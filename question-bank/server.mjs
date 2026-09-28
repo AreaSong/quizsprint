@@ -2,6 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { addQuestion, expandStoredAnswers, normalizeAnswers, normalizeTitle } from "./question-record.mjs";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PORT) || 8787;
@@ -89,16 +90,6 @@ const downloadJson = (res, filename, payload) => {
   res.end(body);
 };
 
-const normalizeTitle = (text) => String(text || "")
-  .replace(/<[^>]+>/g, "")
-  .replace(/&nbsp;/gi, " ")
-  .replace(/^\s*\d+\s*[.、．)）]\s*/, "")
-  .replace(/^【[^】]*】\s*/, "")
-  .replace(/[（(]\s*\d+\s*分\s*[)）]/g, "")
-  .replace(/[\s\u00a0]+/g, "")
-  .replace(/[,.，。、：；？！'""''「」【】《》（）()[\]{}<>]/g, "")
-  .toLowerCase();
-
 const levenshtein = (left, right) => {
   const distances = Array.from({ length: left.length + 1 }, (_, index) => index);
   for (let rightIndex = 0; rightIndex < right.length; rightIndex += 1) {
@@ -142,11 +133,6 @@ const loadQuestions = () => {
 
 const saveQuestions = (questions) => {
   fs.writeFileSync(DATA_FILE, `${JSON.stringify(questions, null, 2)}\n`, "utf8");
-};
-
-const normalizeAnswers = (answers) => {
-  if (!Array.isArray(answers)) return [];
-  return answers.map((item) => String(item || "").trim()).filter(Boolean);
 };
 
 const rankQuestion = (questions, title, type) => {
@@ -256,27 +242,18 @@ const handleProbe = (questions, body) => {
 };
 
 const handleAdd = (questions, body) => {
-  const title = String(body.title || body.question || "").trim();
-  const answers = normalizeAnswers(body.answers || body.answer);
-  if (!title || !answers.length) {
-    return { status: 400, payload: miss("title 和 answers 必填") };
+  const result = addQuestion(questions, body);
+  if (result.status !== 200) {
+    return { status: 400, payload: miss(result.msg) };
   }
-  const next = {
-    title,
-    no: body.no == null ? "" : String(body.no).trim(),
-    type: body.type == null ? "" : String(body.type),
-    options: Array.isArray(body.options) ? body.options.map((item) => String(item)) : [],
-    answers
+  if (result.wrote) saveQuestions(questions);
+  return {
+    status: 200,
+    payload: ok(result.answers, questions.length, {
+      created: result.created,
+      skipped: result.skipped
+    })
   };
-  const existingIndex = questions.findIndex((item) => normalizeTitle(item.title) === normalizeTitle(title));
-  const created = existingIndex < 0;
-  if (created) {
-    questions.push(next);
-  } else {
-    questions[existingIndex] = { ...questions[existingIndex], ...next };
-  }
-  saveQuestions(questions);
-  return { status: 200, payload: ok(next.answers, questions.length, { created }) };
 };
 
 const importItems = (body) => {
@@ -319,7 +296,8 @@ const handleUpdate = (questions, body) => {
     return { status: 400, payload: miss("需要有效 index") };
   }
   const title = String(body.title || body.question || "").trim();
-  const answers = normalizeAnswers(body.answers || body.answer);
+  const options = Array.isArray(body.options) ? body.options.map((item) => String(item)) : [];
+  const answers = expandStoredAnswers(body.answers || body.answer, options);
   if (!title || !answers.length) {
     return { status: 400, payload: miss("title 和 answers 必填") };
   }
@@ -327,7 +305,7 @@ const handleUpdate = (questions, body) => {
     title,
     no: body.no == null ? String(questions[index].no || "") : String(body.no).trim(),
     type: body.type == null ? "" : String(body.type),
-    options: Array.isArray(body.options) ? body.options.map((item) => String(item)) : [],
+    options,
     answers
   };
   saveQuestions(questions);
