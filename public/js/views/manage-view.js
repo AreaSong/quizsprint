@@ -18,7 +18,7 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
 });
 
 export const renderManageView = async (container, ctx) => {
-  const { activeBankId, banks, isAdmin, onRequireLogin, onRefreshBanks, onNavigate } = ctx;
+  const { activeBankId, banks, isAdmin, onRequireLogin, onRefreshBanks, onNavigate, onSelectBank } = ctx;
   const bank = banks.find((b) => b.id === activeBankId);
   if (!bank) {
     container.innerHTML = '<div class="panel"><p class="muted-text">请先在“题库中心”选择或创建一个题库。</p></div>';
@@ -67,7 +67,14 @@ export const renderManageView = async (container, ctx) => {
       <div class="panel">
         <div class="row-gap" style="justify-content:space-between;">
           <div>
-            <h2 style="margin:0;">${escapeHtml(bank.name)} · 试题管理</h2>
+            <div class="row-gap">
+              <h2 style="margin:0;">${escapeHtml(bank.name)} · 试题管理</h2>
+              ${banks.length > 1 ? `
+                <select id="m-bank-select" class="bank-select-inline" aria-label="切换管理题库">
+                  ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
+                </select>
+              ` : ""}
+            </div>
             <div class="row-gap" style="margin-top:6px;">
               <span class="muted-text">共 ${questions.length} 题 · 匹配 ${filtered.length} 题</span>
               ${Object.entries(typeCounts).map(([k, v]) => `<span class="badge">${TYPE_LABELS[k] || "其他"} ${v}</span>`).join("")}
@@ -152,6 +159,11 @@ export const renderManageView = async (container, ctx) => {
       <div id="edit-modal" class="modal-backdrop" hidden></div>
     `;
 
+    container.querySelector("#m-bank-select")?.addEventListener("change", (e) => {
+      const nextId = e.target.value;
+      onSelectBank?.(nextId);
+      renderManageView(container, { ...ctx, activeBankId: nextId });
+    });
     container.querySelector("#f-type").addEventListener("change", (e) => { state.type = e.target.value; state.page = 1; renderBody(); });
     container.querySelector("#f-chapter").addEventListener("change", (e) => { state.chapter = e.target.value; state.page = 1; renderBody(); });
     container.querySelector("#f-kw").addEventListener("input", (e) => { state.keyword = e.target.value; state.page = 1; renderBody(); });

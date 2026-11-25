@@ -347,8 +347,14 @@ export const renderPracticeView = async (container, ctx) => {
     clearKeydown();
     if (mode === "exam" && !examSession) return renderExamSetup();
     const chapterStats = computeChapterStats(allQuestions, bankState.records || {});
-    const modeBar = buildModeBarHtml({ bank, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings });
+    const modeBar = buildModeBarHtml({ bank, banks, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings });
     const bindBar = () => {
+      container.querySelector("#p-bank-select")?.addEventListener("change", (e) => {
+        const nextId = e.target.value;
+        ctx.onSelectBank?.(nextId);
+        ctx.setFocusMode?.(true, banks.find((b) => b.id === nextId)?.name || "在线刷题", "banks");
+        renderPracticeView(container, { ...ctx, activeBankId: nextId, routeParams: { mode } });
+      });
       container.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; buildList(); renderMain(); }));
       container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { typeFilter = e.target.value; buildList(); renderMain(); });
       container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { chapterFilter = e.target.value; buildList(); renderMain(); });

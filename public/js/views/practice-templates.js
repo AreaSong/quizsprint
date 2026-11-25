@@ -250,11 +250,15 @@ export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) =
   </div>
 `;
 
-export const buildModeBarHtml = ({ bank, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings }) => `
+export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings }) => `
   <div class="panel practice-modebar" style="margin-bottom:14px;padding:10px 14px;">
     <div class="row-gap" style="justify-content:space-between;">
       <div class="row-gap">
-        <strong>${escapeHtml(bank.name)}</strong>
+        ${banks.length > 1 ? `
+          <select id="p-bank-select" class="bank-select-inline" aria-label="切换刷题题库">
+            ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
+          </select>
+        ` : `<strong>${escapeHtml(bank.name)}</strong>`}
         ${[
           ["order", "顺序练习"],
           ["chapter", "章节练习"],

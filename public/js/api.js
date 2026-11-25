@@ -79,11 +79,13 @@ export const getGlobalSettings = () => {
     shuffleOptions: false,
     eyeCare: false,
     theme: "",
+    accent: "indigo",
     immersive: false,
     strategy: "default",
     wrongClearStreak: 1
   });
   if (!s.theme) s.theme = s.eyeCare ? "paper" : "light";
+  if (!s.accent) s.accent = "indigo";
   return s;
 };
 

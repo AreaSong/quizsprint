@@ -9,58 +9,84 @@
 </head>
 <body>
   <div class="app-shell">
-    <aside class="app-sidebar">
-      <div class="brand-logo" id="go-home" role="button" tabindex="0">
-        <span class="brand-icon" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-        </span>
-        <span class="brand-text">
-          <strong>QuizSprint</strong>
-          <span>Question Bank</span>
-        </span>
-      </div>
-
-      <nav class="side-group" aria-label="学习空间">
-        <div class="side-label">学习空间</div>
-        <button data-route="banks" class="side-btn nav-btn active">题库中心</button>
-        <button data-route="practice" class="side-btn nav-btn">在线刷题</button>
-        <button data-route="exams" class="side-btn nav-btn">在线考试</button>
-        <button data-route="search" class="side-btn nav-btn">搜题中心</button>
-        <button data-route="stats" class="side-btn nav-btn">学习统计</button>
-      </nav>
-
-      <nav class="side-group" id="sidebar-admin-group" aria-label="管理后台" hidden>
-        <div class="side-label">管理后台</div>
-        <button data-route="manage" class="side-btn nav-btn">试题管理</button>
-        <button data-route="import" class="side-btn nav-btn">批量导题</button>
-        <button data-route="users" class="side-btn nav-btn">用户管理</button>
-        <button type="button" class="side-btn js-open-sys-modal">系统与备份</button>
-      </nav>
-
-      <div class="side-foot">
-        <button type="button" class="side-btn js-open-disclaimer" style="font-size:12px;">免责声明与规范</button>
-      </div>
-    </aside>
-
-    <div class="app-content-col">
-      <header class="app-topbar">
+    <header class="app-topbar">
+      <div class="topbar-inner">
         <div class="topbar-left">
-          <span id="page-title" class="page-title">题库中心</span>
-          <select id="active-bank-select" class="bank-select" aria-label="切换当前题库"></select>
+          <div class="brand-logo" id="go-home" role="button" tabindex="0">
+            <span class="brand-icon" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            </span>
+            <span class="brand-text">
+              <strong>QuizSprint</strong>
+              <span>Question Bank</span>
+            </span>
+          </div>
+          <div id="focus-bar-left" class="focus-bar-left" hidden>
+            <button type="button" id="focus-back-btn" class="btn ghost tiny">← 返回</button>
+            <span id="focus-title" class="focus-title">在线刷题</span>
+          </div>
         </div>
+
+        <nav class="top-nav" id="top-nav" aria-label="主导航">
+          <button type="button" data-route="banks" class="top-nav-btn active">题库中心</button>
+          <button type="button" data-route="practice" class="top-nav-btn">在线刷题</button>
+          <button type="button" data-route="exams" class="top-nav-btn">在线考试</button>
+          <button type="button" data-route="search" class="top-nav-btn">搜题中心</button>
+          <button type="button" data-route="stats" class="top-nav-btn">学习统计</button>
+          <button type="button" id="top-admin-btn" data-route="manage" class="top-nav-btn" hidden>管理后台</button>
+        </nav>
+
         <div class="topbar-right">
-          <button id="theme-btn" class="btn ghost tiny" title="切换明亮 / 护眼 / 夜间主题">明亮</button>
+          <div id="appearance-wrap" class="appearance-wrap">
+            <button type="button" id="appearance-btn" class="btn ghost tiny" title="切换阅读底色与主题色">
+              <span class="accent-swatch" aria-hidden="true"></span>
+              <span>外观</span>
+            </button>
+            <div id="appearance-menu" class="dropdown-menu appearance-menu" hidden>
+              <div>
+                <div class="appearance-label">阅读底色</div>
+                <div class="theme-seg">
+                  <button type="button" class="theme-seg-btn" data-set-theme="light">明亮</button>
+                  <button type="button" class="theme-seg-btn" data-set-theme="paper">护眼</button>
+                  <button type="button" class="theme-seg-btn" data-set-theme="dark">夜间</button>
+                </div>
+              </div>
+              <div>
+                <div class="appearance-label">主题色</div>
+                <div class="accent-dots">
+                  <button type="button" class="accent-dot" data-set-accent="indigo" title="靛蓝" style="background:#2b5ce6"></button>
+                  <button type="button" class="accent-dot" data-set-accent="emerald" title="翠绿" style="background:#0f766e"></button>
+                  <button type="button" class="accent-dot" data-set-accent="amber" title="暖橙" style="background:#d97706"></button>
+                  <button type="button" class="accent-dot" data-set-accent="violet" title="紫罗兰" style="background:#6d28d9"></button>
+                  <button type="button" class="accent-dot" data-set-accent="slate" title="石墨黑" style="background:#1e293b"></button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div id="user-menu-wrap" class="user-menu-wrap"></div>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <main id="app-main" class="app-main"></main>
+    <nav id="admin-subbar" class="admin-subbar" aria-label="管理后台" hidden>
+      <div class="admin-subbar-inner">
+        <div class="row-gap">
+          <span class="side-label" style="padding:0 6px 0 0;">管理后台</span>
+          <button type="button" data-route="manage" class="admin-sub-btn">试题管理</button>
+          <button type="button" data-route="import" class="admin-sub-btn">批量导题</button>
+          <button type="button" data-route="users" class="admin-sub-btn">用户与门禁</button>
+          <button type="button" class="admin-sub-btn js-open-sys-modal">系统与备份</button>
+        </div>
+        <button type="button" class="btn ghost tiny" data-route="banks">← 返回学习空间</button>
+      </div>
+    </nav>
 
-      <footer class="app-footer">
-        <span>QuizSprint 仅供创作者个人学习、技术研究与同学间复习交流使用，严禁商业盈利、公开传播盗版题库或正式考试作弊。</span>
-        <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明</button>
-      </footer>
-    </div>
+    <main id="app-main" class="app-main"></main>
+
+    <footer class="app-footer">
+      <span>QuizSprint 仅供创作者个人学习、技术研究与同学间复习交流使用，严禁商业盈利、公开传播盗版题库或正式考试作弊。</span>
+      <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明与规范</button>
+    </footer>
 
     <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="移动端导航">
       <button data-route="banks" class="m-tab-btn active">题库</button>

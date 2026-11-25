@@ -60,8 +60,9 @@ export const renderExamsView = async (container, ctx) => {
       container.querySelector("#ex-go-login")?.addEventListener("click", onRequireUserLogin);
       return;
     }
-    return renderExamRoom(container, routeParams.examId);
+    return renderExamRoom(container, routeParams.examId, "", ctx);
   }
+  ctx.setFocusMode?.(false);
 
   let exams = [];
   try {
@@ -151,7 +152,7 @@ export const renderExamsView = async (container, ctx) => {
           showToast("请先登录账号后再进入考场", "bad");
           return onRequireUserLogin();
         }
-        return renderExamRoom(container, eid);
+        return renderExamRoom(container, eid, "", ctx);
       }
       if (act === "copy") {
         const link = `${location.origin}/#exam=${eid}`;
@@ -184,7 +185,7 @@ export const renderExamsView = async (container, ctx) => {
   });
 };
 
-const renderExamRoom = async (container, examId, code = "") => {
+const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
   let exam;
   try {
     const res = await apiRequest(`/api/exams/${encodeURIComponent(examId)}?code=${encodeURIComponent(code)}`);
@@ -198,11 +199,12 @@ const renderExamRoom = async (container, examId, code = "") => {
         submitText: "进入考场"
       });
       if (!form) return;
-      return renderExamRoom(container, examId, form.code);
+      return renderExamRoom(container, examId, form.code, ctx);
     }
     container.innerHTML = `<div class="panel"><p class="muted-text">${escapeHtml(err.message)}</p></div>`;
     return;
   }
+  ctx.setFocusMode?.(true, exam.title || "在线考场", "exams");
 
   const draft = loadExamDraft(examId);
   if (draft && draft.endAt > Date.now() && draft.studentName) {

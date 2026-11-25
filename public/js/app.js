@@ -30,14 +30,17 @@ const ROUTE_TITLES = {
   import: "批量导题",
   users: "用户管理"
 };
+const ADMIN_ROUTES = new Set(["manage", "import", "users"]);
 const THEME_CYCLE = ["light", "paper", "dark"];
-const THEME_LABELS = { light: "明亮", paper: "护眼", dark: "夜间" };
+const ACCENT_LIST = ["indigo", "emerald", "amber", "violet", "slate"];
 
 const appMain = document.getElementById("app-main");
-const bankSelect = document.getElementById("active-bank-select");
-const pageTitleEl = document.getElementById("page-title");
-const sidebarAdminGroup = document.getElementById("sidebar-admin-group");
-const themeBtn = document.getElementById("theme-btn");
+const topAdminBtn = document.getElementById("top-admin-btn");
+const adminSubbar = document.getElementById("admin-subbar");
+const focusBarLeft = document.getElementById("focus-bar-left");
+const focusTitleEl = document.getElementById("focus-title");
+const focusBackBtn = document.getElementById("focus-back-btn");
+const appearanceMenu = document.getElementById("appearance-menu");
 const userMenuWrap = document.getElementById("user-menu-wrap");
 const userModal = document.getElementById("user-modal");
 const aiModal = document.getElementById("ai-modal");
@@ -55,17 +58,20 @@ const appState = {
 let userRegisterMode = false;
 let requireAdminPrompt = false;
 let userDropdownOpen = false;
+let focusBackTarget = "banks";
 
-const applyTheme = () => {
+const applyAppearance = () => {
   const settings = getGlobalSettings();
   const theme = THEME_CYCLE.includes(settings.theme) ? settings.theme : "light";
+  const accent = ACCENT_LIST.includes(settings.accent) ? settings.accent : "indigo";
   document.documentElement.dataset.theme = theme;
-  themeBtn.textContent = THEME_LABELS[theme] || "明亮";
+  document.documentElement.dataset.accent = accent;
+  appearanceMenu?.querySelectorAll("[data-set-theme]").forEach((b) => b.classList.toggle("active", b.dataset.setTheme === theme));
+  appearanceMenu?.querySelectorAll("[data-set-accent]").forEach((b) => b.classList.toggle("active", b.dataset.setAccent === accent));
 };
 
-const syncBankSelect = () => {
+const syncBankSelection = () => {
   if (!appState.banks.length) {
-    bankSelect.innerHTML = '<option value="">暂无题库</option>';
     appState.activeBankId = "";
     return;
   }
@@ -73,16 +79,13 @@ const syncBankSelect = () => {
     appState.activeBankId = appState.banks[0].id;
     localStorage.setItem("as_qb_active_bank", appState.activeBankId);
   }
-  bankSelect.innerHTML = appState.banks
-    .map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === appState.activeBankId ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`)
-    .join("");
 };
 
 const renderUserMenu = () => {
   const user = getCloudUser();
   const loggedIn = Boolean(user || appState.isAdmin);
   const hasAiKey = Boolean(getLocalAiConfig().apiKey);
-  if (sidebarAdminGroup) sidebarAdminGroup.hidden = !appState.isAdmin;
+  if (topAdminBtn) topAdminBtn.hidden = !appState.isAdmin;
 
   if (!loggedIn) {
     userMenuWrap.innerHTML = `
@@ -139,7 +142,7 @@ const renderUserMenu = () => {
 const refreshBanks = async () => {
   const data = await apiRequest("/api/banks");
   appState.banks = data.banks || [];
-  syncBankSelect();
+  syncBankSelection();
 };
 
 const refreshAuth = async () => {
@@ -167,11 +170,27 @@ const openAccountModal = (requireAdmin = false) => {
 
 const VALID_ROUTES = new Set(Object.keys(ROUTE_TITLES));
 
+const setFocusMode = (enabled, label = "", backRoute = "banks") => {
+  document.body.classList.toggle("focus-mode", Boolean(enabled));
+  if (focusBarLeft) focusBarLeft.hidden = !enabled;
+  if (focusTitleEl && label) focusTitleEl.textContent = label;
+  focusBackTarget = backRoute;
+};
+
+const syncShellMode = (nextRoute, params = {}) => {
+  const loggedIn = Boolean(appState.isAdmin || getCloudUser());
+  if (adminSubbar) adminSubbar.hidden = !(appState.isAdmin && ADMIN_ROUTES.has(nextRoute));
+  if (topAdminBtn) topAdminBtn.classList.toggle("active", ADMIN_ROUTES.has(nextRoute));
+  const curBank = appState.banks.find((b) => b.id === appState.activeBankId);
+  if (nextRoute === "practice" && loggedIn) setFocusMode(true, curBank?.name || "在线刷题", "banks");
+  else if (nextRoute === "exams" && params.examId && loggedIn) setFocusMode(true, "在线考场", "exams");
+  else setFocusMode(false);
+};
+
 const navigate = (route, params = {}) => {
   const nextRoute = VALID_ROUTES.has(route) ? route : "banks";
   appState.route = nextRoute;
   appState.routeParams = params;
-  if (pageTitleEl) pageTitleEl.textContent = ROUTE_TITLES[nextRoute] || "QuizSprint";
   appMain.classList.toggle("practice-full", nextRoute === "practice");
   if (nextRoute !== "practice") document.body.classList.remove("immersive-mode");
   if (!(nextRoute === "exams" && params.examId)) {
@@ -183,6 +202,7 @@ const navigate = (route, params = {}) => {
 };
 
 const renderCurrentView = () => {
+  syncShellMode(appState.route, appState.routeParams);
   const ctx = {
     banks: appState.banks,
     activeBankId: appState.activeBankId,
@@ -192,9 +212,9 @@ const renderCurrentView = () => {
     onSelectBank: (id) => {
       appState.activeBankId = id;
       localStorage.setItem("as_qb_active_bank", id);
-      syncBankSelect();
     },
     onNavigate: navigate,
+    setFocusMode,
     onRefreshBanks: async () => { await refreshBanks(); renderCurrentView(); },
     onRequireLogin: () => openAccountModal(true),
     onRequireUserLogin: () => openAccountModal(false),
@@ -217,7 +237,7 @@ const cycleTheme = () => {
   settings.theme = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
   settings.eyeCare = settings.theme === "paper";
   saveGlobalSettings(settings);
-  applyTheme();
+  applyAppearance();
 };
 
 const doLogout = async () => {
@@ -308,16 +328,31 @@ document.addEventListener("click", (e) => {
     userDropdownOpen = false;
     renderUserMenu();
   }
+  if (appearanceMenu && !appearanceMenu.hidden && !e.target.closest("#appearance-wrap")) {
+    appearanceMenu.hidden = true;
+  }
   const routeBtn = e.target.closest("[data-route]");
   if (routeBtn) navigate(routeBtn.dataset.route);
 });
 document.getElementById("go-home").addEventListener("click", () => navigate("banks"));
-bankSelect.addEventListener("change", (e) => {
-  appState.activeBankId = e.target.value;
-  localStorage.setItem("as_qb_active_bank", appState.activeBankId);
-  renderCurrentView();
+focusBackBtn?.addEventListener("click", () => navigate(focusBackTarget));
+document.getElementById("appearance-btn")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (appearanceMenu) appearanceMenu.hidden = !appearanceMenu.hidden;
 });
-themeBtn.addEventListener("click", cycleTheme);
+appearanceMenu?.addEventListener("click", (e) => {
+  const themePick = e.target.closest("[data-set-theme]");
+  const accentPick = e.target.closest("[data-set-accent]");
+  if (!themePick && !accentPick) return;
+  const settings = getGlobalSettings();
+  if (themePick) {
+    settings.theme = themePick.dataset.setTheme;
+    settings.eyeCare = settings.theme === "paper";
+  }
+  if (accentPick) settings.accent = accentPick.dataset.setAccent;
+  saveGlobalSettings(settings);
+  applyAppearance();
+});
 
 document.getElementById("user-close").addEventListener("click", () => { userModal.hidden = true; });
 document.getElementById("u-toggle-mode").addEventListener("click", () => {
@@ -387,7 +422,7 @@ document.getElementById("ai-form").addEventListener("submit", (e) => {
 
 const bootstrap = async () => {
   initSystemAndDisclaimerModals();
-  applyTheme();
+  applyAppearance();
   await Promise.all([refreshBanks(), refreshAuth()]);
   const examMatch = location.hash.match(/^#exam=([^&]+)/);
   if (examMatch) return navigate("exams", { examId: decodeURIComponent(examMatch[1]) });
