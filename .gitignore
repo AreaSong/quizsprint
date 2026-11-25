@@ -1,0 +1,22 @@
+node_modules/
+.DS_Store
+*.log
+npm-debug.log*
+
+# 运行期数据库与上传资源（保留种子文件 data/questions.json）
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
+data/uploads/
+data/banks/
+data/banks.json
+data/users.json
+data/user-progress/
+data/exams.json
+data/exam-submissions/
+data/ai-config.json
+
+# 临时目录
+output/
+tmp/

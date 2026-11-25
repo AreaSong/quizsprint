@@ -2,425 +2,365 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { addQuestion, expandStoredAnswers, normalizeAnswers, normalizeTitle } from "./question-record.mjs";
+import {
+  buildClearSessionCookie,
+  buildSessionCookie,
+  createSessionToken,
+  getAdminPassword,
+  getUserFromRequest,
+  isAdminRequest,
+  isUsingGeneratedPassword,
+  verifyPassword
+} from "./lib/auth.mjs";
+import { createExamStore } from "./lib/exam-store.mjs";
+import { handleExtraRoutes } from "./lib/extra-routes.mjs";
+import { handleLegacyRoutes } from "./lib/legacy-routes.mjs";
+import { createStore } from "./lib/store.mjs";
+import { createUserStore } from "./lib/user-store.mjs";
 
-const HOST = "127.0.0.1";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT) || 8787;
-const ACCESS_KEY = process.env.QUESTION_BANK_KEY || "";
-const MATCH_THRESHOLD = 75;
-const DATA_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "questions.json");
-const ADMIN_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "public", "admin.html");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+const PUBLIC_DIR = path.join(__dirname, "public");
+const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
-const html = (res, content) => {
-  res.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store"
-  });
-  res.end(content);
-};
+const store = createStore(DATA_DIR);
+const userStore = createUserStore(DATA_DIR);
+const examStore = createExamStore(DATA_DIR);
 
-const json = (res, status, payload) => {
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, referer, u, t",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
-  });
-  res.end(body);
-};
-
-const miss = (msg) => ({
-  code: 10003,
-  data: { answer: [], num: "", usenum: "" },
-  msg
-});
-
-const ok = (answers, total, extra = {}) => {
-  const { msg, question, ...rest } = extra;
-  return {
-    code: 200,
-    data: {
-      answer: answers,
-      num: String(total),
-      usenum: "1",
-      ...(question ? { question } : {})
-    },
-    msg: msg || "ok",
-    ...rest
-  };
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif"
 };
 
 const TEMPLATE = {
-  说明: "type：0单选 1多选 2填空 3判断 4简答。options 填全部选项正文。answers 填正确项正文，不要写 A/B/C。填好 questions 后，到管理页一键导入。",
+  说明: "type：0单选 1多选 2填空 3判断 4简答 5不定项。options 填全部选项正文。answers 填正确项正文（或选项字母），analysis 填解析，chapter 填章节，difficulty 填难度。",
   questions: [
     {
       title: "绿色植物在光照下释放氧气，主要是因为",
       type: "0",
       options: ["呼吸作用", "光合作用", "蒸腾作用", "渗透作用"],
-      answers: ["光合作用"]
-    },
-    {
-      title: "下列属于可再生资源的是",
-      type: "1",
-      options: ["煤炭", "太阳能", "风能", "石油"],
-      answers: ["太阳能", "风能"]
-    },
-    {
-      title: "地球绕太阳公转一周大约是一年",
-      type: "3",
-      options: ["正确", "错误"],
-      answers: ["正确"]
-    },
-    {
-      title: "中国的首都是",
-      type: "2",
-      options: [],
-      answers: ["北京"]
+      answers: ["光合作用"],
+      analysis: "光合作用吸收二氧化碳并释放氧气。",
+      chapter: "基础生物",
+      difficulty: "简单"
     }
   ]
 };
 
-const downloadJson = (res, filename, payload) => {
-  const body = `${JSON.stringify(payload, null, 2)}\n`;
-  res.writeHead(200, {
+const sendJson = (res, status, payload, extraHeaders = {}) => {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Content-Disposition": `attachment; filename="${filename}"`
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key, X-Bank-Password, referer, u, t",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    ...extraHeaders
   });
   res.end(body);
 };
 
-const levenshtein = (left, right) => {
-  const distances = Array.from({ length: left.length + 1 }, (_, index) => index);
-  for (let rightIndex = 0; rightIndex < right.length; rightIndex += 1) {
-    let previous = distances[0];
-    distances[0] = rightIndex + 1;
-    for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
-      const current = distances[leftIndex + 1];
-      distances[leftIndex + 1] = left[leftIndex] === right[rightIndex]
-        ? previous
-        : Math.min(previous, distances[leftIndex], current) + 1;
-      previous = current;
-    }
-  }
-  return distances[left.length];
-};
-
-const similarity = (left, right) => {
-  if (!left || !right) return 0;
-  if (left === right) return 100;
-  const maxLength = Math.max(left.length, right.length);
-  return Math.round((1 - levenshtein(Array.from(left), Array.from(right)) / maxLength) * 100);
-};
-
-const scoreTitle = (needle, hay) => {
-  if (hay === needle) return 100;
-  if (needle.length >= 6 && (hay.includes(needle) || needle.includes(hay))) {
-    const ratio = Math.min(hay.length, needle.length) / Math.max(hay.length, needle.length);
-    return Math.round(80 * ratio + 15);
-  }
-  return similarity(hay, needle);
-};
-
-const loadQuestions = () => {
-  const raw = fs.readFileSync(DATA_FILE, "utf8");
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error("questions.json 必须是数组");
-  }
-  return parsed;
-};
-
-const saveQuestions = (questions) => {
-  fs.writeFileSync(DATA_FILE, `${JSON.stringify(questions, null, 2)}\n`, "utf8");
-};
-
-const rankQuestion = (questions, title, type) => {
-  const needle = normalizeTitle(title);
-  if (!needle) return { item: null, index: -1, score: -1 };
-  let best = null;
-  let bestIndex = -1;
-  let bestScore = -1;
-  questions.forEach((item, index) => {
-    const hay = normalizeTitle(item.title);
-    if (!hay) return;
-    let score = scoreTitle(needle, hay);
-    if (type && item.type != null && String(item.type) === String(type) && score >= MATCH_THRESHOLD) {
-      score += 1;
-    }
-    if (score > bestScore) {
-      best = item;
-      bestIndex = index;
-      bestScore = score;
-    }
+const sendDownload = (res, filename, payload) => {
+  const safeName = encodeURIComponent(filename);
+  res.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Disposition": `attachment; filename*=UTF-8''${safeName}`
   });
-  return { item: best, index: bestIndex, score: bestScore };
+  res.end(`${JSON.stringify(payload, null, 2)}\n`);
 };
 
-const findQuestion = (questions, title, type) => {
-  const ranked = rankQuestion(questions, title, type);
-  return ranked.score >= MATCH_THRESHOLD ? ranked.item : null;
+const serveSafeFile = (baseDir, relPath, res) => {
+  const resolved = path.resolve(baseDir, relPath);
+  if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
+    sendJson(res, 403, { code: 403, msg: "禁止访问" });
+    return true;
+  }
+  if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) return false;
+  const ext = path.extname(resolved).toLowerCase();
+  res.writeHead(200, {
+    "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
+    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300"
+  });
+  fs.createReadStream(resolved).pipe(res);
+  return true;
 };
 
 const readBody = (req) => new Promise((resolve, reject) => {
+  let size = 0;
   const chunks = [];
-  req.on("data", (chunk) => chunks.push(chunk));
-  req.on("end", () => {
-    const text = Buffer.concat(chunks).toString("utf8").trim();
-    if (!text) {
-      resolve({});
+  req.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      reject(new Error("请求体过大（超过 16MB）"));
+      req.destroy();
       return;
     }
+    chunks.push(chunk);
+  });
+  req.on("end", () => {
+    const text = Buffer.concat(chunks).toString("utf8").trim();
+    if (!text) return resolve({});
     try {
       resolve(JSON.parse(text));
-    } catch (error) {
-      reject(error);
+    } catch {
+      reject(new Error("JSON 格式无效"));
     }
   });
   req.on("error", reject);
 });
 
-const isAuthorized = (body) => {
-  if (!ACCESS_KEY) return true;
-  return String(body.key || "") === ACCESS_KEY;
+const requireAdmin = (req, res) => {
+  if (isAdminRequest(req, userStore.getApiKey())) return true;
+  sendJson(res, 401, { code: 401, msg: "需要管理员登录或有效 X-API-Key" });
+  return false;
 };
 
-const handleSearch = (questions, body) => {
-  if (!isAuthorized(body)) {
-    return miss("密钥错误");
-  }
-  const matched = findQuestion(questions, body.question, body.type);
-  const answers = normalizeAnswers(matched?.answers);
-  if (!answers.length) {
-    return miss("未查询到答案");
-  }
-  return ok(answers, questions.length, { question: probeQuestion(matched) });
-};
+const handleApi = async (req, res, url) => {
+  const method = req.method || "GET";
+  const pathname = url.pathname;
 
-const probeQuestion = (item) => {
-  if (!item) return null;
-  return {
-    title: item.title || "",
-    no: item.no == null ? "" : String(item.no),
-    type: item.type == null ? "" : String(item.type),
-    options: Array.isArray(item.options) ? item.options.map((entry) => String(entry)) : [],
-    answers: normalizeAnswers(item.answers)
-  };
-};
+  if (method === "OPTIONS") {
+    return sendJson(res, 204, {});
+  }
 
-const handleProbe = (questions, body) => {
-  if (!isAuthorized(body)) {
-    return { status: 401, payload: { code: 401, matched: false, threshold: MATCH_THRESHOLD, score: 0, index: -1, question: null, answers: [], msg: "密钥错误" } };
+  if (method === "GET" && pathname === "/health") {
+    const banks = store.listBanks();
+    const questionCount = banks.reduce((sum, b) => sum + (b.questionCount || 0), 0);
+    return sendJson(res, 200, { ok: true, count: questionCount, bankCount: banks.length, questionCount });
   }
-  const title = String(body.question || body.title || "").trim();
-  if (!title) {
-    return { status: 400, payload: { code: 400, matched: false, threshold: MATCH_THRESHOLD, score: 0, index: -1, question: null, answers: [], msg: "请填写题干" } };
-  }
-  const ranked = rankQuestion(questions, title, body.type);
-  const close = ranked.score >= 30;
-  const question = close ? probeQuestion(ranked.item) : null;
-  const answers = question?.answers || [];
-  const matched = ranked.score >= MATCH_THRESHOLD && answers.length > 0;
-  let msg = `不会作答 · ${Math.max(0, ranked.score)} 分（需 ≥ ${MATCH_THRESHOLD}）`;
-  if (!questions.length) msg = "题库还没有题目";
-  else if (matched) msg = `会作答 · ${ranked.score} 分`;
-  else if (ranked.score >= MATCH_THRESHOLD) msg = `找到题但没有答案 · ${ranked.score} 分`;
-  else if (question) msg = `不会作答 · 最接近 ${ranked.score} 分（需 ≥ ${MATCH_THRESHOLD}）`;
-  return {
-    status: 200,
-    payload: {
+  if (method === "GET" && pathname === "/api/auth/me") {
+    return sendJson(res, 200, {
       code: 200,
-      matched,
-      threshold: MATCH_THRESHOLD,
-      score: Math.max(0, ranked.score),
-      index: close ? ranked.index : -1,
-      question,
-      answers: matched ? answers : [],
-      msg
-    }
-  };
-};
-
-const handleAdd = (questions, body) => {
-  const result = addQuestion(questions, body);
-  if (result.status !== 200) {
-    return { status: 400, payload: miss(result.msg) };
-  }
-  if (result.wrote) saveQuestions(questions);
-  return {
-    status: 200,
-    payload: ok(result.answers, questions.length, {
-      created: result.created,
-      skipped: result.skipped
-    })
-  };
-};
-
-const importItems = (body) => {
-  if (Array.isArray(body)) return body;
-  if (body && Array.isArray(body.questions)) return body.questions;
-  return [];
-};
-
-const handleImport = (questions, body) => {
-  const items = importItems(body).filter((item) => item && typeof item === "object" && (item.title || item.question));
-  if (!items.length) {
-    return { status: 400, payload: miss("没有可导入的题目") };
-  }
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
-  for (const item of items) {
-    const result = handleAdd(questions, item);
-    if (result.status !== 200) {
-      skipped += 1;
-      continue;
-    }
-    if (result.payload.created) created += 1;
-    else updated += 1;
-  }
-  return {
-    status: 200,
-    payload: ok([], questions.length, {
-      created,
-      updated,
-      skipped,
-      msg: `导入完成：新增 ${created}，更新 ${updated}，跳过 ${skipped}`
-    })
-  };
-};
-
-const handleUpdate = (questions, body) => {
-  const index = Number(body.index);
-  if (!Number.isInteger(index) || index < 0 || index >= questions.length) {
-    return { status: 400, payload: miss("需要有效 index") };
-  }
-  const title = String(body.title || body.question || "").trim();
-  const options = Array.isArray(body.options) ? body.options.map((item) => String(item)) : [];
-  const answers = expandStoredAnswers(body.answers || body.answer, options);
-  if (!title || !answers.length) {
-    return { status: 400, payload: miss("title 和 answers 必填") };
-  }
-  questions[index] = {
-    title,
-    no: body.no == null ? String(questions[index].no || "") : String(body.no).trim(),
-    type: body.type == null ? "" : String(body.type),
-    options,
-    answers
-  };
-  saveQuestions(questions);
-  return { status: 200, payload: ok(answers, questions.length) };
-};
-
-const handleDelete = (questions, body) => {
-  const index = Number(body.index);
-  const title = String(body.title || "").trim();
-  if (Number.isInteger(index) && index >= 0 && index < questions.length) {
-    questions.splice(index, 1);
-  } else if (title) {
-    const key = normalizeTitle(title);
-    const next = questions.filter((item) => normalizeTitle(item.title) !== key);
-    questions.length = 0;
-    questions.push(...next);
-  } else {
-    return { status: 400, payload: miss("需要 title 或 index") };
-  }
-  saveQuestions(questions);
-  return { status: 200, payload: ok([], questions.length) };
-};
-
-const route = async (req, res) => {
-  const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
-  if (req.method === "OPTIONS") {
-    json(res, 204, {});
-    return;
-  }
-  if (req.method === "GET" && url.pathname === "/exam-parse.js") {
-    res.writeHead(200, {
-      "Content-Type": "text/javascript; charset=utf-8",
-      "Cache-Control": "no-store"
+      admin: isAdminRequest(req, userStore.getApiKey()),
+      usingGeneratedPassword: isUsingGeneratedPassword()
     });
-    res.end(fs.readFileSync(path.join(path.dirname(ADMIN_FILE), "exam-parse.js")));
-    return;
   }
-  if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/admin")) {
-    html(res, fs.readFileSync(ADMIN_FILE, "utf8"));
-    return;
-  }
-  if (req.method === "GET" && url.pathname === "/template.json") {
-    downloadJson(res, "areasong-question-template.json", TEMPLATE);
-    return;
-  }
-  if (req.method === "GET" && url.pathname === "/health") {
-    const questions = loadQuestions();
-    json(res, 200, { ok: true, count: questions.length });
-    return;
-  }
-  const questions = loadQuestions();
-  if (req.method === "GET" && url.pathname === "/questions") {
-    json(res, 200, questions);
-    return;
-  }
-  if (req.method === "GET" && (url.pathname === "/export" || url.pathname === "/export.json")) {
-    downloadJson(res, "areasong-questions.json", questions);
-    return;
-  }
-  if (req.method === "POST" && url.pathname === "/search") {
+  if (method === "POST" && pathname === "/api/auth/login") {
     const body = await readBody(req);
-    json(res, 200, handleSearch(questions, body));
-    return;
+    if (!verifyPassword(body.password)) {
+      return sendJson(res, 401, { code: 401, msg: "管理密码错误" });
+    }
+    const isHttps = req.headers["x-forwarded-proto"] === "https";
+    return sendJson(
+      res,
+      200,
+      { code: 200, admin: true, msg: "登录成功" },
+      { "Set-Cookie": buildSessionCookie(createSessionToken(), isHttps) }
+    );
   }
-  if (req.method === "POST" && url.pathname === "/probe") {
-    const body = await readBody(req);
-    const result = handleProbe(questions, body);
-    json(res, result.status, result.payload);
-    return;
+  if (method === "POST" && pathname === "/api/auth/logout") {
+    return sendJson(res, 200, { code: 200, admin: false }, { "Set-Cookie": buildClearSessionCookie() });
   }
-  if (req.method === "POST" && url.pathname === "/questions") {
-    const body = await readBody(req);
-    const result = handleAdd(questions, body);
-    json(res, result.status, result.payload);
-    return;
+  if (method === "GET" && pathname === "/api/template.json") {
+    return sendDownload(res, "quizhub-question-template.json", TEMPLATE);
   }
-  if (req.method === "PUT" && url.pathname === "/questions") {
-    const body = await readBody(req);
-    const result = handleUpdate(questions, body);
-    json(res, result.status, result.payload);
-    return;
+  if (method === "GET" && pathname === "/api/search") {
+    const items = store.searchQuestions({
+      query: url.searchParams.get("q") || "",
+      bankId: url.searchParams.get("bankId") || "",
+      type: url.searchParams.get("type") || ""
+    });
+    return sendJson(res, 200, { code: 200, items, total: items.length });
   }
-  if (req.method === "POST" && url.pathname === "/questions/import") {
-    const body = await readBody(req);
-    const result = handleImport(questions, body);
-    json(res, result.status, result.payload);
-    return;
+
+  const handledExtra = await handleExtraRoutes(req, res, url, {
+    store,
+    userStore,
+    examStore,
+    uploadsDir: UPLOADS_DIR,
+    readBody,
+    sendJson,
+    requireAdmin
+  });
+  if (handledExtra) return;
+
+  if (method === "GET" && pathname === "/api/banks") {
+    const banks = store.listBanks().map(({ password, ...rest }) => ({
+      ...rest,
+      locked: Boolean(password)
+    }));
+    return sendJson(res, 200, { code: 200, banks });
   }
-  if (req.method === "DELETE" && url.pathname === "/questions") {
-    const body = await readBody(req);
-    const result = handleDelete(questions, body);
-    json(res, result.status, result.payload);
-    return;
+  if (method === "POST" && pathname === "/api/banks") {
+    if (!requireAdmin(req, res)) return;
+    const out = store.createBank(await readBody(req));
+    if (out.error) return sendJson(res, 400, { code: 400, msg: out.error });
+    return sendJson(res, 200, { code: 200, bank: out.bank });
   }
-  json(res, 404, miss("接口不存在"));
+
+  const bankMatch = pathname.match(/^\/api\/banks\/([^/]+)$/);
+  if (bankMatch) {
+    const bankId = decodeURIComponent(bankMatch[1]);
+    if (method === "GET") {
+      const bank = store.getBank(bankId);
+      if (!bank) return sendJson(res, 404, { code: 404, msg: "题库不存在" });
+      const { password, ...safeBank } = bank;
+      return sendJson(res, 200, { code: 200, bank: { ...safeBank, locked: Boolean(password) } });
+    }
+    if (method === "PUT") {
+      if (!requireAdmin(req, res)) return;
+      const out = store.updateBank(bankId, await readBody(req));
+      if (out.error) return sendJson(res, 404, { code: 404, msg: out.error });
+      return sendJson(res, 200, { code: 200, bank: out.bank });
+    }
+    if (method === "DELETE") {
+      if (!requireAdmin(req, res)) return;
+      const out = store.deleteBank(bankId);
+      if (out.error) return sendJson(res, 404, { code: 404, msg: out.error });
+      return sendJson(res, 200, { code: 200, ok: true });
+    }
+  }
+
+  const bankSubMatch = pathname.match(/^\/api\/banks\/([^/]+)\/(questions|import|export)$/);
+  if (bankSubMatch) {
+    const bank = store.getBank(decodeURIComponent(bankSubMatch[1]));
+    if (!bank) return sendJson(res, 404, { code: 404, msg: "题库不存在" });
+    const action = bankSubMatch[2];
+    const bankPwd = url.searchParams.get("pwd") || req.headers["x-bank-password"] || "";
+    if (method === "GET" && bank.password && bankPwd !== bank.password && !isAdminRequest(req, userStore.getApiKey())) {
+      return sendJson(res, 403, { code: 403, locked: true, msg: "该题库已加密，请输入访问密码" });
+    }
+    if (action === "export" && method === "GET") {
+      if (!getUserFromRequest(req) && !isAdminRequest(req, userStore.getApiKey())) {
+        return sendJson(res, 401, { code: 401, msg: "请先登录账号后再导出题库" });
+      }
+      return sendDownload(res, `${bank.name}.json`, { bank: bank.name, questions: store.loadBankQuestions(bank.id) });
+    }
+    if (action === "questions" && method === "GET") {
+      const { password, ...safeBank } = bank;
+      let list = store.loadBankQuestions(bank.id);
+      const qFilter = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const typeFilter = url.searchParams.get("type") || "";
+      const chapFilter = url.searchParams.get("chapter") || "";
+      if (typeFilter !== "") list = list.filter((item) => String(item.type) === typeFilter);
+      if (chapFilter !== "") list = list.filter((item) => item.chapter === chapFilter);
+      if (qFilter) {
+        list = list.filter((item) => `${item.title} ${(item.options || []).join(" ")} ${(item.answers || []).join(" ")}`.toLowerCase().includes(qFilter));
+      }
+      const total = list.length;
+      const page = Number(url.searchParams.get("page") || 0);
+      const pageSize = Number(url.searchParams.get("pageSize") || 50);
+      if (page > 0 && pageSize > 0) {
+        const start = (page - 1) * pageSize;
+        list = list.slice(start, start + pageSize);
+      }
+      return sendJson(res, 200, { code: 200, bank: safeBank, total, questions: list });
+    }
+    if (action === "questions" && method === "POST") {
+      if (!requireAdmin(req, res)) return;
+      const result = store.upsertQuestion(bank.id, await readBody(req));
+      return sendJson(res, result.status, { code: result.status, ...result });
+    }
+    if (action === "import" && method === "POST") {
+      if (!requireAdmin(req, res)) return;
+      const body = await readBody(req);
+      const items = Array.isArray(body) ? body : (Array.isArray(body.questions) ? body.questions : []);
+      if (!items.length) return sendJson(res, 400, { code: 400, msg: "没有可导入的题目" });
+      const result = store.importQuestions(bank.id, items, Boolean(body.skipIfExists));
+      return sendJson(res, result.status, {
+        code: result.status,
+        ...result,
+        msg: `导入完成：新增 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped}`
+      });
+    }
+  }
+
+  const batchMatch = pathname.match(/^\/api\/banks\/([^/]+)\/questions\/batch$/);
+  if (batchMatch && method === "POST") {
+    if (!requireAdmin(req, res)) return;
+    const result = store.batchUpdateOrDelete(decodeURIComponent(batchMatch[1]), await readBody(req));
+    return sendJson(res, result.status, { code: result.status, ...result });
+  }
+
+  const qItemMatch = pathname.match(/^\/api\/banks\/([^/]+)\/questions\/([^/]+)$/);
+  if (qItemMatch) {
+    const bankId = decodeURIComponent(qItemMatch[1]);
+    const qId = decodeURIComponent(qItemMatch[2]);
+    if (method === "GET") {
+      const bank = store.getBank(bankId);
+      if (!bank) return sendJson(res, 404, { code: 404, msg: "题库不存在" });
+      const bankPwd = url.searchParams.get("pwd") || req.headers["x-bank-password"] || "";
+      if (bank.password && bankPwd !== bank.password && !isAdminRequest(req, userStore.getApiKey())) {
+        return sendJson(res, 403, { code: 403, locked: true, msg: "该题库已加密" });
+      }
+      const question = store.loadBankQuestions(bank.id).find((q) => q.id === qId);
+      if (!question) return sendJson(res, 404, { code: 404, msg: "试题不存在" });
+      return sendJson(res, 200, { code: 200, question });
+    }
+    if (!requireAdmin(req, res)) return;
+    if (method === "PUT" || method === "PATCH") {
+      const body = await readBody(req);
+      if (method === "PATCH") {
+        const cur = store.loadBankQuestions(bankId).find((q) => q.id === qId);
+        if (!cur) return sendJson(res, 404, { code: 404, msg: "试题不存在" });
+        const result = store.updateQuestion(bankId, qId, { ...cur, ...body });
+        return sendJson(res, result.status, { code: result.status, ...result });
+      }
+      const result = store.updateQuestion(bankId, qId, body);
+      return sendJson(res, result.status, { code: result.status, ...result });
+    }
+    if (method === "DELETE") {
+      const result = store.deleteQuestion(bankId, qId);
+      return sendJson(res, result.status, { code: result.status, ...result });
+    }
+  }
+
+  sendJson(res, 404, { code: 404, msg: "接口不存在" });
 };
 
 const server = http.createServer(async (req, res) => {
   try {
-    await route(req, res);
+    if (req.method === "OPTIONS") {
+      sendJson(res, 204, {});
+      return;
+    }
+    const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+    const handledLegacy = await handleLegacyRoutes(req, res, url, {
+      store,
+      userStore,
+      readBody,
+      sendJson,
+      sendDownload,
+      template: TEMPLATE
+    });
+    if (handledLegacy) return;
+    if (url.pathname.startsWith("/api/") || url.pathname === "/health") {
+      await handleApi(req, res, url);
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/uploads/")) {
+      if (serveSafeFile(UPLOADS_DIR, url.pathname.slice(9), res)) return;
+    }
+    if (req.method === "GET") {
+      const rel = url.pathname === "/" || url.pathname === "/admin" ? "index.html" : url.pathname.replace(/^\/+/, "");
+      if (serveSafeFile(PUBLIC_DIR, rel, res)) return;
+      serveSafeFile(PUBLIC_DIR, "index.html", res);
+      return;
+    }
+    sendJson(res, 404, { code: 404, msg: "资源不存在" });
   } catch (error) {
-    json(res, 500, miss(error instanceof Error ? error.message : "服务出错"));
+    sendJson(res, 500, { code: 500, msg: error instanceof Error ? error.message : "服务内部错误" });
   }
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`本地题库已启动：http://${HOST}:${PORT}`);
-  console.log(`管理页：http://${HOST}:${PORT}/`);
-  console.log("搜题：POST /search");
-  console.log("试搜：POST /probe");
-  console.log("加题：POST /questions");
-  console.log("导出：GET  /export");
-  console.log("检查：GET  /health");
-  console.log(`题库文件：${DATA_FILE}`);
-  if (ACCESS_KEY) {
-    console.log("已启用 QUESTION_BANK_KEY，请求体需要带 key");
+  console.log(`知题库 (QuizHub) 已启动：http://${HOST}:${PORT}`);
+  console.log(`数据目录：${DATA_DIR}`);
+  if (isUsingGeneratedPassword()) {
+    console.log(`未设置 ADMIN_PASSWORD，本次随机管理密码为：${getAdminPassword()}`);
+  } else {
+    console.log("已启用环境变量 ADMIN_PASSWORD 管理鉴权");
   }
 });

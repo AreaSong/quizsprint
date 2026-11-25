@@ -1,0 +1,8 @@
+data
+node_modules
+userscript
+.git
+.cursor
+*.log
+*.test.mjs
+.DS_Store

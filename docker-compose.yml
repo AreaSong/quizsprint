@@ -1,0 +1,15 @@
+services:
+  quiz-hub:
+    build: .
+    container_name: quiz-hub
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8787
+      - ADMIN_PASSWORD=change-this-password
+      - AUTH_SECRET=replace-with-random-long-secret
+      - DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data

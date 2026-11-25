@@ -1,9 +1,15 @@
 {
-  "name": "local-question-bank",
+  "name": "quiz-hub",
+  "version": "1.0.0",
+  "description": "知题库 (QuizHub) · 在线刷题、背题与防作弊考试学习平台（兼容油猴脚本本地题库）",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test question-record.test.mjs"
+    "test": "node --test *.test.mjs"
+  },
+  "dependencies": {
+    "mammoth": "^1.13.0",
+    "xlsx": "^0.18.5"
   }
 }

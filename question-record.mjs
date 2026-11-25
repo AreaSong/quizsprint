@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const JUDGE_MAP = {
@@ -73,11 +75,16 @@ export const addQuestion = (questions, body) => {
     };
   }
   const next = {
+    id: body.id ? String(body.id) : crypto.randomUUID(),
     title,
     no: body.no == null ? "" : String(body.no).trim(),
     type: body.type == null ? "" : String(body.type),
     options,
-    answers
+    answers,
+    analysis: body.analysis == null ? "" : String(body.analysis).trim(),
+    chapter: body.chapter == null ? "" : String(body.chapter).trim(),
+    difficulty: body.difficulty == null ? "中等" : String(body.difficulty).trim(),
+    updatedAt: new Date().toISOString()
   };
   const skipIfExists = Boolean(body.skipIfExists);
   const existingIndex = questions.findIndex((item) => normalizeTitle(item.title) === normalizeTitle(title));
@@ -94,6 +101,13 @@ export const addQuestion = (questions, body) => {
       answers: normalizeAnswers(questions[existingIndex].answers)
     };
   }
-  questions[existingIndex] = { ...questions[existingIndex], ...next };
+  const existing = questions[existingIndex];
+  questions[existingIndex] = {
+    ...existing,
+    ...next,
+    id: existing.id || next.id,
+    analysis: next.analysis || existing.analysis || "",
+    chapter: next.chapter || existing.chapter || ""
+  };
   return { wrote: true, status: 200, created: false, skipped: false, answers: next.answers };
 };

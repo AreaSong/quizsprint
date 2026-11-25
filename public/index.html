@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>知题库 (QuizHub) · 在线刷题与考试学习平台</title>
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="brand-logo" id="go-home" role="button" tabindex="0">知题库 · QuizHub</div>
+        <select id="active-bank-select" class="bank-select" aria-label="切换当前题库"></select>
+      </div>
+      <nav class="main-nav" id="main-nav">
+        <button data-route="banks" class="nav-btn active">题库中心</button>
+        <button data-route="practice" class="nav-btn">在线刷题</button>
+        <button data-route="exams" class="nav-btn">在线考试</button>
+        <button data-route="search" class="nav-btn">搜题中心</button>
+        <button data-route="stats" class="nav-btn">学习统计</button>
+        <button data-route="manage" class="nav-btn">试题管理</button>
+        <button data-route="import" class="nav-btn">批量导题</button>
+      </nav>
+      <div class="topbar-actions">
+        <button id="eye-care-btn" class="btn ghost tiny" title="切换护眼模式">护眼模式</button>
+        <button id="user-auth-btn" class="btn ghost tiny">学员登录</button>
+        <button id="api-key-btn" class="btn ghost tiny" hidden>API 密钥</button>
+        <button id="ai-cfg-btn" class="btn ghost tiny">AI 设置</button>
+        <button id="auth-btn" class="btn ghost tiny">管理登录</button>
+      </div>
+    </header>
+
+    <main id="app-main" class="app-main"></main>
+  </div>
+
+  <div id="login-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>管理员登录</h3>
+        <button id="login-close" class="btn ghost tiny">关闭</button>
+      </div>
+      <p class="muted-text">未登录仅支持浏览题库与搜题；登录后可刷题与考试，建库、导题与发考需验证管理密码。</p>
+      <form id="login-form" class="stack-form">
+        <label><span>管理密码</span>
+          <input id="login-password" type="password" placeholder="请输入 ADMIN_PASSWORD" autocomplete="current-password" required>
+        </label>
+        <div class="modal-actions"><button type="submit" class="btn primary">登录</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="user-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="user-modal-title">学员登录（云端同步刷题记录）</h3>
+        <button id="user-close" class="btn ghost tiny">关闭</button>
+      </div>
+      <p class="muted-text">登录后，错题本、收藏、笔记与 30 天打卡统计将自动同步至云端，支持跨设备继续刷题。</p>
+      <form id="user-form" class="stack-form">
+        <label><span>用户名</span><input id="u-name" required placeholder="2-24位中英文或数字"></label>
+        <label><span>密码</span><input id="u-pass" type="password" required placeholder="至少 4 位"></label>
+        <label id="u-nick-wrap" hidden><span>昵称（可选）</span><input id="u-nick" placeholder="排行榜展示昵称"></label>
+        <div class="modal-actions" style="justify-content:space-between;">
+          <button type="button" id="u-toggle-mode" class="btn ghost tiny">没有账号？去注册</button>
+          <button type="submit" class="btn primary" id="u-submit-btn">登录</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="ai-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>本地 AI 大模型配置</h3>
+        <button id="ai-close" class="btn ghost tiny">关闭</button>
+      </div>
+      <p class="muted-text" style="margin:0 0 10px;">你的 API Key 仅保存在当前浏览器本地（localStorage），不会上传到服务器保存，其他人无法使用你的额度。</p>
+      <form id="ai-form" class="stack-form">
+        <label><span>API Base URL</span><input id="ai-url" placeholder="https://api.openai.com/v1" required></label>
+        <label><span>API Key（仅存当前浏览器本地）</span><input id="ai-key" type="password" placeholder="sk-..."></label>
+        <div>
+          <div class="row-gap" style="justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:13px;font-weight:600;">模型名称</span>
+            <button type="button" id="ai-fetch-models" class="btn ghost tiny">拉取模型列表</button>
+          </div>
+          <select id="ai-model-select" style="width:100%;margin-bottom:6px;" hidden></select>
+          <input id="ai-model" placeholder="gpt-4o-mini / deepseek-chat" style="width:100%;" required>
+        </div>
+        <div class="modal-actions"><button type="submit" class="btn primary">保存配置</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="apikey-modal" class="modal-backdrop" hidden>
+    <div class="modal-card" style="max-width:520px;">
+      <div class="modal-head">
+        <h3>外部调用 API 密钥（CRUD）</h3>
+        <button id="apikey-close" class="btn ghost tiny">关闭</button>
+      </div>
+      <p class="muted-text">外部程序或脚本可在请求头携带 <code>X-API-Key</code>（或 <code>Authorization: Bearer</code>）直接增删改查题库与试题。</p>
+      <div class="stack-form">
+        <div class="row-gap">
+          <input id="apikey-value" readonly style="flex:1;font-family:monospace;">
+          <button type="button" id="apikey-copy" class="btn primary tiny">复制</button>
+          <button type="button" id="apikey-rotate" class="btn danger tiny">重置密钥</button>
+        </div>
+        <pre id="apikey-example" style="margin:0;padding:10px;background:var(--surface-soft);border:1px solid var(--line);border-radius:6px;font-size:12px;overflow-x:auto;"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
