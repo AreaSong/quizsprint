@@ -16,11 +16,16 @@ export const renderUsersView = async (container, ctx) => {
   }
 
   let users = [];
+  let regPolicy = { mode: "open", inviteCode: "" };
   const state = { keyword: "", role: "" };
 
   const loadUsers = async () => {
-    const res = await apiRequest("/api/admin/users");
-    users = res.users || [];
+    const [uRes, pRes] = await Promise.all([
+      apiRequest("/api/admin/users"),
+      apiRequest("/api/admin/registration")
+    ]);
+    users = uRes.users || [];
+    regPolicy = { mode: pRes.mode || "open", inviteCode: pRes.inviteCode || "" };
   };
 
   try {
@@ -52,6 +57,27 @@ export const renderUsersView = async (container, ctx) => {
             </div>
           </div>
           <button id="usr-add-btn" class="btn primary">+ 新建账号</button>
+        </div>
+
+        <div class="panel" style="margin-top:12px;padding:12px;background:var(--surface-soft);">
+          <div class="row-gap" style="justify-content:space-between;flex-wrap:wrap;">
+            <div>
+              <strong>公网注册门禁</strong>
+              <span class="muted-text" style="font-size:12px;margin-left:8px;">控制未登录访客是否可自行注册学员账号</span>
+            </div>
+            <div class="row-gap" style="flex-wrap:wrap;">
+              <select id="reg-mode">
+                <option value="open" ${regPolicy.mode === "open" ? "selected" : ""}>开放自主注册</option>
+                <option value="invite" ${regPolicy.mode === "invite" ? "selected" : ""}>凭邀请码注册</option>
+                <option value="closed" ${regPolicy.mode === "closed" ? "selected" : ""}>仅管理员手动开号</option>
+              </select>
+              <span id="reg-invite-wrap" class="row-gap" ${regPolicy.mode === "invite" ? "" : "hidden"}>
+                <input id="reg-invite-code" value="${escapeHtml(regPolicy.inviteCode)}" placeholder="设置注册邀请码" style="width:150px;">
+                <button type="button" id="reg-gen-invite" class="btn ghost tiny">随机生成</button>
+              </span>
+              <button type="button" id="reg-save-btn" class="btn primary tiny">保存门禁设置</button>
+            </div>
+          </div>
         </div>
 
         <div class="row-gap" style="margin-top:12px;">
@@ -88,6 +114,26 @@ export const renderUsersView = async (container, ctx) => {
 
     container.querySelector("#usr-role-filter").addEventListener("change", (e) => { state.role = e.target.value; renderBody(); });
     container.querySelector("#usr-kw").addEventListener("input", (e) => { state.keyword = e.target.value; renderBody(); });
+
+    const regModeSel = container.querySelector("#reg-mode");
+    const regInviteWrap = container.querySelector("#reg-invite-wrap");
+    const regInviteInput = container.querySelector("#reg-invite-code");
+    regModeSel.addEventListener("change", () => { regInviteWrap.hidden = regModeSel.value !== "invite"; });
+    container.querySelector("#reg-gen-invite").addEventListener("click", () => {
+      regInviteInput.value = Math.random().toString(36).slice(2, 10).toUpperCase();
+    });
+    container.querySelector("#reg-save-btn").addEventListener("click", async () => {
+      try {
+        const res = await apiRequest("/api/admin/registration", {
+          method: "PUT",
+          body: JSON.stringify({ mode: regModeSel.value, inviteCode: regInviteInput.value.trim() })
+        });
+        regPolicy = { mode: res.mode, inviteCode: res.inviteCode || "" };
+        showToast("注册门禁设置已保存", "ok");
+      } catch (err) {
+        showToast(err.message, "bad");
+      }
+    });
 
     container.querySelector("#usr-add-btn").addEventListener("click", async () => {
       const form = await openFormDialog({

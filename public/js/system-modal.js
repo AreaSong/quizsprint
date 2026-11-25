@@ -7,9 +7,15 @@ const formatUptime = (sec) => {
   return h > 0 ? `${h} 小时 ${m} 分` : `${m} 分 ${s % 60} 秒`;
 };
 
+const formatBytes = (bytes) => {
+  const n = Number(bytes || 0);
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(n / 1024).toFixed(1)} KB`;
+};
+
 const buildTabsBar = (activeTab) => `
   <div class="row-gap" style="border-bottom:1px solid var(--line);padding-bottom:8px;">
-    ${[["update", "在线更新"], ["backup", "数据备份"]].map(([k, label]) => `
+    ${[["update", "在线更新"], ["backup", "数据备份与维护"]].map(([k, label]) => `
       <button type="button" class="btn tiny ${activeTab === k ? "primary" : "ghost"} js-sys-tab" data-tab="${k}">${label}</button>
     `).join("")}
   </div>
@@ -46,13 +52,32 @@ const buildUpdateHtml = (st, checkResult = null) => {
   `;
 };
 
-const buildBackupHtml = () => `
-  <div class="panel" style="padding:14px;background:var(--surface-soft);">
-    <h4 style="margin:0 0 6px;">SQLite 数据库快照备份</h4>
-    <p class="muted-text" style="margin:0 0 12px;">一键下载完整的 <code>question-bank.db</code>（包含全部题库、试题、学员账号、练习进度与考试成绩单）。</p>
-    <a class="btn primary" href="/api/admin/backup.db" style="display:inline-block;text-decoration:none;">下载数据库备份 (.db)</a>
-  </div>
-`;
+const buildBackupHtml = (dbStats, maintainReport = "") => {
+  const c = dbStats?.counts || {};
+  return `
+    <div class="panel" style="padding:14px;background:var(--surface-soft);">
+      <div class="row-gap" style="justify-content:space-between;">
+        <strong>SQLite 数据库概况</strong>
+        <span class="badge ok">${escapeHtml(dbStats?.journalMode || "WAL")} 模式 · ${formatBytes(dbStats?.dbSizeBytes)}</span>
+      </div>
+      <div class="row-gap" style="margin-top:10px;font-size:12px;">
+        <span class="badge">题库 ${c.banks ?? "-"}</span>
+        <span class="badge">试题 ${c.questions ?? "-"}</span>
+        <span class="badge">账号 ${c.users ?? "-"}</span>
+        <span class="badge">考试 ${c.exams ?? "-"}</span>
+        <span class="badge">交卷 ${c.submissions ?? "-"}</span>
+        <span class="badge">错题聚合 ${c.wrongStats ?? "-"}</span>
+        <span class="badge">上传图片 ${dbStats?.uploadCount ?? "-"}</span>
+      </div>
+      <p class="muted-text" style="margin:10px 0 12px;">下载备份将通过 SQLite 原生 <code>VACUUM INTO</code> 生成完整原子快照；一键整理可清理孤立进度、孤立错题统计、未引用图片并压缩空闲空间。</p>
+      <div class="row-gap">
+        <a class="btn primary tiny" href="/api/admin/backup.db" style="text-decoration:none;">下载数据库备份 (.db)</a>
+        <button type="button" id="db-maintain-btn" class="btn ghost tiny">一键清理孤立数据并压缩 (VACUUM)</button>
+      </div>
+      ${maintainReport ? `<div class="muted-text" style="margin-top:10px;font-size:12px;color:var(--ok);">${escapeHtml(maintainReport)}</div>` : ""}
+    </div>
+  `;
+};
 
 const pollUntilReady = async (outputEl) => {
   outputEl.hidden = false;
@@ -86,15 +111,19 @@ export const initSystemAndDisclaimerModals = () => {
 
   let activeTab = "update";
   let cachedStatus = null;
+  let cachedDbStats = null;
 
   const loadTabAndRender = async (tab) => {
     activeTab = tab;
     if (tab === "update" && !cachedStatus) cachedStatus = await apiRequest("/api/admin/system/status");
+    if (tab === "backup") cachedDbStats = await apiRequest("/api/admin/db/stats");
     renderPanel();
   };
 
-  const renderPanel = (checkResult = null, outputText = "") => {
-    const content = activeTab === "update" ? buildUpdateHtml(cachedStatus || {}, checkResult) : buildBackupHtml();
+  const renderPanel = (checkResult = null, outputText = "", maintainReport = "") => {
+    const content = activeTab === "update"
+      ? buildUpdateHtml(cachedStatus || {}, checkResult)
+      : buildBackupHtml(cachedDbStats || {}, maintainReport);
     sysBody.innerHTML = `${buildTabsBar(activeTab)}${content}`;
     sysBody.querySelectorAll(".js-sys-tab").forEach((b) => b.addEventListener("click", () => loadTabAndRender(b.dataset.tab).catch((e) => showToast(e.message, "bad"))));
 
@@ -129,12 +158,27 @@ export const initSystemAndDisclaimerModals = () => {
         await pollUntilReady(sysBody.querySelector("#sys-output"));
       } catch (err) { showToast(err.message, "bad"); }
     });
+
+    sysBody.querySelector("#db-maintain-btn")?.addEventListener("click", async () => {
+      try {
+        const res = await apiRequest("/api/admin/db/maintain", { method: "POST" });
+        cachedDbStats = res.stats;
+        const msg = `整理完成：清理孤立进度 ${res.removedProgress} 条、孤立错题 ${res.removedWrongStats} 条、孤立图片 ${res.removedImages} 张；体积 ${formatBytes(res.beforeSizeBytes)} → ${formatBytes(res.afterSizeBytes)}`;
+        showToast("数据库整理压缩完成", "ok");
+        renderPanel(null, "", msg);
+      } catch (err) { showToast(err.message, "bad"); }
+    });
   };
 
-  sysBtn?.addEventListener("click", async () => {
+  const openSystemModal = async () => {
     sysModal.hidden = false;
     cachedStatus = null;
     sysBody.innerHTML = '<p class="muted-text">正在读取系统状态...</p>';
     try { await loadTabAndRender("update"); } catch (err) { sysBody.innerHTML = `<p class="muted-text">${escapeHtml(err.message)}</p>`; }
+  };
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".js-open-sys-modal")) openSystemModal();
   });
+  sysBtn?.addEventListener("click", openSystemModal);
 };

@@ -1,8 +1,45 @@
-import { apiRequest, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
+import { apiRequest, escapeHtml, getCloudUser, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { openFormDialog } from "../dialog.js";
-import { openCreateExamModal, openMySubmissionsModal, openSubmissionsModal } from "./exam-modals.js";
+import { openCreateExamModal, openEditExamModal, openMySubmissionsModal, openSubmissionsModal } from "./exam-modals.js";
 
 let activeExamCleanup = null;
+
+const getExamDraftKey = (examId) => `quizsprint_exam_draft_${examId}_${getCloudUser()?.id || "anon"}`;
+
+const loadExamDraft = (examId) => {
+  try {
+    const raw = localStorage.getItem(getExamDraftKey(examId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveExamDraft = (examId, draft) => {
+  try { localStorage.setItem(getExamDraftKey(examId), JSON.stringify(draft)); } catch { /* ignore */ }
+};
+
+const clearExamDraft = (examId) => {
+  try { localStorage.removeItem(getExamDraftKey(examId)); } catch { /* ignore */ }
+};
+
+const restoreExamInputs = (container, questions, answers) => {
+  for (const q of questions) {
+    const saved = answers[q.id];
+    if (!Array.isArray(saved) || !saved.length) continue;
+    const card = container.querySelector(`[data-qid="${CSS.escape(q.id)}"]`);
+    if (!card) continue;
+    if (q.options?.length) {
+      const picked = new Set(saved);
+      card.querySelectorAll("input[type=radio], input[type=checkbox]").forEach((inp) => {
+        inp.checked = picked.has(inp.value);
+      });
+    } else {
+      const fill = card.querySelector(".er-fill");
+      if (fill) fill.value = saved.join(" | ");
+    }
+  }
+};
 
 export const renderExamsView = async (container, ctx) => {
   if (activeExamCleanup) {
@@ -66,6 +103,7 @@ export const renderExamsView = async (container, ctx) => {
               <button class="btn primary tiny" data-act="enter">进入考场</button>
               <button class="btn ghost tiny" data-act="copy">复制链接</button>
               ${isAdmin ? `
+                <button class="btn ghost tiny" data-act="edit">编辑</button>
                 <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
                 <button class="btn danger tiny" data-act="del">删除</button>
               ` : ""}
@@ -78,6 +116,10 @@ export const renderExamsView = async (container, ctx) => {
   `;
 
   const modal = container.querySelector("#ex-modal");
+
+  if (routeParams.openMySubs && isLoggedIn) {
+    openMySubmissionsModal(modal).catch((err) => showToast(err.message, "bad"));
+  }
 
   container.querySelector("#ex-my-subs-btn").addEventListener("click", async () => {
     if (!isLoggedIn) {
@@ -128,6 +170,9 @@ export const renderExamsView = async (container, ctx) => {
         }
         return;
       }
+      if (act === "edit" && ex) {
+        return openEditExamModal(modal, { exam: ex, onUpdated: () => renderExamsView(container, ctx) });
+      }
       if (act === "subs") {
         try {
           await openSubmissionsModal(modal, { exam: ex });
@@ -159,6 +204,16 @@ const renderExamRoom = async (container, examId, code = "") => {
     return;
   }
 
+  const draft = loadExamDraft(examId);
+  if (draft && draft.endAt > Date.now() && draft.studentName) {
+    showToast("已自动恢复上次未交卷作答草稿", "ok");
+    return startExamSession(container, exam, {
+      studentName: draft.studentName,
+      studentNo: draft.studentNo || ""
+    }, draft);
+  }
+  if (draft) clearExamDraft(examId);
+
   container.innerHTML = `
     <div class="panel" style="max-width:480px;margin:20px auto;">
       <h2 style="margin-top:0;">${escapeHtml(exam.title)}</h2>
@@ -180,14 +235,21 @@ const renderExamRoom = async (container, examId, code = "") => {
   });
 };
 
-const startExamSession = (container, exam, student) => {
+const startExamSession = (container, exam, student, restoredDraft = null) => {
   const questions = exam.questionsSnapshot || [];
-  const answers = {};
+  const answers = restoredDraft?.answers && typeof restoredDraft.answers === "object" ? { ...restoredDraft.answers } : {};
   const fallbackScore = questions.length ? Math.round(((exam.totalScore || 100) / questions.length) * 10) / 10 : 0;
-  let remainSec = exam.durationMinutes * 60;
-  let tabSwitches = 0;
+  let tabSwitches = Number(restoredDraft?.tabSwitches || 0);
   let finished = false;
-  const startTime = Date.now();
+  const startTime = Number(restoredDraft?.startTime || Date.now());
+  const endAt = Number(restoredDraft?.endAt || (startTime + exam.durationMinutes * 60000));
+  const calcRemainSec = () => Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+  let remainSec = calcRemainSec();
+
+  const persistDraft = () => {
+    if (!finished) saveExamDraft(exam.id, { ...student, answers, tabSwitches, startTime, endAt });
+  };
+  persistDraft();
 
   const submitNow = async () => {
     if (finished) return;
@@ -204,6 +266,7 @@ const startExamSession = (container, exam, student) => {
           usedSeconds: Math.round((Date.now() - startTime) / 1000)
         })
       });
+      clearExamDraft(exam.id);
       const sub = res.submission;
       container.innerHTML = `
         <div class="panel" style="max-width:720px;margin:0 auto;">
@@ -227,6 +290,8 @@ const startExamSession = (container, exam, student) => {
         </div>
       `;
     } catch (err) {
+      finished = false;
+      persistDraft();
       showToast(err.message, "bad");
     }
   };
@@ -241,6 +306,7 @@ const startExamSession = (container, exam, student) => {
     if (!container.querySelector("#er-submit")) return cleanupSession();
     if (document.hidden && !finished) {
       tabSwitches += 1;
+      persistDraft();
       showToast(`警告：检测到切屏 (${tabSwitches}/${exam.maxTabSwitches})`, "bad");
       if (exam.maxTabSwitches > 0 && tabSwitches > exam.maxTabSwitches) {
         showToast("切屏次数超限，系统自动交卷！", "bad");
@@ -251,12 +317,15 @@ const startExamSession = (container, exam, student) => {
   document.addEventListener("visibilitychange", onVis);
   activeExamCleanup = cleanupSession;
 
-  timer = setInterval(() => {
-    if (finished || !container.querySelector("#er-submit")) return cleanupSession();
-    remainSec -= 1;
+  const updateClock = () => {
+    remainSec = calcRemainSec();
     const el = container.querySelector("#er-clock");
     if (el) el.textContent = `${String(Math.floor(remainSec / 60)).padStart(2, "0")}:${String(remainSec % 60).padStart(2, "0")}`;
-    if (remainSec <= 0) submitNow();
+    return remainSec;
+  };
+  timer = setInterval(() => {
+    if (finished || !container.querySelector("#er-submit")) return cleanupSession();
+    if (updateClock() <= 0) submitNow();
   }, 1000);
 
   container.innerHTML = `
@@ -294,15 +363,19 @@ const startExamSession = (container, exam, student) => {
   container.querySelectorAll("input[type=radio], input[type=checkbox]").forEach((inp) => {
     inp.addEventListener("change", () => {
       const qid = inp.closest("[data-qid]").dataset.qid;
-      answers[qid] = [...container.querySelectorAll(`[data-qid="${qid}"] input:checked`)].map((i) => i.value);
+      answers[qid] = [...container.querySelectorAll(`[data-qid="${CSS.escape(qid)}"] input:checked`)].map((i) => i.value);
+      persistDraft();
     });
   });
   container.querySelectorAll(".er-fill").forEach((inp) => {
     inp.addEventListener("input", () => {
       const qid = inp.closest("[data-qid]").dataset.qid;
       answers[qid] = inp.value.split("|").map((s) => s.trim()).filter(Boolean);
+      persistDraft();
     });
   });
+  restoreExamInputs(container, questions, answers);
+  updateClock();
   container.querySelector("#er-submit").addEventListener("click", () => {
     if (confirm("确认交卷吗？")) submitNow();
   });

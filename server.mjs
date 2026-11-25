@@ -165,7 +165,7 @@ const handleApi = async (req, res, url) => {
     return sendJson(res, 200, { code: 200, admin: false }, { "Set-Cookie": buildClearSessionCookie() });
   }
   if (method === "GET" && pathname === "/api/template.json") {
-    return sendDownload(res, "quizhub-question-template.json", TEMPLATE);
+    return sendDownload(res, "quizsprint-question-template.json", TEMPLATE);
   }
   if (method === "GET" && pathname === "/api/search") {
     const items = store.searchQuestions({
@@ -365,7 +365,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`知题库 (QuizHub) 已启动：http://${HOST}:${PORT}`);
+  console.log(`QuizSprint 已启动：http://${HOST}:${PORT}`);
   console.log(`数据目录：${DATA_DIR}`);
   if (isUsingGeneratedPassword()) {
     console.log(`未设置 ADMIN_PASSWORD，本次随机管理密码为：${getAdminPassword()}`);

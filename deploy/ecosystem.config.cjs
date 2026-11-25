@@ -3,7 +3,7 @@ const path = require("node:path");
 module.exports = {
   apps: [
     {
-      name: "quiz-hub",
+      name: "quizsprint",
       script: "./server.mjs",
       cwd: path.resolve(__dirname, ".."),
       instances: 1,

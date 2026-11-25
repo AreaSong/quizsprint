@@ -3,7 +3,7 @@ node_modules/
 *.log
 npm-debug.log*
 
-# 运行期数据库与上传资源（保留种子文件 data/questions.json）
+# 运行期数据库与上传资源（data/ 下运行期文件已忽略）
 data/*.db
 data/*.db-shm
 data/*.db-wal

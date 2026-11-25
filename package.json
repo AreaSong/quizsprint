@@ -1,7 +1,7 @@
 {
-  "name": "quiz-hub",
+  "name": "quizsprint",
   "version": "1.0.0",
-  "description": "知题库 (QuizHub) · 在线刷题、背题与防作弊考试学习平台（兼容油猴脚本本地题库）",
+  "description": "QuizSprint · 自托管在线刷题、背题与防作弊考试学习平台（兼容油猴脚本本地题库）",
   "private": true,
   "type": "module",
   "scripts": {

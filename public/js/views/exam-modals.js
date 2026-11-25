@@ -1,6 +1,14 @@
 import { apiRequest, escapeHtml, fetchBankQuestionsSafe, showToast, TYPE_LABELS } from "../api.js";
 
 const round1 = (n) => Math.round(Number(n || 0) * 10) / 10;
+const localInputToIso = (val) => (val ? new Date(val).toISOString() : "");
+const isoToLocalInput = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 export const exportSubmissionsCsv = (examTitle, subs) => {
   const header = ["姓名", "学号", "得分", "是否及格", "阅卷状态", "答对题数", "总题数", "切屏次数", "用时(秒)", "交卷时间"];
@@ -153,15 +161,14 @@ export const openCreateExamModal = async (modal, { banks, activeBankId, onCreate
 
   modal.querySelector("#ex-m-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const toIso = (val) => (val ? new Date(val).toISOString() : "");
     const payload = {
       title: modal.querySelector("#ex-title").value.trim(),
       bankId: bankSel.value,
       durationMinutes: Number(modal.querySelector("#ex-dur").value),
       passScore: Number(passEl.value),
       maxAttempts: Number(modal.querySelector("#ex-attempts").value || 0),
-      startTime: toIso(modal.querySelector("#ex-start").value),
-      endTime: toIso(modal.querySelector("#ex-end").value),
+      startTime: localInputToIso(modal.querySelector("#ex-start").value),
+      endTime: localInputToIso(modal.querySelector("#ex-end").value),
       accessCode: modal.querySelector("#ex-code").value.trim(),
       maxTabSwitches: Number(modal.querySelector("#ex-tab").value),
       disableCopy: modal.querySelector("#ex-nocopy").checked,
@@ -193,6 +200,65 @@ export const openCreateExamModal = async (modal, { banks, activeBankId, onCreate
   });
 
   await loadBankPool();
+};
+
+const renderEditExamBody = (exam) => `
+  <div class="modal-card" style="max-width:600px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-head"><h3>编辑考试设置</h3><button id="ex-e-close" class="btn ghost tiny">关闭</button></div>
+    <p class="muted-text" style="margin:0 0 10px;">固定试卷共 ${exam.questionCount || 0} 题（满分 ${exam.totalScore || 100} 分），调整规则不影响已抽题目与历史成绩。</p>
+    <form id="ex-e-form" class="stack-form">
+      <label><span>考试名称</span><input id="ex-e-title" required value="${escapeHtml(exam.title)}"></label>
+      <div class="row-gap">
+        <label style="flex:1;"><span>时长(分钟)</span><input id="ex-e-dur" type="number" min="1" value="${exam.durationMinutes}"></label>
+        <label style="flex:1;"><span>及格分</span><input id="ex-e-pass" type="number" min="1" value="${exam.passScore}"></label>
+        <label style="flex:1;"><span>每人限考次数(0不限)</span><input id="ex-e-attempts" type="number" min="0" value="${exam.maxAttempts || 0}"></label>
+      </div>
+      <div class="row-gap">
+        <label style="flex:1;"><span>开考时间(可选)</span><input id="ex-e-start" type="datetime-local" value="${isoToLocalInput(exam.startTime)}"></label>
+        <label style="flex:1;"><span>截止时间(可选)</span><input id="ex-e-end" type="datetime-local" value="${isoToLocalInput(exam.endTime)}"></label>
+      </div>
+      <div class="row-gap">
+        <label style="flex:1;"><span>考试密码(留空即取消密码)</span><input id="ex-e-code" value="${escapeHtml(exam.accessCode || "")}" placeholder="留空表示免密"></label>
+        <label style="flex:1;"><span>最大切屏次数</span><input id="ex-e-tab" type="number" min="0" value="${exam.maxTabSwitches}"></label>
+      </div>
+      <label class="switch-row"><span>禁止复制题目文本</span><input id="ex-e-nocopy" type="checkbox" ${exam.disableCopy ? "checked" : ""}></label>
+      <label class="switch-row"><span>交卷后公开参考答案</span><input id="ex-e-show-ans" type="checkbox" ${exam.showAnswerAfterSubmit !== false ? "checked" : ""}></label>
+      <label class="switch-row"><span>多选题/不定项漏选按比例得分</span><input id="ex-e-mpart" type="checkbox" ${exam.multiPartialScore ? "checked" : ""}></label>
+      <label class="switch-row"><span>填空题按空平均得分</span><input id="ex-e-fpart" type="checkbox" ${exam.fillPartialScore ? "checked" : ""}></label>
+      <div class="modal-actions"><button type="submit" class="btn primary">保存修改</button></div>
+    </form>
+  </div>
+`;
+
+export const openEditExamModal = (modal, { exam, onUpdated }) => {
+  modal.hidden = false;
+  modal.innerHTML = renderEditExamBody(exam);
+  modal.querySelector("#ex-e-close").addEventListener("click", () => { modal.hidden = true; });
+  modal.querySelector("#ex-e-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      title: modal.querySelector("#ex-e-title").value.trim(),
+      durationMinutes: Number(modal.querySelector("#ex-e-dur").value),
+      passScore: Number(modal.querySelector("#ex-e-pass").value),
+      maxAttempts: Number(modal.querySelector("#ex-e-attempts").value || 0),
+      startTime: localInputToIso(modal.querySelector("#ex-e-start").value),
+      endTime: localInputToIso(modal.querySelector("#ex-e-end").value),
+      accessCode: modal.querySelector("#ex-e-code").value.trim(),
+      maxTabSwitches: Number(modal.querySelector("#ex-e-tab").value),
+      disableCopy: modal.querySelector("#ex-e-nocopy").checked,
+      showAnswerAfterSubmit: modal.querySelector("#ex-e-show-ans").checked,
+      multiPartialScore: modal.querySelector("#ex-e-mpart").checked,
+      fillPartialScore: modal.querySelector("#ex-e-fpart").checked
+    };
+    try {
+      await apiRequest(`/api/exams/${encodeURIComponent(exam.id)}`, { method: "PUT", body: JSON.stringify(payload) });
+      modal.hidden = true;
+      showToast("考试设置已更新", "ok");
+      onUpdated?.();
+    } catch (err) {
+      showToast(err.message, "bad");
+    }
+  });
 };
 
 export const openSubmissionsModal = async (modal, { exam, onUpdated }) => {

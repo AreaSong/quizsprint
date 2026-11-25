@@ -107,7 +107,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
       ${q.analysis ? `<div style="margin-top:8px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
       <div id="ai-explain-box" class="muted-text" style="margin-top:8px;white-space:pre-wrap;" hidden></div>
       <div style="margin-top:10px;">
-        <input id="q-note-input" type="text" value="${escapeHtml((bankState.notes || {})[q.id] || "")}" placeholder="写一条个人笔记（自动保存在本地/云端）..." style="width:100%;">
+        <input id="q-note-input" type="text" value="${escapeHtml((bankState.notes || {})[q.id] || "")}" placeholder="写一条个人笔记（自动保存）..." style="width:100%;">
       </div>
     </div>
   `;
@@ -139,44 +139,46 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
       <span style="color:var(--bad);">错 ${wrongCount}</span>
       <span>正确率 ${rate}%</span>
     </div>
-    <hr style="border:0;border-top:1px solid var(--line);margin:12px 0;">
-    <label class="switch-row"><span>背题模式（直出答案）</span><input class="js-sw-recite" type="checkbox" ${settings.reciteMode ? "checked" : ""}></label>
-    <label class="switch-row"><span>答对自动下一题</span><input class="js-sw-auto" type="checkbox" ${settings.autoNext ? "checked" : ""}></label>
-    <label class="switch-row"><span>选项乱序</span><input class="js-sw-shuffle" type="checkbox" ${settings.shuffleOptions ? "checked" : ""}></label>
-    <div class="switch-row">
-      <span>选题策略</span>
-      <select class="js-sw-strategy" style="padding:3px 6px;font-size:12px;">
-        <option value="default" ${settings.strategy === "default" ? "selected" : ""}>默认顺序</option>
-        <option value="wrongFirst" ${settings.strategy === "wrongFirst" ? "selected" : ""}>错题优先</option>
-        <option value="unansweredFirst" ${settings.strategy === "unansweredFirst" ? "selected" : ""}>未做题优先</option>
-      </select>
-    </div>
-    <div class="switch-row">
-      <span>错题移出条件</span>
-      <select class="js-sw-streak" style="padding:3px 6px;font-size:12px;">
-        ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(settings.wrongClearStreak || 1) === n ? "selected" : ""}>连续答对 ${n} 次</option>`).join("")}
-      </select>
-    </div>
     ${mode === "wrong" && list.length ? `<button class="btn ghost tiny js-export-wrong" style="width:100%;margin-top:8px;">导出/打印错题本</button>` : ""}
+    <details class="sheet-settings">
+      <summary>练习偏好设置 ▾</summary>
+      <div style="margin-top:8px;">
+        <label class="switch-row"><span>背题模式（直出答案）</span><input class="js-sw-recite" type="checkbox" ${settings.reciteMode ? "checked" : ""}></label>
+        <label class="switch-row"><span>答对自动下一题</span><input class="js-sw-auto" type="checkbox" ${settings.autoNext ? "checked" : ""}></label>
+        <label class="switch-row"><span>选项乱序</span><input class="js-sw-shuffle" type="checkbox" ${settings.shuffleOptions ? "checked" : ""}></label>
+        <div class="switch-row">
+          <span>选题策略</span>
+          <select class="js-sw-strategy" style="padding:3px 6px;font-size:12px;">
+            <option value="default" ${settings.strategy === "default" ? "selected" : ""}>默认顺序</option>
+            <option value="wrongFirst" ${settings.strategy === "wrongFirst" ? "selected" : ""}>错题优先</option>
+            <option value="unansweredFirst" ${settings.strategy === "unansweredFirst" ? "selected" : ""}>未做题优先</option>
+          </select>
+        </div>
+        <div class="switch-row">
+          <span>错题移出条件</span>
+          <select class="js-sw-streak" style="padding:3px 6px;font-size:12px;">
+            ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(settings.wrongClearStreak || 1) === n ? "selected" : ""}>连续答对 ${n} 次</option>`).join("")}
+          </select>
+        </div>
+      </div>
+    </details>
   `;
 };
 
-export const buildNotesAsideHtml = (list, q, bankState) => {
+export const buildNotesPanelHtml = (list, q, bankState) => {
   const notesMap = bankState.notes || {};
   const notedEntries = list
     .map((item, idx) => ({ item, idx, note: notesMap[item.id] }))
     .filter((entry) => entry.note && entry.note.trim());
 
   return `
-    <aside class="panel practice-notes-aside">
+    <div class="stack-form">
       <div class="row-gap" style="justify-content:space-between;">
         <strong>本题笔记</strong>
-        <span class="muted-text" style="font-size:12px;">自动保存</span>
+        <span class="muted-text" style="font-size:12px;">失焦自动保存</span>
       </div>
-      <textarea id="aside-note-input" class="note-textarea" placeholder="在这里记录本题解题思路、口诀或易错点...">${escapeHtml(notesMap[q.id] || "")}</textarea>
-      <div class="row-gap" style="justify-content:space-between;margin-top:4px;">
-        <strong>已记笔记 (${notedEntries.length})</strong>
-      </div>
+      <textarea id="aside-note-input" class="note-textarea" placeholder="在这里记录解题思路、记忆口诀或易错点...">${escapeHtml(notesMap[q.id] || "")}</textarea>
+      <div><strong>本卷已记 (${notedEntries.length})</strong></div>
       <div class="note-history-list">
         ${notedEntries.map((entry) => `
           <button type="button" class="note-history-item" data-jump="${entry.idx}">
@@ -185,7 +187,7 @@ export const buildNotesAsideHtml = (list, q, bankState) => {
           </button>
         `).join("") || '<p class="muted-text" style="margin:4px 0;font-size:12px;">暂无历史笔记</p>'}
       </div>
-    </aside>
+    </div>
   `;
 };
 
@@ -241,7 +243,7 @@ export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) =
     </div>
     <div class="row-gap">
       <button id="btn-imm-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}">背题</button>
-      <button id="btn-imm-eye" class="btn tiny ${settings.eyeCare ? "ok" : "ghost"}">护眼</button>
+      <button id="btn-imm-theme" class="btn ghost tiny">切换主题</button>
       <button class="btn primary tiny js-open-ai-modal">问 AI</button>
       <button class="btn ghost tiny js-open-sheet">答题卡</button>
     </div>
@@ -263,13 +265,13 @@ export const buildModeBarHtml = ({ bank, mode, bankState, typeFilter, chapterFil
           ["exam", "模拟考试"]
         ].map(([k, label]) => `<button class="btn tiny ${mode === k ? "primary" : "ghost"}" data-mode="${k}">${label}</button>`).join("")}
         ${mode === "type" ? `
-          <select id="p-type-filter" style="padding:3px 8px;font-size:12px;">
+          <select id="p-type-filter" style="padding:4px 8px;font-size:12px;">
             <option value="">全部题型</option>
             ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${typeFilter === k ? "selected" : ""}>${v}</option>`).join("")}
           </select>
         ` : ""}
         ${mode === "chapter" ? `
-          <select id="p-chapter-filter" style="padding:3px 8px;font-size:12px;">
+          <select id="p-chapter-filter" style="padding:4px 8px;font-size:12px;">
             <option value="">全部章节 (${chapterStats.reduce((s, c) => s + c.total, 0)} 题)</option>
             ${chapterStats.map((c) => `<option value="${escapeHtml(c.name)}" ${chapterFilter === c.name ? "selected" : ""}>${escapeHtml(c.name)} (${c.done}/${c.total})</option>`).join("")}
           </select>

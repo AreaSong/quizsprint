@@ -9,6 +9,8 @@ import {
   setCloudSession,
   showToast
 } from "./api.js";
+import { openFormDialog } from "./dialog.js";
+import { initSystemAndDisclaimerModals } from "./system-modal.js";
 import { renderBanksView } from "./views/banks-view.js";
 import { renderExamsView } from "./views/exams-view.js";
 import { renderImportView } from "./views/import-view.js";
@@ -17,19 +19,26 @@ import { renderPracticeView } from "./views/practice-view.js";
 import { renderSearchView } from "./views/search-view.js";
 import { renderStatsView } from "./views/stats-view.js";
 import { renderUsersView } from "./views/users-view.js";
-import { initSystemAndDisclaimerModals } from "./system-modal.js";
-import { openFormDialog } from "./dialog.js";
+
+const ROUTE_TITLES = {
+  banks: "题库中心",
+  practice: "在线刷题",
+  exams: "在线考试",
+  search: "搜题中心",
+  stats: "学习统计",
+  manage: "试题管理",
+  import: "批量导题",
+  users: "用户管理"
+};
+const THEME_CYCLE = ["light", "paper", "dark"];
+const THEME_LABELS = { light: "明亮", paper: "护眼", dark: "夜间" };
 
 const appMain = document.getElementById("app-main");
 const bankSelect = document.getElementById("active-bank-select");
-const navBtns = document.querySelectorAll(".nav-btn");
-const navUsersBtn = document.getElementById("nav-users-btn");
-const userAuthBtn = document.getElementById("user-auth-btn");
-const userPwdBtn = document.getElementById("user-pwd-btn");
-const sysUpdateBtn = document.getElementById("sys-update-btn");
-const apiKeyBtn = document.getElementById("api-key-btn");
-const aiCfgBtn = document.getElementById("ai-cfg-btn");
-const eyeCareBtn = document.getElementById("eye-care-btn");
+const pageTitleEl = document.getElementById("page-title");
+const sidebarAdminGroup = document.getElementById("sidebar-admin-group");
+const themeBtn = document.getElementById("theme-btn");
+const userMenuWrap = document.getElementById("user-menu-wrap");
 const userModal = document.getElementById("user-modal");
 const aiModal = document.getElementById("ai-modal");
 const apiKeyModal = document.getElementById("apikey-modal");
@@ -39,16 +48,19 @@ const appState = {
   routeParams: {},
   banks: [],
   activeBankId: localStorage.getItem("as_qb_active_bank") || "",
-  isAdmin: false
+  isAdmin: false,
+  registrationMode: "open"
 };
 
 let userRegisterMode = false;
 let requireAdminPrompt = false;
+let userDropdownOpen = false;
 
-const applyEyeCare = () => {
+const applyTheme = () => {
   const settings = getGlobalSettings();
-  document.body.classList.toggle("eye-care", Boolean(settings.eyeCare));
-  eyeCareBtn.textContent = settings.eyeCare ? "退出护眼" : "护眼模式";
+  const theme = THEME_CYCLE.includes(settings.theme) ? settings.theme : "light";
+  document.documentElement.dataset.theme = theme;
+  themeBtn.textContent = THEME_LABELS[theme] || "明亮";
 };
 
 const syncBankSelect = () => {
@@ -66,23 +78,62 @@ const syncBankSelect = () => {
     .join("");
 };
 
-const syncAuthBtns = () => {
-  apiKeyBtn.hidden = !appState.isAdmin;
-  if (sysUpdateBtn) sysUpdateBtn.hidden = !appState.isAdmin;
-  if (navUsersBtn) navUsersBtn.hidden = !appState.isAdmin;
-
-  const hasAiKey = Boolean(getLocalAiConfig().apiKey);
-  aiCfgBtn.textContent = hasAiKey ? "AI 已配置" : "AI 设置(未填Key)";
-  aiCfgBtn.classList.toggle("ok", hasAiKey);
-
+const renderUserMenu = () => {
   const user = getCloudUser();
-  if (userPwdBtn) userPwdBtn.hidden = !Boolean(user);
   const loggedIn = Boolean(user || appState.isAdmin);
-  userAuthBtn.textContent = !loggedIn
-    ? "账号登录"
-    : (appState.isAdmin ? `${user ? (user.nickname || user.username) : "管理员"}(管理员·退出)` : `${user.nickname || user.username}(退出)`);
-  userAuthBtn.classList.toggle("primary", loggedIn);
-  userAuthBtn.classList.toggle("ghost", !loggedIn);
+  const hasAiKey = Boolean(getLocalAiConfig().apiKey);
+  if (sidebarAdminGroup) sidebarAdminGroup.hidden = !appState.isAdmin;
+
+  if (!loggedIn) {
+    userMenuWrap.innerHTML = `
+      <div class="row-gap">
+        <button type="button" class="btn ghost tiny js-open-ai-cfg">${hasAiKey ? "AI 已配置" : "AI 设置"}</button>
+        <button type="button" id="user-login-btn" class="btn primary tiny">账号登录</button>
+      </div>
+    `;
+    userMenuWrap.querySelector("#user-login-btn").addEventListener("click", () => openAccountModal(false));
+    userMenuWrap.querySelector(".js-open-ai-cfg").addEventListener("click", openAiModal);
+    return;
+  }
+
+  const displayName = user ? (user.nickname || user.username) : "管理员";
+  const initial = displayName.slice(0, 1).toUpperCase();
+  userMenuWrap.innerHTML = `
+    <button type="button" id="user-avatar-btn" class="avatar-btn">
+      <span class="avatar-circle">${escapeHtml(initial)}</span>
+      <span>${escapeHtml(displayName)}${appState.isAdmin ? " · 管理" : ""}</span>
+      <span class="muted-text">▾</span>
+    </button>
+    <div id="user-dropdown" class="dropdown-menu" ${userDropdownOpen ? "" : "hidden"}>
+      <button type="button" class="dropdown-item js-menu-exams">我的成绩单</button>
+      <button type="button" class="dropdown-item js-menu-ai">AI 模型设置 ${hasAiKey ? "✓" : "(未填)"}</button>
+      ${user ? `<button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button>` : ""}
+      ${appState.isAdmin ? `
+        <div class="dropdown-sep"></div>
+        <button type="button" class="dropdown-item js-menu-users">用户管理</button>
+        <button type="button" class="dropdown-item js-menu-apikey">外部 API 密钥</button>
+        <button type="button" class="dropdown-item js-open-sys-modal">系统更新与备份</button>
+      ` : ""}
+      <div class="dropdown-sep"></div>
+      <button type="button" class="dropdown-item danger js-menu-logout">退出登录</button>
+    </div>
+  `;
+
+  userMenuWrap.querySelector("#user-avatar-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    userDropdownOpen = !userDropdownOpen;
+    renderUserMenu();
+  });
+  userMenuWrap.querySelector(".js-menu-exams").addEventListener("click", () => {
+    userDropdownOpen = false;
+    renderUserMenu();
+    navigate("exams", { openMySubs: true });
+  });
+  userMenuWrap.querySelector(".js-menu-ai").addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openAiModal(); });
+  userMenuWrap.querySelector(".js-menu-pwd")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangePwdDialog(); });
+  userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("users"); });
+  userMenuWrap.querySelector(".js-menu-apikey")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openApiKeyModal(); });
+  userMenuWrap.querySelector(".js-menu-logout").addEventListener("click", doLogout);
 };
 
 const refreshBanks = async () => {
@@ -92,18 +143,16 @@ const refreshBanks = async () => {
 };
 
 const refreshAuth = async () => {
-  const [adminRes, userRes] = await Promise.all([
-    apiRequest("/api/auth/me"),
-    apiRequest("/api/user/me")
-  ]);
+  const [adminRes, userRes] = await Promise.all([apiRequest("/api/auth/me"), apiRequest("/api/user/me")]);
   appState.isAdmin = Boolean(adminRes.admin);
+  appState.registrationMode = userRes.registrationMode || "open";
   if (userRes.user) {
     const prog = await apiRequest("/api/user/progress").catch(() => ({ progress: null }));
     setCloudSession(userRes.user, prog.progress);
   } else {
     setCloudSession(null, null);
   }
-  syncAuthBtns();
+  renderUserMenu();
 };
 
 const openAccountModal = (requireAdmin = false) => {
@@ -111,23 +160,25 @@ const openAccountModal = (requireAdmin = false) => {
   requireAdminPrompt = requireAdmin;
   syncUserModalMode();
   document.getElementById("u-pass").value = "";
+  document.getElementById("u-invite").value = "";
   userModal.hidden = false;
   document.getElementById("u-name").focus();
 };
 
-const VALID_ROUTES = new Set(["banks", "practice", "exams", "search", "stats", "manage", "import", "users"]);
+const VALID_ROUTES = new Set(Object.keys(ROUTE_TITLES));
 
 const navigate = (route, params = {}) => {
   const nextRoute = VALID_ROUTES.has(route) ? route : "banks";
   appState.route = nextRoute;
   appState.routeParams = params;
+  if (pageTitleEl) pageTitleEl.textContent = ROUTE_TITLES[nextRoute] || "QuizSprint";
   appMain.classList.toggle("practice-full", nextRoute === "practice");
   if (nextRoute !== "practice") document.body.classList.remove("immersive-mode");
   if (!(nextRoute === "exams" && params.examId)) {
     const targetHash = `#${nextRoute}`;
     if (location.hash !== targetHash) history.replaceState(null, "", targetHash);
   }
-  navBtns.forEach((btn) => btn.classList.toggle("active", btn.dataset.route === nextRoute));
+  document.querySelectorAll("[data-route]").forEach((btn) => btn.classList.toggle("active", btn.dataset.route === nextRoute));
   renderCurrentView();
 };
 
@@ -144,12 +195,10 @@ const renderCurrentView = () => {
       syncBankSelect();
     },
     onNavigate: navigate,
-    onRefreshBanks: async () => {
-      await refreshBanks();
-      renderCurrentView();
-    },
+    onRefreshBanks: async () => { await refreshBanks(); renderCurrentView(); },
     onRequireLogin: () => openAccountModal(true),
-    onRequireUserLogin: () => openAccountModal(false)
+    onRequireUserLogin: () => openAccountModal(false),
+    onToggleTheme: cycleTheme
   };
 
   if (appState.route === "banks") renderBanksView(appMain, ctx);
@@ -162,78 +211,27 @@ const renderCurrentView = () => {
   else if (appState.route === "users") renderUsersView(appMain, ctx);
 };
 
-navBtns.forEach((btn) => btn.addEventListener("click", () => navigate(btn.dataset.route)));
-document.getElementById("go-home").addEventListener("click", () => navigate("banks"));
-
-bankSelect.addEventListener("change", (e) => {
-  appState.activeBankId = e.target.value;
-  localStorage.setItem("as_qb_active_bank", appState.activeBankId);
-  renderCurrentView();
-});
-
-eyeCareBtn.addEventListener("click", () => {
+const cycleTheme = () => {
   const settings = getGlobalSettings();
-  settings.eyeCare = !settings.eyeCare;
+  const idx = THEME_CYCLE.indexOf(settings.theme);
+  settings.theme = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+  settings.eyeCare = settings.theme === "paper";
   saveGlobalSettings(settings);
-  applyEyeCare();
-});
-
-// 统一账号注册/登录（按数据库 role 自动区分管理员与学员）
-const syncUserModalMode = () => {
-  document.getElementById("user-modal-title").textContent = userRegisterMode
-    ? "注册学员账号"
-    : (requireAdminPrompt ? "管理员账号登录" : "账号登录");
-  document.getElementById("user-modal-desc").textContent = requireAdminPrompt && !userRegisterMode
-    ? "当前操作需要管理员权限，请使用管理员账号（如 admin）登录。"
-    : "访客仅支持查看题库与搜题；登录后可刷题、考试与云端同步，管理员账号自动解锁建库、导题与发考权限。";
-  document.getElementById("u-nick-wrap").hidden = !userRegisterMode;
-  const regDisc = document.getElementById("u-reg-disclaimer");
-  if (regDisc) regDisc.hidden = !userRegisterMode;
-  document.getElementById("u-submit-btn").textContent = userRegisterMode ? "注册并登录" : "登录";
-  document.getElementById("u-toggle-mode").textContent = userRegisterMode ? "已有账号？去登录" : "没有账号？去注册";
+  applyTheme();
 };
 
-userAuthBtn.addEventListener("click", async () => {
-  if (getCloudUser() || appState.isAdmin) {
-    await Promise.all([
-      apiRequest("/api/user/logout", { method: "POST" }).catch(() => {}),
-      apiRequest("/api/auth/logout", { method: "POST" }).catch(() => {})
-    ]);
-    await refreshAuth();
-    showToast("已退出账号");
-    renderCurrentView();
-  } else {
-    openAccountModal(false);
-  }
-});
-document.getElementById("user-close").addEventListener("click", () => { userModal.hidden = true; });
-document.getElementById("u-toggle-mode").addEventListener("click", () => {
-  userRegisterMode = !userRegisterMode;
-  if (userRegisterMode) requireAdminPrompt = false;
-  syncUserModalMode();
-});
-document.getElementById("user-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    const endpoint = userRegisterMode ? "/api/user/register" : "/api/user/login";
-    await apiRequest(endpoint, {
-      method: "POST",
-      body: JSON.stringify({
-        username: document.getElementById("u-name").value.trim(),
-        password: document.getElementById("u-pass").value,
-        nickname: document.getElementById("u-nick").value.trim()
-      })
-    });
-    await refreshAuth();
-    userModal.hidden = true;
-    showToast(appState.isAdmin ? "管理员登录成功" : "登录成功，已启用云端同步", "ok");
-    renderCurrentView();
-  } catch (err) {
-    showToast(err.message, "bad");
-  }
-});
+const doLogout = async () => {
+  userDropdownOpen = false;
+  await Promise.all([
+    apiRequest("/api/user/logout", { method: "POST" }).catch(() => {}),
+    apiRequest("/api/auth/logout", { method: "POST" }).catch(() => {})
+  ]);
+  await refreshAuth();
+  showToast("已退出账号");
+  renderCurrentView();
+};
 
-userPwdBtn?.addEventListener("click", async () => {
+const openChangePwdDialog = async () => {
   const form = await openFormDialog({
     title: "修改登录密码",
     fields: [
@@ -249,9 +247,8 @@ userPwdBtn?.addEventListener("click", async () => {
   } catch (err) {
     showToast(err.message, "bad");
   }
-});
+};
 
-// API 密钥弹窗
 const renderApiKeyExample = (key) => {
   document.getElementById("apikey-value").value = key;
   document.getElementById("apikey-example").textContent =
@@ -260,7 +257,8 @@ const renderApiKeyExample = (key) => {
   -H "X-API-Key: ${key}" \\
   -d '{"title":"示例题目","type":"0","options":["A1","B1"],"answers":["A1"]}'`;
 };
-apiKeyBtn.addEventListener("click", async () => {
+
+const openApiKeyModal = async () => {
   try {
     const res = await apiRequest("/api/admin/apikey");
     renderApiKeyExample(res.apiKey);
@@ -268,30 +266,13 @@ apiKeyBtn.addEventListener("click", async () => {
   } catch (err) {
     showToast(err.message, "bad");
   }
-});
-document.getElementById("apikey-close").addEventListener("click", () => { apiKeyModal.hidden = true; });
-document.getElementById("apikey-copy").addEventListener("click", () => {
-  const val = document.getElementById("apikey-value").value;
-  navigator.clipboard?.writeText(val).catch(() => {});
-  showToast("已复制 API Key", "ok");
-});
-document.getElementById("apikey-rotate").addEventListener("click", async () => {
-  if (!confirm("重置后旧 API Key 将立即失效，确认重置吗？")) return;
-  try {
-    const res = await apiRequest("/api/admin/apikey", { method: "POST" });
-    renderApiKeyExample(res.apiKey);
-    showToast("API Key 已重置", "ok");
-  } catch (err) {
-    showToast(err.message, "bad");
-  }
-});
+};
 
-// 本地 AI 配置弹窗（仅保存在当前浏览器 localStorage）
 const aiModelSelect = document.getElementById("ai-model-select");
 const aiModelInput = document.getElementById("ai-model");
 const aiKeyInput = document.getElementById("ai-key");
 
-aiCfgBtn.addEventListener("click", () => {
+const openAiModal = () => {
   const cfg = getLocalAiConfig();
   document.getElementById("ai-url").value = cfg.baseUrl || "https://api.openai.com/v1";
   aiModelInput.value = cfg.model || "gpt-4o-mini";
@@ -299,68 +280,119 @@ aiCfgBtn.addEventListener("click", () => {
   aiKeyInput.placeholder = "sk-...";
   aiModelSelect.hidden = true;
   aiModal.hidden = false;
+};
+
+const syncUserModalMode = () => {
+  const regMode = appState.registrationMode || "open";
+  if (regMode === "closed") userRegisterMode = false;
+  document.getElementById("user-modal-title").textContent = userRegisterMode
+    ? "注册学员账号"
+    : (requireAdminPrompt ? "管理员账号登录" : "账号登录");
+  document.getElementById("user-modal-desc").textContent = requireAdminPrompt && !userRegisterMode
+    ? "当前操作需要管理员权限，请使用管理员账号（如 admin）登录。"
+    : "访客仅支持查看题库与搜题；登录后可刷题、考试与云端同步，管理员账号自动解锁建库、导题与发考权限。";
+  document.getElementById("u-nick-wrap").hidden = !userRegisterMode;
+  const needInvite = userRegisterMode && regMode === "invite";
+  document.getElementById("u-invite-wrap").hidden = !needInvite;
+  document.getElementById("u-invite").required = needInvite;
+  document.getElementById("u-reg-closed-tip").hidden = regMode !== "closed";
+  document.getElementById("u-toggle-mode").hidden = regMode === "closed";
+  const regDisc = document.getElementById("u-reg-disclaimer");
+  if (regDisc) regDisc.hidden = !userRegisterMode;
+  document.getElementById("u-submit-btn").textContent = userRegisterMode ? "注册并登录" : "登录";
+  document.getElementById("u-toggle-mode").textContent = userRegisterMode ? "已有账号？去登录" : "没有账号？去注册";
+};
+
+document.addEventListener("click", (e) => {
+  if (userDropdownOpen && !e.target.closest("#user-menu-wrap")) {
+    userDropdownOpen = false;
+    renderUserMenu();
+  }
+  const routeBtn = e.target.closest("[data-route]");
+  if (routeBtn) navigate(routeBtn.dataset.route);
 });
+document.getElementById("go-home").addEventListener("click", () => navigate("banks"));
+bankSelect.addEventListener("change", (e) => {
+  appState.activeBankId = e.target.value;
+  localStorage.setItem("as_qb_active_bank", appState.activeBankId);
+  renderCurrentView();
+});
+themeBtn.addEventListener("click", cycleTheme);
+
+document.getElementById("user-close").addEventListener("click", () => { userModal.hidden = true; });
+document.getElementById("u-toggle-mode").addEventListener("click", () => {
+  userRegisterMode = !userRegisterMode;
+  if (userRegisterMode) requireAdminPrompt = false;
+  syncUserModalMode();
+});
+document.getElementById("user-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const endpoint = userRegisterMode ? "/api/user/register" : "/api/user/login";
+    await apiRequest(endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        username: document.getElementById("u-name").value.trim(),
+        password: document.getElementById("u-pass").value,
+        nickname: document.getElementById("u-nick").value.trim(),
+        inviteCode: document.getElementById("u-invite").value.trim()
+      })
+    });
+    await refreshAuth();
+    userModal.hidden = true;
+    showToast(appState.isAdmin ? "管理员登录成功" : "登录成功，已启用云端同步", "ok");
+    renderCurrentView();
+  } catch (err) {
+    showToast(err.message, "bad");
+  }
+});
+
+document.getElementById("apikey-close").addEventListener("click", () => { apiKeyModal.hidden = true; });
+document.getElementById("apikey-copy").addEventListener("click", () => {
+  navigator.clipboard?.writeText(document.getElementById("apikey-value").value).catch(() => {});
+  showToast("已复制 API Key", "ok");
+});
+document.getElementById("apikey-rotate").addEventListener("click", async () => {
+  if (!confirm("重置后旧 API Key 将立即失效，确认重置吗？")) return;
+  try { renderApiKeyExample((await apiRequest("/api/admin/apikey", { method: "POST" })).apiKey); showToast("API Key 已重置", "ok"); }
+  catch (err) { showToast(err.message, "bad"); }
+});
+
 document.getElementById("ai-close").addEventListener("click", () => { aiModal.hidden = true; });
 document.getElementById("ai-fetch-models").addEventListener("click", async () => {
   try {
     showToast("正在拉取模型列表...");
     const res = await apiRequest("/api/ai/models", {
       method: "POST",
-      body: JSON.stringify({
-        aiConfig: {
-          baseUrl: document.getElementById("ai-url").value.trim(),
-          apiKey: aiKeyInput.value.trim()
-        }
-      })
+      body: JSON.stringify({ aiConfig: { baseUrl: document.getElementById("ai-url").value.trim(), apiKey: aiKeyInput.value.trim() } })
     });
     const models = res.models || [];
     if (!models.length) return showToast("接口未返回可用模型", "bad");
-    aiModelSelect.innerHTML = models
-      .map((m) => `<option value="${escapeHtml(m)}" ${m === aiModelInput.value ? "selected" : ""}>${escapeHtml(m)}</option>`)
-      .join("");
+    aiModelSelect.innerHTML = models.map((m) => `<option value="${escapeHtml(m)}" ${m === aiModelInput.value ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
     aiModelSelect.hidden = false;
     if (!aiModelInput.value) aiModelInput.value = models[0];
-    saveLocalAiConfig({
-      baseUrl: document.getElementById("ai-url").value.trim(),
-      apiKey: aiKeyInput.value.trim(),
-      model: aiModelInput.value.trim()
-    });
-    syncAuthBtns();
+    saveLocalAiConfig({ baseUrl: document.getElementById("ai-url").value.trim(), apiKey: aiKeyInput.value.trim(), model: aiModelInput.value.trim() });
+    renderUserMenu();
     showToast(`已拉取 ${models.length} 个模型并保存配置`, "ok");
-  } catch (err) {
-    showToast(err.message, "bad");
-  }
+  } catch (err) { showToast(err.message, "bad"); }
 });
-aiModelSelect.addEventListener("change", () => {
-  if (aiModelSelect.value) aiModelInput.value = aiModelSelect.value;
-});
+aiModelSelect.addEventListener("change", () => { if (aiModelSelect.value) aiModelInput.value = aiModelSelect.value; });
 document.getElementById("ai-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  saveLocalAiConfig({
-    baseUrl: document.getElementById("ai-url").value.trim(),
-    apiKey: aiKeyInput.value.trim(),
-    model: aiModelInput.value.trim()
-  });
-  syncAuthBtns();
+  saveLocalAiConfig({ baseUrl: document.getElementById("ai-url").value.trim(), apiKey: aiKeyInput.value.trim(), model: aiModelInput.value.trim() });
+  renderUserMenu();
   aiModal.hidden = true;
   showToast("本地 AI 配置已保存（仅当前浏览器可用）", "ok");
 });
 
 const bootstrap = async () => {
   initSystemAndDisclaimerModals();
-  applyEyeCare();
+  applyTheme();
   await Promise.all([refreshBanks(), refreshAuth()]);
   const examMatch = location.hash.match(/^#exam=([^&]+)/);
-  if (examMatch) {
-    navigate("exams", { examId: decodeURIComponent(examMatch[1]) });
-    return;
-  }
+  if (examMatch) return navigate("exams", { examId: decodeURIComponent(examMatch[1]) });
   const hashRoute = location.hash.replace(/^#/, "");
-  if (VALID_ROUTES.has(hashRoute)) {
-    navigate(hashRoute);
-  } else {
-    navigate("banks");
-  }
+  navigate(VALID_ROUTES.has(hashRoute) ? hashRoute : "banks");
 };
 
 bootstrap().catch((err) => {

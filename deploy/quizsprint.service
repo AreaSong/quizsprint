@@ -1,10 +1,10 @@
 [Unit]
-Description=QuizHub 知题库在线刷题与考试平台
+Description=QuizSprint 在线题库刷题与考试平台
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/quiz-hub
+WorkingDirectory=/opt/quizsprint
 ExecStart=/usr/bin/env node server.mjs
 Restart=always
 RestartSec=2

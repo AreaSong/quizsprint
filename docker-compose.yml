@@ -1,7 +1,7 @@
 services:
-  quiz-hub:
+  quizsprint:
     build: .
-    container_name: quiz-hub
+    container_name: quizsprint
     restart: unless-stopped
     ports:
       - "8787:8787"

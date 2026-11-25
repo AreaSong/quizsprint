@@ -72,15 +72,20 @@ const writeJsonStorage = (key, value) => {
   }
 };
 
-export const getGlobalSettings = () => readJsonStorage("settings", {
-  reciteMode: false,
-  autoNext: true,
-  shuffleOptions: false,
-  eyeCare: false,
-  immersive: false,
-  strategy: "default",
-  wrongClearStreak: 1
-});
+export const getGlobalSettings = () => {
+  const s = readJsonStorage("settings", {
+    reciteMode: false,
+    autoNext: true,
+    shuffleOptions: false,
+    eyeCare: false,
+    theme: "",
+    immersive: false,
+    strategy: "default",
+    wrongClearStreak: 1
+  });
+  if (!s.theme) s.theme = s.eyeCare ? "paper" : "light";
+  return s;
+};
 
 export const saveGlobalSettings = (next) => writeJsonStorage("settings", next);
 

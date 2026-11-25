@@ -1,44 +1,74 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>知题库 (QuizHub) · 在线刷题与考试学习平台</title>
+  <title>QuizSprint · 自托管题库与在线考试学习平台</title>
   <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/layout.css">
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-group">
-        <div class="brand-logo" id="go-home" role="button" tabindex="0">知题库 · QuizHub</div>
-        <select id="active-bank-select" class="bank-select" aria-label="切换当前题库"></select>
+    <aside class="app-sidebar">
+      <div class="brand-logo" id="go-home" role="button" tabindex="0">
+        <span class="brand-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+        </span>
+        <span class="brand-text">
+          <strong>QuizSprint</strong>
+          <span>Question Bank</span>
+        </span>
       </div>
-      <nav class="main-nav" id="main-nav">
-        <button data-route="banks" class="nav-btn active">题库中心</button>
-        <button data-route="practice" class="nav-btn">在线刷题</button>
-        <button data-route="exams" class="nav-btn">在线考试</button>
-        <button data-route="search" class="nav-btn">搜题中心</button>
-        <button data-route="stats" class="nav-btn">学习统计</button>
-        <button data-route="manage" class="nav-btn">试题管理</button>
-        <button data-route="import" class="nav-btn">批量导题</button>
-        <button data-route="users" id="nav-users-btn" class="nav-btn" hidden>用户管理</button>
+
+      <nav class="side-group" aria-label="学习空间">
+        <div class="side-label">学习空间</div>
+        <button data-route="banks" class="side-btn nav-btn active">题库中心</button>
+        <button data-route="practice" class="side-btn nav-btn">在线刷题</button>
+        <button data-route="exams" class="side-btn nav-btn">在线考试</button>
+        <button data-route="search" class="side-btn nav-btn">搜题中心</button>
+        <button data-route="stats" class="side-btn nav-btn">学习统计</button>
       </nav>
-      <div class="topbar-actions">
-        <button id="eye-care-btn" class="btn ghost tiny" title="切换护眼模式">护眼模式</button>
-        <button id="user-auth-btn" class="btn ghost tiny">账号登录</button>
-        <button id="user-pwd-btn" class="btn ghost tiny" hidden>改密码</button>
-        <button id="sys-update-btn" class="btn ghost tiny" hidden>系统管理</button>
-        <button id="api-key-btn" class="btn ghost tiny" hidden>API 密钥</button>
-        <button id="ai-cfg-btn" class="btn ghost tiny">AI 设置</button>
+
+      <nav class="side-group" id="sidebar-admin-group" aria-label="管理后台" hidden>
+        <div class="side-label">管理后台</div>
+        <button data-route="manage" class="side-btn nav-btn">试题管理</button>
+        <button data-route="import" class="side-btn nav-btn">批量导题</button>
+        <button data-route="users" class="side-btn nav-btn">用户管理</button>
+        <button type="button" class="side-btn js-open-sys-modal">系统与备份</button>
+      </nav>
+
+      <div class="side-foot">
+        <button type="button" class="side-btn js-open-disclaimer" style="font-size:12px;">免责声明与规范</button>
       </div>
-    </header>
+    </aside>
 
-    <main id="app-main" class="app-main"></main>
+    <div class="app-content-col">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <span id="page-title" class="page-title">题库中心</span>
+          <select id="active-bank-select" class="bank-select" aria-label="切换当前题库"></select>
+        </div>
+        <div class="topbar-right">
+          <button id="theme-btn" class="btn ghost tiny" title="切换明亮 / 护眼 / 夜间主题">明亮</button>
+          <div id="user-menu-wrap" class="user-menu-wrap"></div>
+        </div>
+      </header>
 
-    <footer class="app-footer">
-      <span>知题库 (QuizHub) 仅供创作者个人学习、技术研究与同学间复习交流使用，严禁商业盈利、公开传播盗版题库或正式考试作弊。</span>
-      <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明</button>
-    </footer>
+      <main id="app-main" class="app-main"></main>
+
+      <footer class="app-footer">
+        <span>QuizSprint 仅供创作者个人学习、技术研究与同学间复习交流使用，严禁商业盈利、公开传播盗版题库或正式考试作弊。</span>
+        <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明</button>
+      </footer>
+    </div>
+
+    <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="移动端导航">
+      <button data-route="banks" class="m-tab-btn active">题库</button>
+      <button data-route="practice" class="m-tab-btn">刷题</button>
+      <button data-route="exams" class="m-tab-btn">考试</button>
+      <button data-route="search" class="m-tab-btn">搜题</button>
+      <button data-route="stats" class="m-tab-btn">统计</button>
+    </nav>
   </div>
 
   <div id="user-modal" class="modal-backdrop" hidden>
@@ -52,6 +82,8 @@
         <label><span>用户名</span><input id="u-name" required placeholder="2-24位中英文或数字"></label>
         <label><span>密码</span><input id="u-pass" type="password" required placeholder="至少 4 位"></label>
         <label id="u-nick-wrap" hidden><span>昵称（可选）</span><input id="u-nick" placeholder="排行榜展示昵称"></label>
+        <label id="u-invite-wrap" hidden><span>注册邀请码</span><input id="u-invite" placeholder="请向管理员获取邀请码"></label>
+        <p id="u-reg-closed-tip" class="muted-text" style="font-size:12px;margin:0;" hidden>当前站点已关闭自主注册，如需账号请联系管理员开通。</p>
         <p id="u-reg-disclaimer" class="muted-text" style="font-size:12px;margin:0;" hidden>注册即表示同意：本平台仅供个人学习与复习交流，严禁商用或作弊用途。<a href="#" class="js-open-disclaimer">查看完整免责声明</a></p>
         <div class="modal-actions" style="justify-content:space-between;">
           <button type="button" id="u-toggle-mode" class="btn ghost tiny">没有账号？去注册</button>
@@ -109,7 +141,7 @@
         <button id="disclaimer-close" class="btn ghost tiny">关闭</button>
       </div>
       <div class="stack-form" style="font-size:13px;line-height:1.7;">
-        <div><strong>1. 使用定位：</strong>本项目（知题库 · QuizHub）及配套脚本<strong>仅供创作者本人学习、技术研究与同学间日常复习交流使用</strong>。</div>
+        <div><strong>1. 使用定位：</strong>本项目（QuizSprint）及配套脚本<strong>仅供创作者本人学习、技术研究与同学间日常复习交流使用</strong>。</div>
         <div><strong>2. 严禁用途：</strong>严禁将本项目用于任何商业盈利、付费售卖、公开盗版传播，严禁用于任何正式考试作弊或违反法律法规与校纪校规的行为。</div>
         <div><strong>3. 内容免责：</strong>系统本身不内置也不提供任何第三方受版权保护的真题或商业题库；所有试题均由部署者/使用者自行导入与维护，因题库内容版权或不当使用产生的一切法律与合规责任由使用者自行承担。</div>
         <div><strong>4. 隐私与自托管：</strong>AI 大模型 API Key 仅保存于当前浏览器本地（<code>localStorage</code>），服务端不会持久保存或盗用个人密钥；自托管部署者请妥善保管服务器密码与数据库备份。</div>

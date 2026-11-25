@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildExcelTemplateBuffer, parseExcelBase64 } from "./lib/doc-import.mjs";
 import { createUserToken, isAdminRequest } from "./lib/auth.mjs";
+import { createBackupBuffer, getDatabaseStats, getDb, maintainDatabase } from "./lib/db.mjs";
 import { createExamStore, scoreQuestionAnswer } from "./lib/exam-store.mjs";
 import { handleExtraRoutes } from "./lib/extra-routes.mjs";
 import { handleLegacyRoutes } from "./lib/legacy-routes.mjs";
@@ -463,6 +464,174 @@ test("学员改密码、我的成绩单、管理员账号管理、数据库备�
     });
     assert.equal(okBackup.status, 200);
     assert.ok(okBackup.buf.subarray(0, 15).toString("utf8").startsWith("SQLite format 3"));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("数据库 WAL 模式、高频索引、删库删题级联清理、原子备份与一键维护正常", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qh-db-opt-"));
+  const uploadsDir = path.join(tmpDir, "uploads");
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const db = getDb(tmpDir);
+
+    const stats = getDatabaseStats(tmpDir, uploadsDir);
+    assert.equal(stats.journalMode, "WAL");
+
+    const idxNames = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
+    for (const expectedIdx of ["idx_questions_bank_type_chap", "idx_subs_user", "idx_subs_exam_user", "idx_wrong_stats_rank"]) {
+      assert.ok(idxNames.includes(expectedIdx), `缺少索引 ${expectedIdx}`);
+    }
+
+    const { bank: b1 } = store.createBank({ name: "题库A" });
+    const { bank: b2 } = store.createBank({ name: "题库B" });
+    fs.writeFileSync(path.join(uploadsDir, "keep.png"), "img1");
+    fs.writeFileSync(path.join(uploadsDir, "orphan.png"), "img2");
+
+    store.importQuestions(b1.id, [
+      { id: "qa1", title: "保留图题", type: "0", options: ["A", "B"], answers: ["A"], images: ["/uploads/keep.png"] },
+      { id: "qa2", title: "待删错题", type: "0", options: ["A", "B"], answers: ["A"] }
+    ]);
+    store.importQuestions(b2.id, [{ id: "qb1", title: "库B题", type: "0", options: ["A", "B"], answers: ["A"] }]);
+
+    const { user } = userStore.register({ username: "db_stu", password: "1234" });
+    userStore.saveBankProgress(user.id, b1.id, { wrongIds: ["qa2"] }, { answered: 1, correct: 0, questionId: "qa2" });
+    userStore.saveBankProgress(user.id, b2.id, { wrongIds: ["qb1"] }, { answered: 1, correct: 0, questionId: "qb1" });
+
+    // 删除单题 qa2 时自动级联清理 question_wrong_stats
+    store.deleteQuestion(b1.id, "qa2");
+    assert.equal(db.prepare("SELECT COUNT(*) AS cnt FROM question_wrong_stats WHERE question_id = 'qa2'").get().cnt, 0);
+
+    // 删除题库 b2 时自动级联清理 user_progress 与 question_wrong_stats
+    store.deleteBank(b2.id);
+    assert.equal(db.prepare("SELECT COUNT(*) AS cnt FROM user_progress WHERE bank_id = ?").get(b2.id).cnt, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS cnt FROM question_wrong_stats WHERE bank_id = ?").get(b2.id).cnt, 0);
+
+    // 人为制造孤立记录测试一键维护 + 孤立图片回收
+    db.prepare("INSERT INTO user_progress (user_id, bank_id, data_json, updated_at) VALUES (?, 'ghost_bank', '{}', ?)").run(user.id, new Date().toISOString());
+    db.prepare("INSERT INTO question_wrong_stats (bank_id, question_id, wrong_count, attempt_count, updated_at) VALUES ('ghost_bank', 'ghost_q', 3, 3, ?)").run(new Date().toISOString());
+
+    const mRes = maintainDatabase(tmpDir, uploadsDir);
+    assert.equal(mRes.removedProgress, 1);
+    assert.equal(mRes.removedWrongStats, 1);
+    assert.equal(mRes.removedImages, 1);
+    assert.equal(fs.existsSync(path.join(uploadsDir, "keep.png")), true);
+    assert.equal(fs.existsSync(path.join(uploadsDir, "orphan.png")), false);
+
+    const bakBuf = createBackupBuffer(tmpDir);
+    assert.ok(bakBuf.subarray(0, 15).toString("utf8").startsWith("SQLite format 3"));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("公网注册门禁与已发布考试轻量编辑正常且不泄露敏感口令", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qh-gate-edit-"));
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+
+    // 1. 注册门禁策略测试：open / invite / closed
+    assert.equal(userStore.getRegistrationPolicy().mode, "open");
+    assert.ok(userStore.setRegistrationPolicy({ mode: "invite", inviteCode: "" }).error);
+
+    let setRes = null;
+    await handleExtraRoutes({ method: "PUT", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/admin/registration"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({ mode: "invite", inviteCode: "CLASS2026" }),
+      sendJson: (_r, status, payload) => { setRes = { status, payload }; },
+      requireAdmin: () => true
+    });
+    assert.equal(setRes.status, 200);
+    assert.equal(setRes.payload.mode, "invite");
+
+    // /api/user/me 仅暴露 registrationMode，绝不泄露 inviteCode
+    let meRes = null;
+    await handleExtraRoutes({ method: "GET", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/user/me"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({}), sendJson: (_r, status, payload) => { meRes = { status, payload }; },
+      requireAdmin: () => false
+    });
+    assert.equal(meRes.payload.registrationMode, "invite");
+    assert.equal(meRes.payload.inviteCode, undefined);
+
+    // 公开注册错误邀请码拦截，正确邀请码放行
+    let badReg = null;
+    await handleExtraRoutes({ method: "POST", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/user/register"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({ username: "gate_u1", password: "pw1234", inviteCode: "WRONG" }),
+      sendJson: (_r, status, payload) => { badReg = { status, payload }; },
+      requireAdmin: () => false
+    });
+    assert.equal(badReg.status, 403);
+
+    let okReg = null;
+    await handleExtraRoutes({ method: "POST", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/user/register"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({ username: "gate_u1", password: "pw1234", inviteCode: "CLASS2026" }),
+      sendJson: (_r, status, payload) => { okReg = { status, payload }; },
+      requireAdmin: () => false
+    });
+    assert.equal(okReg.status, 200);
+
+    // closed 模式下公开注册被拦截，但管理员手动创建账号不受限制
+    userStore.setRegistrationPolicy({ mode: "closed" });
+    let closedReg = null;
+    await handleExtraRoutes({ method: "POST", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/user/register"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({ username: "gate_u2", password: "pw1234" }),
+      sendJson: (_r, status, payload) => { closedReg = { status, payload }; },
+      requireAdmin: () => false
+    });
+    assert.equal(closedReg.status, 403);
+    assert.ok(userStore.register({ username: "adm_added", password: "pw1234" }).user);
+
+    // 2. 已发布考试轻量编辑测试
+    const { bank } = store.createBank({ name: "微调测试库" });
+    store.importQuestions(bank.id, [{ id: "q1", title: "测试题1", type: "0", options: ["A", "B"], answers: ["A"] }]);
+    const { exam } = examStore.createExam({
+      title: "初版考试",
+      bankId: bank.id,
+      durationMinutes: 20,
+      accessCode: "OLD123",
+      selectedQuestionIds: ["q1"],
+      questionScores: { q1: 10 }
+    }, store.loadBankQuestions(bank.id));
+    examStore.submitExam(exam.id, { userId: okReg.payload.user.id, studentName: "王同学", answers: { q1: ["A"] } });
+
+    let editRes = null;
+    await handleExtraRoutes({ method: "PUT", headers: {} }, {}, new URL(`http://127.0.0.1:8787/api/exams/${exam.id}`), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({
+        title: "修订版考试",
+        durationMinutes: 45,
+        accessCode: "NEW456",
+        maxAttempts: 2,
+        showAnswerAfterSubmit: false
+      }),
+      sendJson: (_r, status, payload) => { editRes = { status, payload }; },
+      requireAdmin: () => true
+    });
+    assert.equal(editRes.status, 200);
+    assert.equal(editRes.payload.exam.title, "修订版考试");
+    assert.equal(editRes.payload.exam.durationMinutes, 45);
+    assert.equal(editRes.payload.exam.totalScore, 10);
+    assert.equal(editRes.payload.exam.questionsSnapshot.length, 1);
+    assert.equal(examStore.getSubmissions(exam.id).length, 1);
+
+    // 非管理员 GET /api/exams 必须剥离 accessCode
+    let guestList = null;
+    await handleExtraRoutes({ method: "GET", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/exams"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({}), sendJson: (_r, status, payload) => { guestList = { status, payload }; },
+      requireAdmin: () => false
+    });
+    assert.equal(guestList.payload.exams[0].hasAccessCode, true);
+    assert.equal(guestList.payload.exams[0].accessCode, undefined);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
