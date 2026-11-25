@@ -1,0 +1,17 @@
+[Unit]
+Description=QuizHub 知题库在线刷题与考试平台
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/quiz-hub
+ExecStart=/usr/bin/env node server.mjs
+Restart=always
+RestartSec=2
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=8787
+Environment=AUTH_SECRET=replace-with-random-long-secret
+
+[Install]
+WantedBy=multi-user.target

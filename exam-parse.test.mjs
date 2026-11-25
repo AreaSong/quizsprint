@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,6 +10,7 @@ import { createExamStore, scoreQuestionAnswer } from "./lib/exam-store.mjs";
 import { handleExtraRoutes } from "./lib/extra-routes.mjs";
 import { handleLegacyRoutes } from "./lib/legacy-routes.mjs";
 import { createStore } from "./lib/store.mjs";
+import { checkRemoteUpdate, getSystemStatus, pullRemoteUpdate } from "./lib/system-updater.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
 import { CLEAN_TOOLS, parseExamTextDetailed } from "./public/exam-parse.js";
 import { buildInteractionHtml, isAnswerCorrect, isMultiChoice } from "./public/js/views/practice-templates.js";
@@ -261,6 +263,206 @@ test("加密题库 Excel 导出需登录且校验访问密码", async () => {
       sendJson: (_r, status, payload) => { detailGuest = { status, payload }; }, requireAdmin: () => false
     });
     assert.equal(detailGuest.status, 401);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("精细化组卷、时间窗/限考次数、隐藏答案、简答题人工阅卷与高频错题正常", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qh-adv-"));
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+
+    const { bank: pubBank } = store.createBank({ name: "公开模拟库" });
+    store.importQuestions(pubBank.id, [
+      { id: "s1", title: "单选1", type: "0", options: ["A", "B"], answers: ["A"], chapter: "第一章" },
+      { id: "e1", title: "简答1", type: "4", options: [], answers: ["核心要点"], chapter: "第二章" }
+    ]);
+    const { bank: secBank } = store.createBank({ name: "私有密库", password: "123" });
+    store.importQuestions(secBank.id, [
+      { id: "p1", title: "加密错题不可泄露", type: "0", options: ["X", "Y"], answers: ["X"] }
+    ]);
+
+    const { user } = userStore.register({ username: "stu_hot", password: "1234", nickname: "测试同学" });
+    userStore.saveBankProgress(user.id, pubBank.id, { records: { s1: { correct: false } }, wrongIds: ["s1"] }, {
+      answered: 1, correct: 0, questionId: "s1"
+    });
+    userStore.saveBankProgress(user.id, secBank.id, { records: { p1: { correct: false } }, wrongIds: ["p1"] }, {
+      answered: 1, correct: 0, questionId: "p1"
+    });
+
+    const { hotWrongQuestions } = userStore.getStatsAndLeaderboard(user.id);
+    assert.equal(hotWrongQuestions.length, 1);
+    assert.equal(hotWrongQuestions[0].questionId, "s1");
+
+    // 按题型抽题配分 + 限考 1 次 + 隐藏答案
+    const { exam } = examStore.createExam({
+      title: "精细组卷测试",
+      bankId: pubBank.id,
+      typeConfig: { "0": { count: 1, score: 4 }, "4": { count: 1, score: 10 } },
+      maxAttempts: 1,
+      showAnswerAfterSubmit: false
+    }, store.loadBankQuestions(pubBank.id));
+    assert.equal(exam.totalScore, 14);
+    assert.equal(exam.passScore, 8);
+
+    const subRes = examStore.submitExam(exam.id, {
+      userId: user.id,
+      studentName: "测试同学",
+      answers: { s1: ["A"], e1: ["随便写"] }
+    });
+    assert.equal(subRes.submission.score, 4);
+    assert.equal(subRes.submission.manualGraded, false);
+    assert.equal(subRes.submission.details[0].answerHidden, true);
+    assert.deepEqual(subRes.submission.details[0].expected, []);
+
+    // 限考 1 次拦截第 2 次提交
+    const secondTry = examStore.submitExam(exam.id, {
+      userId: user.id,
+      studentName: "测试同学",
+      answers: { s1: ["A"], e1: ["核心要点"] }
+    });
+    assert.ok(secondTry.error.includes("最多允许参加 1 次"));
+
+    // 管理员人工阅卷简答题给 8 分 -> 总分 4 + 8 = 12 >= 8 及格
+    const graded = examStore.gradeSubmission(exam.id, subRes.submission.id, { e1: 8 });
+    assert.equal(graded.submission.score, 12);
+    assert.equal(graded.submission.passed, true);
+    assert.equal(graded.submission.manualGraded, true);
+
+    // 未来时间窗拦截
+    const futureExam = examStore.createExam({
+      title: "未开考",
+      bankId: pubBank.id,
+      selectedQuestionIds: ["s1"],
+      startTime: new Date(Date.now() + 3600 * 1000).toISOString()
+    }, store.loadBankQuestions(pubBank.id)).exam;
+    assert.ok(examStore.checkExamEligibility(futureExam, user.id).error.includes("尚未开始"));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("system-updater 支持状态读取、检查远端更新、ff-only 拉取及脏工作区拦截", async () => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "qh-git-"));
+  const remoteDir = path.join(baseDir, "remote.git");
+  const workDir = path.join(baseDir, "work");
+  const seedDir = path.join(baseDir, "seed");
+  const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: "pipe" }).toString("utf8");
+  try {
+    run("git", ["init", "--bare", remoteDir], baseDir);
+    run("git", ["clone", remoteDir, seedDir], baseDir);
+    run("git", ["config", "user.email", "test@example.com"], seedDir);
+    run("git", ["config", "user.name", "Tester"], seedDir);
+    fs.writeFileSync(path.join(seedDir, "README.md"), "v1\n");
+    run("git", ["add", "."], seedDir);
+    run("git", ["commit", "-m", "init v1"], seedDir);
+    run("git", ["push", "-u", "origin", "HEAD"], seedDir);
+
+    run("git", ["clone", remoteDir, workDir], baseDir);
+
+    // 在 seed 仓库推送第二个提交
+    fs.writeFileSync(path.join(seedDir, "README.md"), "v2\n");
+    run("git", ["commit", "-am", "patch v2"], seedDir);
+    run("git", ["push"], seedDir);
+
+    const statusBefore = await getSystemStatus(workDir);
+    assert.equal(statusBefore.isGitRepo, true);
+    assert.equal(statusBefore.dirty, false);
+
+    const check = await checkRemoteUpdate(workDir);
+    assert.equal(check.behindCount, 1);
+    assert.equal(check.commits[0].message, "patch v2");
+
+    // 制造未提交脏修改时应拒绝拉取
+    fs.writeFileSync(path.join(workDir, "README.md"), "local dirty\n");
+    const dirtyRes = await pullRemoteUpdate(workDir);
+    assert.ok(dirtyRes.error.includes("未提交"));
+
+    // 清理工作区后应正常 ff-only 拉取成功
+    run("git", ["checkout", "--", "README.md"], workDir);
+    const pullRes = await pullRemoteUpdate(workDir);
+    assert.equal(pullRes.ok, true);
+    assert.equal(pullRes.updated, true);
+    assert.equal(fs.readFileSync(path.join(workDir, "README.md"), "utf8").trim(), "v2");
+  } finally {
+    fs.rmSync(baseDir, { recursive: true, force: true });
+  }
+});
+
+test("学员改密码、我的成绩单、管理员账号管理、数据库备份与 PM2 路径配置正常", async () => {
+  const ecoMod = await import("node:module");
+  const require = ecoMod.createRequire(import.meta.url);
+  const eco = require("./deploy/ecosystem.config.cjs");
+  assert.equal(fs.existsSync(path.resolve(eco.apps[0].cwd, eco.apps[0].script)), true);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qh-polish-"));
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+
+    const { user: adm } = userStore.register({ username: "rootadm", password: "adm123", role: "admin" });
+    const { user: stu } = userStore.register({ username: "stu_x", password: "1234", nickname: "小王" });
+
+    assert.ok(userStore.changePassword(stu.id, { oldPassword: "wrong", newPassword: "9999" }).error);
+    assert.equal(userStore.changePassword(stu.id, { oldPassword: "1234", newPassword: "5678" }).ok, true);
+    assert.equal(userStore.authenticate({ username: "stu_x", password: "5678" }).user.id, stu.id);
+
+    // 至少保留一个管理员防降级/防删除
+    assert.ok(userStore.adminUpdateRole(adm.id, "student").error);
+    assert.ok(userStore.adminDeleteUser(adm.id, stu.id).error);
+    assert.ok(userStore.adminDeleteUser(adm.id, adm.id).error);
+    assert.equal(userStore.adminResetPassword(stu.id, "abcd").ok, true);
+    assert.equal(userStore.listUsers().length, 2);
+
+    // 校验 POST /api/admin/users 新建账号路由
+    let createdAdm = null;
+    await handleExtraRoutes({ method: "POST", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/admin/users"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({ username: "sub_admin", password: "pw1234", nickname: "助教", role: "admin" }),
+      sendJson: (_r, status, payload) => { createdAdm = { status, payload }; },
+      requireAdmin: () => true
+    });
+    assert.equal(createdAdm.status, 200);
+    assert.equal(createdAdm.payload.user.role, "admin");
+    assert.equal(userStore.listUsers().length, 3);
+
+    const { bank } = store.createBank({ name: "成绩查询库" });
+    store.importQuestions(bank.id, [{ id: "q1", title: "测试题1", type: "2", answers: ["答案1"] }]);
+    const { exam } = examStore.createExam({
+      title: "期末考",
+      bankId: bank.id,
+      selectedQuestionIds: ["q1"],
+      showAnswerAfterSubmit: false
+    }, store.loadBankQuestions(bank.id));
+    examStore.submitExam(exam.id, { userId: stu.id, studentName: "小王", answers: { q1: ["答案1"] } });
+    const mySubs = examStore.getUserSubmissions(stu.id);
+    assert.equal(mySubs.length, 1);
+    assert.equal(mySubs[0].examTitle, "期末考");
+    assert.equal(mySubs[0].details[0].answerHidden, true);
+
+    // 校验 /api/admin/backup.db 权限拦截与有效 SQLite 文件头
+    let guestBackup = null;
+    await handleExtraRoutes({ method: "GET", headers: {} }, {}, new URL("http://127.0.0.1:8787/api/admin/backup.db"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({}), sendJson: (_r, status, payload) => { guestBackup = { status, payload }; },
+      requireAdmin: (_r, res) => { guestBackup = { status: 401 }; return false; }
+    });
+    assert.equal(guestBackup.status, 401);
+
+    let okBackup = null;
+    await handleExtraRoutes({ method: "GET", headers: {} }, {
+      writeHead: (status, h) => { okBackup = { status, h }; },
+      end: (buf) => { okBackup.buf = buf; }
+    }, new URL("http://127.0.0.1:8787/api/admin/backup.db"), {
+      store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+      readBody: async () => ({}), sendJson: () => {}, requireAdmin: () => true
+    });
+    assert.equal(okBackup.status, 200);
+    assert.ok(okBackup.buf.subarray(0, 15).toString("utf8").startsWith("SQLite format 3"));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

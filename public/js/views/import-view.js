@@ -1,5 +1,6 @@
 import { CLEAN_TOOLS, parseExamTextDetailed, SAMPLE_TEXT } from "../../exam-parse.js";
 import { aiRequest, apiRequest, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
+import { openFormDialog } from "../dialog.js";
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -188,12 +189,18 @@ export const renderImportView = (container, ctx) => {
 
   container.querySelector("#imp-ai-gen").addEventListener("click", async () => {
     if (!isAdmin) return onRequireLogin();
-    const topic = prompt("请输入 AI 出题主题（如：计算机网络 TCP 协议）：");
-    if (!topic) return;
-    const count = Number(prompt("生成题数（1-20）：", "5") || 5);
+    const form = await openFormDialog({
+      title: "AI 一键智能出题",
+      fields: [
+        { name: "topic", label: "出题主题", required: true, placeholder: "如：计算机网络 TCP 协议" },
+        { name: "count", label: "生成题数（1-20）", type: "number", min: 1, max: 20, value: 5, required: true }
+      ],
+      submitText: "开始生成"
+    });
+    if (!form || !form.topic.trim()) return;
     showToast("AI 正在出题...");
     try {
-      const res = await aiRequest("/api/ai/generate", { topic, count });
+      const res = await aiRequest("/api/ai/generate", { topic: form.topic.trim(), count: form.count });
       renderPreview({ questions: res.questions || [], errors: [] });
       showToast(`AI 已生成 ${res.questions?.length || 0} 题，请点击确认导入`, "ok");
     } catch (err) {

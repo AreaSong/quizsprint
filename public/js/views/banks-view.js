@@ -7,6 +7,7 @@ import {
   printQuestionsDocument,
   showToast
 } from "../api.js";
+import { openFormDialog } from "../dialog.js";
 
 export const renderBanksView = (container, ctx) => {
   const { banks, activeBankId, isAdmin, isLoggedIn, onSelectBank, onNavigate, onRefreshBanks, onRequireLogin, onRequireUserLogin } = ctx;
@@ -91,14 +92,24 @@ export const renderBanksView = (container, ctx) => {
 
     container.querySelector("#btn-new-bank").addEventListener("click", async () => {
       if (!isAdmin) return onRequireLogin();
-      const name = prompt("请输入新题库名称：");
-      if (!name || !name.trim()) return;
-      const folder = prompt("所属文件夹分组（默认：默认分组）：", "默认分组") || "默认分组";
-      const description = prompt("题库简介（可选）：") || "";
+      const form = await openFormDialog({
+        title: "新建题库",
+        fields: [
+          { name: "name", label: "题库名称", required: true, placeholder: "如：计算机网络期末" },
+          { name: "folder", label: "文件夹分组", value: "默认分组", placeholder: "默认分组" },
+          { name: "description", label: "题库简介（可选）", placeholder: "简要说明题库用途" }
+        ],
+        submitText: "创建题库"
+      });
+      if (!form || !form.name.trim()) return;
       try {
         const data = await apiRequest("/api/banks", {
           method: "POST",
-          body: JSON.stringify({ name: name.trim(), folder, description })
+          body: JSON.stringify({
+            name: form.name.trim(),
+            folder: form.folder.trim() || "默认分组",
+            description: form.description.trim()
+          })
         });
         showToast("题库已创建", "ok");
         onSelectBank(data.bank.id);
@@ -110,16 +121,26 @@ export const renderBanksView = (container, ctx) => {
 
     container.querySelector("#btn-merge-bank")?.addEventListener("click", async () => {
       if (banks.length < 2) return showToast("至少需要 2 个题库才能合并", "bad");
-      const listHint = banks.map((b, i) => `${i + 1}. ${b.name}`).join("\n");
-      const picks = prompt(`请输入要合并的题库编号（逗号分隔，如 1,2）：\n${listHint}`);
-      if (!picks) return;
-      const sourceIds = picks.split(/[,，\s]+/).map((n) => banks[Number(n) - 1]?.id).filter(Boolean);
-      const targetName = prompt("合并后的新题库名称：", "合并题库");
-      if (!targetName) return;
+      const form = await openFormDialog({
+        title: "合并多个题库",
+        description: "将所选题库去重合并为一个新题库（原题库保留不受影响）。",
+        fields: [
+          {
+            name: "sourceIds",
+            label: "选择要合并的题库（至少 2 个）",
+            type: "checkboxes",
+            options: banks.map((b) => ({ value: b.id, label: `${b.name} (${b.questionCount || 0} 题)` }))
+          },
+          { name: "targetName", label: "合并后的新题库名称", value: "合并题库", required: true }
+        ],
+        submitText: "开始合并"
+      });
+      if (!form) return;
+      if ((form.sourceIds || []).length < 2) return showToast("请至少勾选 2 个题库", "bad");
       try {
         const res = await apiRequest("/api/banks/merge", {
           method: "POST",
-          body: JSON.stringify({ sourceIds, targetName })
+          body: JSON.stringify({ sourceIds: form.sourceIds, targetName: form.targetName.trim() || "合并题库" })
         });
         showToast(`合并成功，共 ${res.created} 题`, "ok");
         onSelectBank(res.bank.id);
@@ -168,17 +189,25 @@ export const renderBanksView = (container, ctx) => {
           return;
         }
         if (action === "config") {
-          const nextName = prompt("题库名称：", currentBank?.name || "");
-          if (!nextName || !nextName.trim()) return;
-          const nextFolder = prompt("文件夹分组：", currentBank?.folder || "默认分组") || "默认分组";
-          const nextPwd = prompt("访问密码（留空表示公开不加密）：", "");
+          const form = await openFormDialog({
+            title: "题库设置",
+            fields: [
+              { name: "name", label: "题库名称", value: currentBank?.name || "", required: true },
+              { name: "folder", label: "文件夹分组", value: currentBank?.folder || "默认分组" },
+              { name: "description", label: "题库简介", value: currentBank?.description || "" },
+              { name: "password", label: "访问密码（留空表示公开不加密）", type: "password", placeholder: "留空公开" }
+            ],
+            submitText: "保存设置"
+          });
+          if (!form || !form.name.trim()) return;
           try {
             await apiRequest(`/api/banks/${encodeURIComponent(bankId)}`, {
               method: "PUT",
               body: JSON.stringify({
-                name: nextName.trim(),
-                folder: nextFolder,
-                ...(nextPwd !== null ? { password: nextPwd } : {})
+                name: form.name.trim(),
+                folder: form.folder.trim() || "默认分组",
+                description: form.description.trim(),
+                password: form.password
               })
             });
             showToast("题库设置已更新", "ok");

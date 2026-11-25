@@ -89,9 +89,10 @@ const serveSafeFile = (baseDir, relPath, res) => {
   }
   if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) return false;
   const ext = path.extname(resolved).toLowerCase();
+  const noCacheExts = new Set([".html", ".css", ".js", ".mjs"]);
   res.writeHead(200, {
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300"
+    "Cache-Control": noCacheExts.has(ext) ? "no-cache" : "public, max-age=300"
   });
   fs.createReadStream(resolved).pipe(res);
   return true;
@@ -180,9 +181,17 @@ const handleApi = async (req, res, url) => {
     userStore,
     examStore,
     uploadsDir: UPLOADS_DIR,
+    dataDir: DATA_DIR,
+    repoDir: __dirname,
     readBody,
     sendJson,
-    requireAdmin
+    requireAdmin,
+    onRequestRestart: () => {
+      setTimeout(() => {
+        server.close(() => process.exit(0));
+        setTimeout(() => process.exit(0), 1500);
+      }, 400);
+    }
   });
   if (handledExtra) return;
 

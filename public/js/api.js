@@ -1,3 +1,5 @@
+import { openFormDialog } from "./dialog.js";
+
 export const TYPE_LABELS = {
   "0": "单选题",
   "1": "多选题",
@@ -76,7 +78,8 @@ export const getGlobalSettings = () => readJsonStorage("settings", {
   shuffleOptions: false,
   eyeCare: false,
   immersive: false,
-  strategy: "default"
+  strategy: "default",
+  wrongClearStreak: 1
 });
 
 export const saveGlobalSettings = (next) => writeJsonStorage("settings", next);
@@ -106,11 +109,12 @@ export const aiRequest = async (url, payload = {}) => {
 
 export const getBankPracticeState = (bankId) => {
   if (currentCloudUser && cloudBanksCache[bankId]) {
-    return cloudBanksCache[bankId];
+    return { wrongStreaks: {}, ...cloudBanksCache[bankId] };
   }
   return readJsonStorage(`bank_${bankId}`, {
     records: {},
     wrongIds: [],
+    wrongStreaks: {},
     favoriteIds: [],
     masteredIds: [],
     notes: {},
@@ -155,11 +159,15 @@ export const fetchBankQuestionsSafe = async (bankId) => {
     return await apiRequest(`/api/banks/${encodeURIComponent(bankId)}/questions`, { headers });
   } catch (err) {
     if (err.status === 403 && err.data?.locked) {
-      const input = prompt("该题库已加密，请输入访问密码：");
-      if (input == null) throw err;
-      setBankPassword(bankId, input);
+      const form = await openFormDialog({
+        title: "题库访问验证",
+        description: "该题库已加密，请输入访问密码：",
+        fields: [{ name: "password", label: "访问密码", type: "password", required: true }]
+      });
+      if (!form) throw err;
+      setBankPassword(bankId, form.password);
       return apiRequest(`/api/banks/${encodeURIComponent(bankId)}/questions`, {
-        headers: { "x-bank-password": input }
+        headers: { "x-bank-password": form.password }
       });
     }
     throw err;
@@ -181,10 +189,14 @@ export const downloadBankFileSafe = async (bank, format = "xlsx") => {
   if (res.status === 403) {
     const data = await res.json().catch(() => ({}));
     if (data.locked) {
-      const input = prompt("该题库已加密，请输入访问密码后再导出：");
-      if (input == null) return;
-      setBankPassword(bank.id, input);
-      res = await tryFetch(input);
+      const form = await openFormDialog({
+        title: "导出加密题库",
+        description: "该题库已加密，请输入访问密码后再导出：",
+        fields: [{ name: "password", label: "访问密码", type: "password", required: true }]
+      });
+      if (!form) return;
+      setBankPassword(bank.id, form.password);
+      res = await tryFetch(form.password);
     }
   }
   if (!res.ok) {

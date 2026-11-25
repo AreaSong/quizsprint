@@ -16,16 +16,20 @@ import { renderManageView } from "./views/manage-view.js";
 import { renderPracticeView } from "./views/practice-view.js";
 import { renderSearchView } from "./views/search-view.js";
 import { renderStatsView } from "./views/stats-view.js";
+import { renderUsersView } from "./views/users-view.js";
+import { initSystemAndDisclaimerModals } from "./system-modal.js";
+import { openFormDialog } from "./dialog.js";
 
 const appMain = document.getElementById("app-main");
 const bankSelect = document.getElementById("active-bank-select");
 const navBtns = document.querySelectorAll(".nav-btn");
-const authBtn = document.getElementById("auth-btn");
+const navUsersBtn = document.getElementById("nav-users-btn");
 const userAuthBtn = document.getElementById("user-auth-btn");
+const userPwdBtn = document.getElementById("user-pwd-btn");
+const sysUpdateBtn = document.getElementById("sys-update-btn");
 const apiKeyBtn = document.getElementById("api-key-btn");
 const aiCfgBtn = document.getElementById("ai-cfg-btn");
 const eyeCareBtn = document.getElementById("eye-care-btn");
-const loginModal = document.getElementById("login-modal");
 const userModal = document.getElementById("user-modal");
 const aiModal = document.getElementById("ai-modal");
 const apiKeyModal = document.getElementById("apikey-modal");
@@ -39,6 +43,7 @@ const appState = {
 };
 
 let userRegisterMode = false;
+let requireAdminPrompt = false;
 
 const applyEyeCare = () => {
   const settings = getGlobalSettings();
@@ -62,19 +67,22 @@ const syncBankSelect = () => {
 };
 
 const syncAuthBtns = () => {
-  authBtn.textContent = appState.isAdmin ? "管理权限(退出)" : "管理登录";
-  authBtn.classList.toggle("primary", appState.isAdmin);
-  authBtn.classList.toggle("ghost", !appState.isAdmin);
   apiKeyBtn.hidden = !appState.isAdmin;
+  if (sysUpdateBtn) sysUpdateBtn.hidden = !appState.isAdmin;
+  if (navUsersBtn) navUsersBtn.hidden = !appState.isAdmin;
 
   const hasAiKey = Boolean(getLocalAiConfig().apiKey);
   aiCfgBtn.textContent = hasAiKey ? "AI 已配置" : "AI 设置(未填Key)";
   aiCfgBtn.classList.toggle("ok", hasAiKey);
 
   const user = getCloudUser();
-  userAuthBtn.textContent = user ? `${user.username}(退出)` : "学员登录";
-  userAuthBtn.classList.toggle("primary", Boolean(user));
-  userAuthBtn.classList.toggle("ghost", !user);
+  if (userPwdBtn) userPwdBtn.hidden = !Boolean(user);
+  const loggedIn = Boolean(user || appState.isAdmin);
+  userAuthBtn.textContent = !loggedIn
+    ? "账号登录"
+    : (appState.isAdmin ? `${user ? (user.nickname || user.username) : "管理员"}(管理员·退出)` : `${user.nickname || user.username}(退出)`);
+  userAuthBtn.classList.toggle("primary", loggedIn);
+  userAuthBtn.classList.toggle("ghost", !loggedIn);
 };
 
 const refreshBanks = async () => {
@@ -98,13 +106,16 @@ const refreshAuth = async () => {
   syncAuthBtns();
 };
 
-const openLoginModal = () => {
-  loginModal.hidden = false;
-  document.getElementById("login-password").value = "";
-  document.getElementById("login-password").focus();
+const openAccountModal = (requireAdmin = false) => {
+  userRegisterMode = false;
+  requireAdminPrompt = requireAdmin;
+  syncUserModalMode();
+  document.getElementById("u-pass").value = "";
+  userModal.hidden = false;
+  document.getElementById("u-name").focus();
 };
 
-const VALID_ROUTES = new Set(["banks", "practice", "exams", "search", "stats", "manage", "import"]);
+const VALID_ROUTES = new Set(["banks", "practice", "exams", "search", "stats", "manage", "import", "users"]);
 
 const navigate = (route, params = {}) => {
   const nextRoute = VALID_ROUTES.has(route) ? route : "banks";
@@ -137,12 +148,8 @@ const renderCurrentView = () => {
       await refreshBanks();
       renderCurrentView();
     },
-    onRequireLogin: openLoginModal,
-    onRequireUserLogin: () => {
-      userRegisterMode = false;
-      syncUserModalMode();
-      userModal.hidden = false;
-    }
+    onRequireLogin: () => openAccountModal(true),
+    onRequireUserLogin: () => openAccountModal(false)
   };
 
   if (appState.route === "banks") renderBanksView(appMain, ctx);
@@ -152,6 +159,7 @@ const renderCurrentView = () => {
   else if (appState.route === "stats") renderStatsView(appMain, ctx);
   else if (appState.route === "manage") renderManageView(appMain, ctx);
   else if (appState.route === "import") renderImportView(appMain, ctx);
+  else if (appState.route === "users") renderUsersView(appMain, ctx);
 };
 
 navBtns.forEach((btn) => btn.addEventListener("click", () => navigate(btn.dataset.route)));
@@ -170,66 +178,45 @@ eyeCareBtn.addEventListener("click", () => {
   applyEyeCare();
 });
 
-authBtn.addEventListener("click", async () => {
-  if (appState.isAdmin) {
-    await apiRequest("/api/auth/logout", { method: "POST" });
-    appState.isAdmin = false;
-    syncAuthBtns();
-    showToast("已退出管理登录");
-    renderCurrentView();
-  } else {
-    openLoginModal();
-  }
-});
-
-document.getElementById("login-close").addEventListener("click", () => { loginModal.hidden = true; });
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    await apiRequest("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ password: document.getElementById("login-password").value })
-    });
-    appState.isAdmin = true;
-    loginModal.hidden = true;
-    syncAuthBtns();
-    showToast("管理员登录成功", "ok");
-    renderCurrentView();
-  } catch (err) {
-    showToast(err.message, "bad");
-  }
-});
-
-// 学员账号注册/登录
+// 统一账号注册/登录（按数据库 role 自动区分管理员与学员）
 const syncUserModalMode = () => {
-  document.getElementById("user-modal-title").textContent = userRegisterMode ? "注册学员账号" : "学员登录（云端同步刷题记录）";
+  document.getElementById("user-modal-title").textContent = userRegisterMode
+    ? "注册学员账号"
+    : (requireAdminPrompt ? "管理员账号登录" : "账号登录");
+  document.getElementById("user-modal-desc").textContent = requireAdminPrompt && !userRegisterMode
+    ? "当前操作需要管理员权限，请使用管理员账号（如 admin）登录。"
+    : "访客仅支持查看题库与搜题；登录后可刷题、考试与云端同步，管理员账号自动解锁建库、导题与发考权限。";
   document.getElementById("u-nick-wrap").hidden = !userRegisterMode;
+  const regDisc = document.getElementById("u-reg-disclaimer");
+  if (regDisc) regDisc.hidden = !userRegisterMode;
   document.getElementById("u-submit-btn").textContent = userRegisterMode ? "注册并登录" : "登录";
   document.getElementById("u-toggle-mode").textContent = userRegisterMode ? "已有账号？去登录" : "没有账号？去注册";
 };
 
 userAuthBtn.addEventListener("click", async () => {
-  if (getCloudUser()) {
-    await apiRequest("/api/user/logout", { method: "POST" });
+  if (getCloudUser() || appState.isAdmin) {
+    await Promise.all([
+      apiRequest("/api/user/logout", { method: "POST" }).catch(() => {}),
+      apiRequest("/api/auth/logout", { method: "POST" }).catch(() => {})
+    ]);
     await refreshAuth();
     showToast("已退出账号");
     renderCurrentView();
   } else {
-    userRegisterMode = false;
-    syncUserModalMode();
-    userModal.hidden = false;
+    openAccountModal(false);
   }
 });
 document.getElementById("user-close").addEventListener("click", () => { userModal.hidden = true; });
 document.getElementById("u-toggle-mode").addEventListener("click", () => {
   userRegisterMode = !userRegisterMode;
+  if (userRegisterMode) requireAdminPrompt = false;
   syncUserModalMode();
 });
 document.getElementById("user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
     const endpoint = userRegisterMode ? "/api/user/register" : "/api/user/login";
-    const res = await apiRequest(endpoint, {
+    await apiRequest(endpoint, {
       method: "POST",
       body: JSON.stringify({
         username: document.getElementById("u-name").value.trim(),
@@ -239,8 +226,26 @@ document.getElementById("user-form").addEventListener("submit", async (e) => {
     });
     await refreshAuth();
     userModal.hidden = true;
-    showToast("登录成功，已启用云端同步", "ok");
+    showToast(appState.isAdmin ? "管理员登录成功" : "登录成功，已启用云端同步", "ok");
     renderCurrentView();
+  } catch (err) {
+    showToast(err.message, "bad");
+  }
+});
+
+userPwdBtn?.addEventListener("click", async () => {
+  const form = await openFormDialog({
+    title: "修改登录密码",
+    fields: [
+      { name: "oldPassword", label: "当前密码", type: "password", required: true },
+      { name: "newPassword", label: "新密码（至少 4 位）", type: "password", required: true }
+    ],
+    submitText: "确认修改"
+  });
+  if (!form) return;
+  try {
+    await apiRequest("/api/user/password", { method: "POST", body: JSON.stringify(form) });
+    showToast("密码修改成功", "ok");
   } catch (err) {
     showToast(err.message, "bad");
   }
@@ -342,6 +347,7 @@ document.getElementById("ai-form").addEventListener("submit", (e) => {
 });
 
 const bootstrap = async () => {
+  initSystemAndDisclaimerModals();
   applyEyeCare();
   await Promise.all([refreshBanks(), refreshAuth()]);
   const examMatch = location.hash.match(/^#exam=([^&]+)/);

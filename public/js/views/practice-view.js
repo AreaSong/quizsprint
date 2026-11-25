@@ -15,24 +15,19 @@ import { mountAiChatWidget } from "./ai-chat-widget.js";
 import {
   buildAnswerPanelHtml,
   buildExamSetupHtml,
+  buildImmersiveBarHtml,
   buildInteractionHtml,
   buildModeBarHtml,
   buildNotesAsideHtml,
   buildSheetInnerHtml,
+  computeChapterStats,
   isAnswerCorrect,
-  isMultiChoice
+  isMultiChoice,
+  shuffleArray
 } from "./practice-templates.js";
 
 let activePracticeCleanup = null;
-
-const shuffleArray = (arr) => {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-};
+const round1 = (n) => Math.round(Number(n || 0) * 10) / 10;
 
 export const renderPracticeView = async (container, ctx) => {
   if (activePracticeCleanup) {
@@ -44,7 +39,7 @@ export const renderPracticeView = async (container, ctx) => {
     container.innerHTML = `
       <div class="panel" style="max-width:520px;margin:28px auto;text-align:center;">
         <h2 style="margin-top:0;">请先登录账号</h2>
-        <p class="muted-text">访客模式下仅支持浏览题库与搜题看题；登录账号后即可开启顺序/随机刷题、背题模式、笔记与模拟考试。</p>
+        <p class="muted-text">访客模式下仅支持浏览题库与搜题看题；登录账号后即可开启顺序/随机刷题、章节练习、背题模式、笔记与模拟考试。</p>
         <button id="p-go-login" class="btn primary">立即登录</button>
       </div>
     `;
@@ -73,6 +68,7 @@ export const renderPracticeView = async (container, ctx) => {
 
   const settings = getGlobalSettings();
   const bankState = getBankPracticeState(bank.id);
+  bankState.wrongStreaks = bankState.wrongStreaks || {};
   document.body.classList.toggle("immersive-mode", Boolean(settings.immersive));
   let mode = routeParams.mode || "order";
   if (mode === "recite") {
@@ -82,30 +78,25 @@ export const renderPracticeView = async (container, ctx) => {
   }
 
   let typeFilter = "";
+  let chapterFilter = "";
   let list = [];
   let currentIndex = 0;
   let multiDraft = new Set();
+  let drillRecords = {};
   let examSession = null;
   let examTimer = null;
   let keydownHandler = null;
   const optionCache = new Map();
 
-  const stopTimer = () => {
-    if (examTimer) clearInterval(examTimer);
-    examTimer = null;
-  };
-  const clearKeydown = () => {
-    if (keydownHandler) window.removeEventListener("keydown", keydownHandler);
-    keydownHandler = null;
-  };
+  const stopTimer = () => { if (examTimer) clearInterval(examTimer); examTimer = null; };
+  const clearKeydown = () => { if (keydownHandler) window.removeEventListener("keydown", keydownHandler); keydownHandler = null; };
   activePracticeCleanup = () => { stopTimer(); clearKeydown(); };
 
   const cachedOptions = (q) => {
     const key = `${q.id}_${settings.shuffleOptions}`;
     if (!optionCache.has(key)) {
       const opts = q.options || [];
-      const next = !settings.shuffleOptions || q.type === "3" || opts.length < 2 ? opts : shuffleArray(opts);
-      optionCache.set(key, next);
+      optionCache.set(key, !settings.shuffleOptions || q.type === "3" || opts.length < 2 ? opts : shuffleArray(opts));
     }
     return optionCache.get(key);
   };
@@ -114,6 +105,7 @@ export const renderPracticeView = async (container, ctx) => {
     stopTimer();
     examSession = null;
     multiDraft.clear();
+    drillRecords = {};
     const mastered = new Set(bankState.masteredIds || []);
     const wrong = new Set(bankState.wrongIds || []);
     const fav = new Set(bankState.favoriteIds || []);
@@ -122,7 +114,12 @@ export const renderPracticeView = async (container, ctx) => {
     else if (mode === "wrong") list = allQuestions.filter((q) => wrong.has(q.id));
     else if (mode === "favorite") list = allQuestions.filter((q) => fav.has(q.id));
     else if (mode === "type") list = allQuestions.filter((q) => !typeFilter || String(q.type) === typeFilter);
-    else {
+    else if (mode === "chapter") {
+      list = allQuestions.filter((q) => !chapterFilter || (String(q.chapter || "").trim() || "未分章节") === chapterFilter);
+    } else if (mode === "hotWrong" && Array.isArray(routeParams.hotIds)) {
+      const hotSet = new Set(routeParams.hotIds.map(String));
+      list = allQuestions.filter((q) => hotSet.has(q.id));
+    } else {
       const base = [...allQuestions];
       if (settings.strategy === "wrongFirst") base.sort((a, b) => (wrong.has(b.id) ? 1 : 0) - (wrong.has(a.id) ? 1 : 0));
       else if (settings.strategy === "unansweredFirst") base.sort((a, b) => (bankState.records[a.id] ? 1 : 0) - (bankState.records[b.id] ? 1 : 0));
@@ -138,33 +135,52 @@ export const renderPracticeView = async (container, ctx) => {
       examSession.answers[q.id] = { selected: selectedArr, correct };
       return;
     }
+    drillRecords[q.id] = { selected: selectedArr, correct };
     bankState.records[q.id] = { selected: selectedArr, correct };
     const wrongSet = new Set(bankState.wrongIds || []);
-    if (correct) wrongSet.delete(q.id);
-    else wrongSet.add(q.id);
+    const needStreak = Math.max(1, Number(settings.wrongClearStreak || 1));
+
+    if (correct) {
+      if (wrongSet.has(q.id)) {
+        const nextStreak = Number(bankState.wrongStreaks[q.id] || 0) + 1;
+        if (nextStreak >= needStreak) {
+          wrongSet.delete(q.id);
+          delete bankState.wrongStreaks[q.id];
+          if (needStreak > 1) showToast(`已连续答对 ${needStreak} 次，移出错题本！`, "ok");
+        } else {
+          bankState.wrongStreaks[q.id] = nextStreak;
+          showToast(`错题巩固进度：${nextStreak}/${needStreak}`, "ok");
+        }
+      }
+    } else {
+      wrongSet.add(q.id);
+      bankState.wrongStreaks[q.id] = 0;
+    }
     bankState.wrongIds = [...wrongSet];
     bankState.lastIndex = currentIndex;
-    saveBankPracticeState(bank.id, bankState, countDaily ? { answered: 1, correct: correct ? 1 : 0 } : null);
+    saveBankPracticeState(bank.id, bankState, countDaily ? { answered: 1, correct: correct ? 1 : 0, questionId: q.id } : null);
   };
 
-  const goPrev = () => {
-    if (currentIndex > 0) {
-      currentIndex -= 1;
-      multiDraft.clear();
-      renderMain();
-    }
-  };
-
+  const goPrev = () => { if (currentIndex > 0) { currentIndex -= 1; multiDraft.clear(); renderMain(); } };
   const goNext = () => {
     if (currentIndex < list.length - 1) {
       currentIndex += 1;
       multiDraft.clear();
-      if (!examSession) {
-        bankState.lastIndex = currentIndex;
-        saveBankPracticeState(bank.id, bankState);
-      }
+      if (!examSession) { bankState.lastIndex = currentIndex; saveBankPracticeState(bank.id, bankState); }
       renderMain();
     }
+  };
+
+  const calcExamScore = () => {
+    let earned = 0;
+    let correctCount = 0;
+    for (const q of list) {
+      if (examSession.answers[q.id]?.correct) {
+        correctCount += 1;
+        earned += Number(examSession.scoreMap[q.id] || 0);
+      }
+    }
+    return { score: round1(earned), correctCount };
   };
 
   const submitExam = () => {
@@ -172,29 +188,74 @@ export const renderPracticeView = async (container, ctx) => {
     stopTimer();
     examSession.submitted = true;
     const wrongSet = new Set(bankState.wrongIds || []);
-    let correctCount = 0;
     for (const q of list) {
-      if (examSession.answers[q.id]?.correct) correctCount += 1;
-      else wrongSet.add(q.id);
+      if (!examSession.answers[q.id]?.correct) { wrongSet.add(q.id); bankState.wrongStreaks[q.id] = 0; }
     }
     bankState.wrongIds = [...wrongSet];
     saveBankPracticeState(bank.id, bankState);
-    const score = Math.round((correctCount / list.length) * 100);
-    showToast(`交卷完成：得分 ${score} 分（${correctCount}/${list.length}）`, score >= examSession.passScore ? "ok" : "bad");
+    const { score, correctCount } = calcExamScore();
+    showToast(`交卷完成：得分 ${score}/${examSession.totalScore} 分（${correctCount}/${list.length}）`, score >= examSession.passScore ? "ok" : "bad");
     renderMain();
   };
 
   const renderExamSetup = () => {
-    container.innerHTML = buildExamSetupHtml(bank.name, allQuestions.length);
+    container.innerHTML = buildExamSetupHtml(bank.name, allQuestions);
+    const quickBox = container.querySelector("#ex-quick-box");
+    const typeBox = container.querySelector("#ex-type-box");
+    const totalEl = container.querySelector("#ex-total-preview");
+    const passEl = container.querySelector("#ex-pass");
+
+    const calcTypePreview = () => {
+      let sum = 0;
+      container.querySelectorAll("[data-type-row]").forEach((row) => {
+        const cnt = Number(row.querySelector(".ex-tc-cnt").value || 0);
+        const sc = Number(row.querySelector(".ex-tc-score").value || 0);
+        sum += cnt * sc;
+      });
+      const rounded = round1(sum);
+      if (totalEl) totalEl.textContent = String(rounded);
+      return rounded;
+    };
+
+    container.querySelectorAll('input[name="ex-mode"]').forEach((r) => {
+      r.addEventListener("change", () => {
+        const byType = r.value === "byType" && r.checked;
+        quickBox.hidden = byType;
+        typeBox.hidden = !byType;
+        const tot = byType ? calcTypePreview() : 100;
+        passEl.value = String(Math.max(1, Math.round(tot * 0.6)));
+      });
+    });
+    typeBox?.addEventListener("input", () => {
+      const tot = calcTypePreview();
+      passEl.value = String(Math.max(1, Math.round(tot * 0.6)));
+    });
     container.querySelector("#ex-cancel").addEventListener("click", () => { mode = "order"; buildList(); renderMain(); });
     container.querySelector("#exam-setup-form").addEventListener("submit", (e) => {
       e.preventDefault();
-      const count = Math.min(allQuestions.length, Math.max(1, Number(container.querySelector("#ex-count").value)));
+      const isByType = container.querySelector('input[name="ex-mode"]:checked')?.value === "byType";
+      const scoreMap = {};
+      if (isByType) {
+        list = [];
+        container.querySelectorAll("[data-type-row]").forEach((row) => {
+          const t = row.dataset.typeRow;
+          const cnt = Math.max(0, Number(row.querySelector(".ex-tc-cnt").value || 0));
+          const sc = Math.max(0.5, Number(row.querySelector(".ex-tc-score").value || 2));
+          const picked = shuffleArray(allQuestions.filter((q) => String(q.type) === t)).slice(0, cnt);
+          for (const q of picked) { list.push(q); scoreMap[q.id] = sc; }
+        });
+        if (!list.length) return showToast("请至少抽取 1 道题", "bad");
+      } else {
+        const count = Math.min(allQuestions.length, Math.max(1, Number(container.querySelector("#ex-count").value)));
+        list = shuffleArray(allQuestions).slice(0, count);
+        const per = 100 / list.length;
+        for (const q of list) scoreMap[q.id] = per;
+      }
+      const totalScore = round1(list.reduce((s, q) => s + Number(scoreMap[q.id] || 0), 0));
       const mins = Math.max(1, Number(container.querySelector("#ex-mins").value));
-      const passScore = Math.max(1, Number(container.querySelector("#ex-pass").value));
-      list = shuffleArray(allQuestions).slice(0, count);
+      const passScore = Math.max(1, Number(passEl.value));
       currentIndex = 0;
-      examSession = { answers: {}, submitted: false, passScore, remainSec: mins * 60 };
+      examSession = { answers: {}, scoreMap, totalScore, submitted: false, passScore, remainSec: mins * 60 };
       examTimer = setInterval(() => {
         if (!examSession || examSession.submitted || (location.hash && location.hash !== "#practice")) return stopTimer();
         examSession.remainSec -= 1;
@@ -209,40 +270,25 @@ export const renderPracticeView = async (container, ctx) => {
   const bindKeyboard = (q, opts, showAnswerNow) => {
     clearKeydown();
     const onKeyDown = (e) => {
-      if (!document.body.contains(container) || (location.hash.startsWith("#") && location.hash !== "#practice")) {
-        clearKeydown();
-        return;
-      }
+      if (!document.body.contains(container) || (location.hash.startsWith("#") && location.hash !== "#practice")) return clearKeydown();
       const tag = e.target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
-        if (e.key === "Enter" && e.target.id === "fill-input") {
-          e.preventDefault();
-          container.querySelector("#btn-confirm-fill")?.click();
-        }
+        if (e.key === "Enter" && e.target.id === "fill-input") { e.preventDefault(); container.querySelector("#btn-confirm-fill")?.click(); }
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); return; }
       if (e.key === "ArrowRight") { e.preventDefault(); goNext(); return; }
       if (e.key === "Enter") {
-        if (!showAnswerNow && isMultiChoice(q)) {
-          e.preventDefault();
-          container.querySelector("#btn-confirm-multi")?.click();
-        } else if (showAnswerNow) {
-          e.preventDefault();
-          goNext();
-        }
+        if (!showAnswerNow && isMultiChoice(q)) { e.preventDefault(); container.querySelector("#btn-confirm-multi")?.click(); }
+        else if (showAnswerNow) { e.preventDefault(); goNext(); }
         return;
       }
       if (!showAnswerNow && opts.length) {
-        const upper = e.key.toUpperCase();
-        const letterIdx = LETTERS.indexOf(upper);
+        const idx = LETTERS.indexOf(e.key.toUpperCase());
         const numIdx = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : -1;
-        const targetIdx = letterIdx >= 0 && letterIdx < opts.length ? letterIdx : (numIdx >= 0 && numIdx < opts.length ? numIdx : -1);
-        if (targetIdx >= 0) {
-          e.preventDefault();
-          container.querySelectorAll(".option-item")[targetIdx]?.click();
-        }
+        const target = idx >= 0 && idx < opts.length ? idx : (numIdx >= 0 && numIdx < opts.length ? numIdx : -1);
+        if (target >= 0) { e.preventDefault(); container.querySelectorAll(".option-item")[target]?.click(); }
       }
     };
     keydownHandler = onKeyDown;
@@ -252,7 +298,6 @@ export const renderPracticeView = async (container, ctx) => {
   const bindMainEvents = (q, opts, showAnswerNow) => {
     container.querySelector("#btn-prev")?.addEventListener("click", goPrev);
     container.querySelector("#btn-next")?.addEventListener("click", goNext);
-
     container.querySelector("#btn-fav")?.addEventListener("click", () => {
       const set = new Set(bankState.favoriteIds || []);
       if (set.has(q.id)) set.delete(q.id); else set.add(q.id);
@@ -260,19 +305,14 @@ export const renderPracticeView = async (container, ctx) => {
       saveBankPracticeState(bank.id, bankState);
       renderMain();
     });
-
     container.querySelector("#btn-master")?.addEventListener("click", () => {
       const set = new Set(bankState.masteredIds || []);
       if (set.has(q.id)) set.delete(q.id);
-      else {
-        set.add(q.id);
-        bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id);
-      }
+      else { set.add(q.id); bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); }
       bankState.masteredIds = [...set];
       saveBankPracticeState(bank.id, bankState);
       renderMain();
     });
-
     const saveNote = (val) => {
       bankState.notes = bankState.notes || {};
       bankState.notes[q.id] = String(val || "").trim();
@@ -285,99 +325,61 @@ export const renderPracticeView = async (container, ctx) => {
       if (aside) aside.value = e.target.value;
     });
     container.querySelector("#aside-note-input")?.addEventListener("change", (e) => { saveNote(e.target.value); renderMain(); });
-
-    container.querySelector("#btn-eval-ok")?.addEventListener("click", () => {
-      const cur = bankState.records[q.id]?.selected || ["已作答"];
-      recordAnswer(q, cur, true, false);
+    container.querySelector("#btn-eval-ok")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], true, false); renderMain(); });
+    container.querySelector("#btn-eval-bad")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], false, false); renderMain(); });
+    container.querySelector("#btn-redo-q")?.addEventListener("click", () => {
+      delete drillRecords[q.id];
+      delete bankState.records[q.id];
+      multiDraft.clear();
+      saveBankPracticeState(bank.id, bankState);
       renderMain();
     });
-    container.querySelector("#btn-eval-bad")?.addEventListener("click", () => {
-      const cur = bankState.records[q.id]?.selected || ["已作答"];
-      recordAnswer(q, cur, false, false);
-      renderMain();
-    });
-
-    container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => {
-      settings.immersive = !settings.immersive;
-      saveGlobalSettings(settings);
-      document.body.classList.toggle("immersive-mode", settings.immersive);
-      renderMain();
-    });
-    container.querySelector("#btn-exit-immersive")?.addEventListener("click", () => {
-      settings.immersive = false;
-      saveGlobalSettings(settings);
-      document.body.classList.remove("immersive-mode");
-      renderMain();
-    });
+    container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => { settings.immersive = !settings.immersive; saveGlobalSettings(settings); document.body.classList.toggle("immersive-mode", settings.immersive); renderMain(); });
+    container.querySelector("#btn-exit-immersive")?.addEventListener("click", () => { settings.immersive = false; saveGlobalSettings(settings); document.body.classList.remove("immersive-mode"); renderMain(); });
     container.querySelector("#btn-imm-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
-    container.querySelector("#btn-imm-eye")?.addEventListener("click", () => {
-      settings.eyeCare = !settings.eyeCare;
-      saveGlobalSettings(settings);
-      document.body.classList.toggle("eye-care", settings.eyeCare);
-      renderMain();
-    });
+    container.querySelector("#btn-imm-eye")?.addEventListener("click", () => { settings.eyeCare = !settings.eyeCare; saveGlobalSettings(settings); document.body.classList.toggle("eye-care", settings.eyeCare); renderMain(); });
 
     const aiModal = container.querySelector("#ai-chat-modal");
     const asideAiRoot = container.querySelector("#aside-ai-chat");
     const modalAiRoot = container.querySelector("#modal-ai-chat");
     mountAiChatWidget(asideAiRoot, q);
-    container.querySelectorAll(".js-open-ai-modal").forEach((btn) => {
-      btn.addEventListener("click", () => { if (aiModal) { mountAiChatWidget(modalAiRoot, q); aiModal.hidden = false; } });
-    });
+    container.querySelectorAll(".js-open-ai-modal").forEach((b) => b.addEventListener("click", () => { if (aiModal) { mountAiChatWidget(modalAiRoot, q); aiModal.hidden = false; } }));
     container.querySelector("#ai-chat-modal-close")?.addEventListener("click", () => { if (aiModal) aiModal.hidden = true; mountAiChatWidget(asideAiRoot, q); });
-
     const sheetModal = container.querySelector("#sheet-modal");
     container.querySelectorAll(".js-open-sheet").forEach((b) => b.addEventListener("click", () => { if (sheetModal) sheetModal.hidden = false; }));
     container.querySelector("#sheet-modal-close")?.addEventListener("click", () => { if (sheetModal) sheetModal.hidden = true; });
-    container.querySelectorAll("button[data-jump]").forEach((btn) => {
-      btn.addEventListener("click", () => { currentIndex = Number(btn.dataset.jump); multiDraft.clear(); if (sheetModal) sheetModal.hidden = true; renderMain(); });
-    });
-    container.querySelectorAll(".js-reset-progress").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        if (!confirm("确定清空本题库的刷题记录吗？")) return;
-        bankState.records = {};
-        bankState.lastIndex = 0;
-        saveBankPracticeState(bank.id, bankState);
-        currentIndex = 0;
-        renderMain();
-      });
-    });
+    container.querySelectorAll("button[data-jump]").forEach((b) => b.addEventListener("click", () => { currentIndex = Number(b.dataset.jump); multiDraft.clear(); if (sheetModal) sheetModal.hidden = true; renderMain(); }));
+    container.querySelectorAll(".js-reset-progress").forEach((b) => b.addEventListener("click", () => {
+      if (!confirm("确定清空本题库的刷题记录吗？")) return;
+      bankState.records = {}; bankState.lastIndex = 0; saveBankPracticeState(bank.id, bankState); currentIndex = 0; renderMain();
+    }));
 
     container.querySelectorAll(".js-sw-recite").forEach((el) => el.addEventListener("change", (e) => { settings.reciteMode = e.target.checked; saveGlobalSettings(settings); renderMain(); }));
     container.querySelectorAll(".js-sw-auto").forEach((el) => el.addEventListener("change", (e) => { settings.autoNext = e.target.checked; saveGlobalSettings(settings); }));
     container.querySelectorAll(".js-sw-shuffle").forEach((el) => el.addEventListener("change", (e) => { settings.shuffleOptions = e.target.checked; saveGlobalSettings(settings); renderMain(); }));
     container.querySelectorAll(".js-sw-strategy").forEach((el) => el.addEventListener("change", (e) => { settings.strategy = e.target.value; saveGlobalSettings(settings); buildList(); renderMain(); }));
+    container.querySelectorAll(".js-sw-streak").forEach((el) => el.addEventListener("change", (e) => { settings.wrongClearStreak = Number(e.target.value || 1); saveGlobalSettings(settings); renderMain(); }));
     container.querySelectorAll(".js-export-wrong").forEach((el) => el.addEventListener("click", () => printQuestionsDocument(`${bank.name} - 错题本`, list, true)));
-
     container.querySelector("#btn-ai-explain")?.addEventListener("click", async () => {
       const box = container.querySelector("#ai-explain-box");
       if (!box) return;
-      box.hidden = false;
-      box.textContent = "AI 正在生成深度解析...";
-      try {
-        const res = await aiRequest("/api/ai/explain", { question: q });
-        box.textContent = res.explanation;
-      } catch (err) {
-        box.textContent = err.message;
-      }
+      box.hidden = false; box.textContent = "AI 正在生成深度解析...";
+      try { box.textContent = (await aiRequest("/api/ai/explain", { question: q })).explanation; } catch (err) { box.textContent = err.message; }
     });
 
     if (!showAnswerNow) {
-      container.querySelectorAll(".option-item").forEach((optBtn) => {
-        optBtn.addEventListener("click", () => {
-          const val = optBtn.dataset.opt;
-          if (isMultiChoice(q)) {
-            if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val);
-            renderMain();
-          } else {
-            const correct = isAnswerCorrect(q, [val]);
-            recordAnswer(q, [val], correct);
-            renderMain();
-            if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) setTimeout(goNext, 420);
-          }
-        });
-      });
-
+      container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
+        const val = optBtn.dataset.opt;
+        if (isMultiChoice(q)) {
+          if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val);
+          renderMain();
+        } else {
+          const correct = isAnswerCorrect(q, [val]);
+          recordAnswer(q, [val], correct);
+          renderMain();
+          if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) setTimeout(goNext, 420);
+        }
+      }));
       container.querySelector("#btn-confirm-multi")?.addEventListener("click", () => {
         if (!multiDraft.size) return showToast("请至少选择一个选项", "bad");
         const selected = [...multiDraft];
@@ -385,7 +387,6 @@ export const renderPracticeView = async (container, ctx) => {
         multiDraft.clear();
         renderMain();
       });
-
       container.querySelector("#btn-confirm-fill")?.addEventListener("click", () => {
         const raw = container.querySelector("#fill-input").value.trim();
         if (!raw) return showToast("请输入答案", "bad");
@@ -393,12 +394,9 @@ export const renderPracticeView = async (container, ctx) => {
         recordAnswer(q, selected, isAnswerCorrect(q, selected));
         renderMain();
       });
-
       container.querySelector("#btn-confirm-essay")?.addEventListener("click", () => {
         const raw = container.querySelector("#essay-input").value.trim();
-        const selected = [raw || "（已查看参考答案）"];
-        const exact = raw ? isAnswerCorrect(q, [raw]) : true;
-        recordAnswer(q, selected, exact);
+        recordAnswer(q, [raw || "（已查看参考答案）"], raw ? isAnswerCorrect(q, [raw]) : true);
         renderMain();
       });
     }
@@ -408,45 +406,36 @@ export const renderPracticeView = async (container, ctx) => {
   const renderMain = () => {
     clearKeydown();
     if (mode === "exam" && !examSession) return renderExamSetup();
-    const modeBar = buildModeBarHtml({ bank, mode, bankState, typeFilter, examSession, settings });
+    const chapterStats = computeChapterStats(allQuestions, bankState.records || {});
+    const modeBar = buildModeBarHtml({ bank, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings });
     const bindBar = () => {
       container.querySelectorAll("button[data-mode]").forEach((btn) => btn.addEventListener("click", () => { mode = btn.dataset.mode; buildList(); renderMain(); }));
       container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { typeFilter = e.target.value; buildList(); renderMain(); });
+      container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { chapterFilter = e.target.value; buildList(); renderMain(); });
       container.querySelector("#btn-submit-exam")?.addEventListener("click", submitExam);
     };
 
     if (!list.length) {
-      container.innerHTML = `${modeBar}<div class="panel"><p class="muted-text">当前模式下暂无题目（比如错题本/收藏夹为空）。</p></div>`;
+      container.innerHTML = `${modeBar}<div class="panel"><p class="muted-text">当前模式下暂无题目（比如错题本/收藏夹/所选章节为空）。</p></div>`;
       bindBar();
       return;
     }
 
     const q = list[currentIndex];
-    const activeRecords = examSession ? examSession.answers : bankState.records;
+    const isDrillMode = mode === "wrong" || mode === "hotWrong";
+    const activeRecords = examSession ? examSession.answers : (isDrillMode ? drillRecords : bankState.records);
     const record = activeRecords[q.id];
     const showAnswerNow = (!examSession && settings.reciteMode) || (examSession ? examSession.submitted : Boolean(record));
     const opts = cachedOptions(q);
     const isFav = (bankState.favoriteIds || []).includes(q.id);
     const isMastered = (bankState.masteredIds || []).includes(q.id);
-    const correctCount = list.filter((item) => activeRecords[item.id]?.correct === true).length;
+    const examRes = examSession?.submitted ? calcExamScore() : null;
     const sheetInnerHtml = buildSheetInnerHtml({ list, currentIndex, activeRecords, examSession, settings, mode });
 
     container.innerHTML = `
       ${modeBar}
-      <div class="immersive-bar">
-        <div class="row-gap">
-          <button id="btn-exit-immersive" class="btn ghost tiny">← 退出沉浸</button>
-          <strong>${escapeHtml(bank.name)}</strong>
-          <span class="muted-text">${currentIndex + 1} / ${list.length}</span>
-        </div>
-        <div class="row-gap">
-          <button id="btn-imm-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}">背题</button>
-          <button id="btn-imm-eye" class="btn tiny ${settings.eyeCare ? "ok" : "ghost"}">护眼</button>
-          <button class="btn primary tiny js-open-ai-modal">问 AI</button>
-          <button class="btn ghost tiny js-open-sheet">答题卡</button>
-        </div>
-      </div>
-      ${examSession?.submitted ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${Math.round((correctCount / list.length) * 100)} 分</strong>（答对 ${correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : ""}
+      ${buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings)}
+      ${examRes ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : ""}
       <div class="practice-layout">
         ${buildNotesAsideHtml(list, q, bankState)}
         <section class="question-box">
@@ -454,6 +443,7 @@ export const renderPracticeView = async (container, ctx) => {
             <div class="row-gap">
               <span class="badge">${TYPE_LABELS[q.type] || "其他"}</span>
               ${q.chapter ? `<span class="badge warn">${escapeHtml(q.chapter)}</span>` : ""}
+              ${examSession ? `<span class="badge ok">${round1(examSession.scoreMap[q.id] || 0)} 分</span>` : ""}
               <span class="muted-text">第 ${currentIndex + 1} / ${list.length} 题</span>
             </div>
             <div class="row-gap">
@@ -478,12 +468,8 @@ export const renderPracticeView = async (container, ctx) => {
           <div id="aside-ai-chat" class="panel"></div>
         </aside>
       </div>
-      <div id="sheet-modal" class="modal-backdrop" hidden>
-        <div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div>
-      </div>
-      <div id="ai-chat-modal" class="modal-backdrop" hidden>
-        <div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-ai-chat"></div></div>
-      </div>
+      <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div></div>
+      <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-ai-chat"></div></div></div>
     `;
 
     bindBar();

@@ -1,25 +1,6 @@
 import { apiRequest, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
-
-const exportSubmissionsCsv = (examTitle, subs) => {
-  const header = ["姓名", "学号", "得分", "是否及格", "答对题数", "总题数", "切屏次数", "用时(秒)", "交卷时间"];
-  const rows = subs.map((s) => [
-    s.studentName,
-    s.studentNo,
-    s.score,
-    s.passed ? "及格" : "不及格",
-    s.correctCount,
-    s.totalCount,
-    s.tabSwitches,
-    s.usedSeconds,
-    s.submittedAt
-  ]);
-  const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${examTitle}-成绩单.csv`;
-  a.click();
-};
+import { openFormDialog } from "../dialog.js";
+import { openCreateExamModal, openMySubmissionsModal, openSubmissionsModal } from "./exam-modals.js";
 
 let activeExamCleanup = null;
 
@@ -58,9 +39,12 @@ export const renderExamsView = async (container, ctx) => {
       <div class="row-gap" style="justify-content:space-between;">
         <div>
           <h2 style="margin:0;">在线考试中心（发卷与防作弊）</h2>
-          <span class="muted-text">支持密码发考、防切屏检测、禁复制、多选漏选得分及成绩单导出</span>
+          <span class="muted-text">支持按题型抽题配分、手动挑题、时间窗与限考管控、简答题人工阅卷及成绩单导出</span>
         </div>
-        <button id="ex-create-btn" class="btn primary">${isAdmin ? "+ 发起新考试" : "管理员发考"}</button>
+        <div class="row-gap">
+          <button id="ex-my-subs-btn" class="btn ghost">我的成绩单</button>
+          <button id="ex-create-btn" class="btn primary">${isAdmin ? "+ 发起新考试" : "管理员发考"}</button>
+        </div>
       </div>
       <div class="cards-grid">
         ${exams.map((ex) => `
@@ -70,17 +54,19 @@ export const renderExamsView = async (container, ctx) => {
                 <h3>${(ex.hasAccessCode ?? Boolean(ex.accessCode)) ? "🔒 " : ""}${escapeHtml(ex.title)}</h3>
                 <span class="badge">${ex.questionCount} 题 · ${ex.durationMinutes} 分钟</span>
               </div>
-              <p class="muted-text" style="margin:6px 0;">来源：${escapeHtml(ex.bankName)} · 及格 ${ex.passScore} 分 · 已交卷 ${ex.submissionCount} 人</p>
+              <p class="muted-text" style="margin:6px 0;">来源：${escapeHtml(ex.bankName)} · 满分 ${ex.totalScore || 100} / 及格 ${ex.passScore} 分 · 已交卷 ${ex.submissionCount} 人</p>
               <div class="row-gap">
                 ${ex.disableCopy ? '<span class="badge warn">禁复制</span>' : ""}
                 <span class="badge">限切屏 ${ex.maxTabSwitches} 次</span>
+                ${ex.maxAttempts > 0 ? `<span class="badge warn">限考 ${ex.maxAttempts} 次</span>` : ""}
+                ${ex.startTime || ex.endTime ? `<span class="badge">限时窗口</span>` : ""}
               </div>
             </div>
             <div class="row-gap">
               <button class="btn primary tiny" data-act="enter">进入考场</button>
               <button class="btn ghost tiny" data-act="copy">复制链接</button>
               ${isAdmin ? `
-                <button class="btn ghost tiny" data-act="subs">成绩单</button>
+                <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
                 <button class="btn danger tiny" data-act="del">删除</button>
               ` : ""}
             </div>
@@ -93,59 +79,21 @@ export const renderExamsView = async (container, ctx) => {
 
   const modal = container.querySelector("#ex-modal");
 
+  container.querySelector("#ex-my-subs-btn").addEventListener("click", async () => {
+    if (!isLoggedIn) {
+      showToast("请先登录账号后再查看个人成绩单", "bad");
+      return onRequireUserLogin();
+    }
+    try { await openMySubmissionsModal(modal); } catch (err) { showToast(err.message, "bad"); }
+  });
+
   container.querySelector("#ex-create-btn").addEventListener("click", () => {
     if (!isAdmin) return onRequireLogin();
     if (!banks.length) return showToast("请先创建题库", "bad");
-    modal.hidden = false;
-    modal.innerHTML = `
-      <div class="modal-card" style="max-width:520px;">
-        <div class="modal-head"><h3>发起在线考试</h3><button id="ex-m-close" class="btn ghost tiny">关闭</button></div>
-        <form id="ex-m-form" class="stack-form">
-          <label><span>考试名称</span><input id="ex-title" required placeholder="如：2026 期中摸底测试"></label>
-          <label><span>选择题库</span>
-            <select id="ex-bank">${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === activeBankId ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount})</option>`).join("")}</select>
-          </label>
-          <div class="row-gap">
-            <label style="flex:1;"><span>抽题数</span><input id="ex-cnt" type="number" min="1" value="20"></label>
-            <label style="flex:1;"><span>时长(分钟)</span><input id="ex-dur" type="number" min="1" value="30"></label>
-            <label style="flex:1;"><span>及格分</span><input id="ex-pass" type="number" min="1" max="100" value="60"></label>
-          </div>
-          <div class="row-gap">
-            <label style="flex:1;"><span>考试密码(可选)</span><input id="ex-code" placeholder="留空则免密"></label>
-            <label style="flex:1;"><span>最大切屏次数</span><input id="ex-tab" type="number" min="0" value="3"></label>
-          </div>
-          <label class="switch-row"><span>禁止复制题目文本</span><input id="ex-nocopy" type="checkbox" checked></label>
-          <label class="switch-row"><span>多选题漏选按比例得分</span><input id="ex-mpart" type="checkbox" checked></label>
-          <label class="switch-row"><span>填空题按空平均得分</span><input id="ex-fpart" type="checkbox" checked></label>
-          <div class="modal-actions"><button type="submit" class="btn primary">创建考试</button></div>
-        </form>
-      </div>
-    `;
-    modal.querySelector("#ex-m-close").addEventListener("click", () => { modal.hidden = true; });
-    modal.querySelector("#ex-m-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      try {
-        await apiRequest("/api/exams", {
-          method: "POST",
-          body: JSON.stringify({
-            title: modal.querySelector("#ex-title").value.trim(),
-            bankId: modal.querySelector("#ex-bank").value,
-            questionCount: Number(modal.querySelector("#ex-cnt").value),
-            durationMinutes: Number(modal.querySelector("#ex-dur").value),
-            passScore: Number(modal.querySelector("#ex-pass").value),
-            accessCode: modal.querySelector("#ex-code").value.trim(),
-            maxTabSwitches: Number(modal.querySelector("#ex-tab").value),
-            disableCopy: modal.querySelector("#ex-nocopy").checked,
-            multiPartialScore: modal.querySelector("#ex-mpart").checked,
-            fillPartialScore: modal.querySelector("#ex-fpart").checked
-          })
-        });
-        modal.hidden = true;
-        showToast("考试已发布", "ok");
-        renderExamsView(container, ctx);
-      } catch (err) {
-        showToast(err.message, "bad");
-      }
+    openCreateExamModal(modal, {
+      banks,
+      activeBankId,
+      onCreated: () => renderExamsView(container, ctx)
     });
   });
 
@@ -181,42 +129,11 @@ export const renderExamsView = async (container, ctx) => {
         return;
       }
       if (act === "subs") {
-        let subs = [];
         try {
-          const res = await apiRequest(`/api/exams/${encodeURIComponent(eid)}/submissions`);
-          subs = res.submissions || [];
+          await openSubmissionsModal(modal, { exam: ex });
         } catch (err) {
-          return showToast(err.message, "bad");
+          showToast(err.message, "bad");
         }
-        modal.hidden = false;
-        modal.innerHTML = `
-          <div class="modal-card" style="max-width:680px;max-height:85vh;overflow-y:auto;">
-            <div class="modal-head">
-              <h3>${escapeHtml(ex?.title || "")} · 成绩单 (${subs.length})</h3>
-              <div class="row-gap">
-                <button id="sub-csv" class="btn primary tiny">导出 CSV</button>
-                <button id="sub-close" class="btn ghost tiny">关闭</button>
-              </div>
-            </div>
-            <table class="data-table">
-              <thead><tr><th>姓名</th><th>学号</th><th>得分</th><th>结果</th><th>切屏</th><th>交卷时间</th></tr></thead>
-              <tbody>
-                ${subs.map((s) => `
-                  <tr>
-                    <td>${escapeHtml(s.studentName)}</td>
-                    <td>${escapeHtml(s.studentNo || "-")}</td>
-                    <td><strong>${s.score}</strong></td>
-                    <td><span class="badge ${s.passed ? "ok" : "bad"}">${s.passed ? "及格" : "不及格"}</span></td>
-                    <td>${s.tabSwitches}</td>
-                    <td class="muted-text">${escapeHtml(s.submittedAt.slice(0, 16).replace("T", " "))}</td>
-                  </tr>
-                `).join("") || '<tr><td colspan="6" class="muted-text">暂无交卷记录</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-        `;
-        modal.querySelector("#sub-close").addEventListener("click", () => { modal.hidden = true; });
-        modal.querySelector("#sub-csv").addEventListener("click", () => exportSubmissionsCsv(ex?.title || "考试", subs));
       }
     });
   });
@@ -229,9 +146,14 @@ const renderExamRoom = async (container, examId, code = "") => {
     exam = res.exam;
   } catch (err) {
     if (err.status === 403 && err.data?.needCode) {
-      const input = prompt(`「${err.data.title}」需要输入考试密码：`);
-      if (input == null) return;
-      return renderExamRoom(container, examId, input);
+      const form = await openFormDialog({
+        title: `进入考场：${err.data.title || ""}`,
+        description: "本场考试已加密，请输入考场密码：",
+        fields: [{ name: "code", label: "考试密码", type: "password", required: true }],
+        submitText: "进入考场"
+      });
+      if (!form) return;
+      return renderExamRoom(container, examId, form.code);
     }
     container.innerHTML = `<div class="panel"><p class="muted-text">${escapeHtml(err.message)}</p></div>`;
     return;
@@ -240,7 +162,7 @@ const renderExamRoom = async (container, examId, code = "") => {
   container.innerHTML = `
     <div class="panel" style="max-width:480px;margin:20px auto;">
       <h2 style="margin-top:0;">${escapeHtml(exam.title)}</h2>
-      <p class="muted-text">题数：${exam.questionsSnapshot.length} 题 · 时长：${exam.durationMinutes} 分钟 · 及格：${exam.passScore} 分 · 最多切屏 ${exam.maxTabSwitches} 次</p>
+      <p class="muted-text">题数：${exam.questionsSnapshot.length} 题 · 满分：${exam.totalScore || 100} 分 · 及格：${exam.passScore} 分 · 时长：${exam.durationMinutes} 分钟 · 最多切屏 ${exam.maxTabSwitches} 次</p>
       <form id="join-exam-form" class="stack-form">
         <label><span>考生姓名</span><input id="stu-name" required placeholder="请输入真实姓名"></label>
         <label><span>学号/工号（可选）</span><input id="stu-no" placeholder="可选"></label>
@@ -261,6 +183,7 @@ const renderExamRoom = async (container, examId, code = "") => {
 const startExamSession = (container, exam, student) => {
   const questions = exam.questionsSnapshot || [];
   const answers = {};
+  const fallbackScore = questions.length ? Math.round(((exam.totalScore || 100) / questions.length) * 10) / 10 : 0;
   let remainSec = exam.durationMinutes * 60;
   let tabSwitches = 0;
   let finished = false;
@@ -286,15 +209,19 @@ const startExamSession = (container, exam, student) => {
         <div class="panel" style="max-width:720px;margin:0 auto;">
           <h2 style="margin-top:0;">交卷成功 · ${escapeHtml(exam.title)}</h2>
           <div class="row-gap" style="margin-bottom:14px;">
-            <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:16px;">得分：${sub.score} 分（${sub.passed ? "及格" : "不及格"}）</span>
+            <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:16px;">得分：${sub.score} / ${exam.totalScore || 100} 分（${sub.passed ? "及格" : "不及格"}）</span>
             <span class="badge">答对 ${sub.correctCount} / ${sub.totalCount}</span>
             <span class="badge warn">切屏 ${sub.tabSwitches} 次</span>
+            ${sub.manualGraded ? "" : '<span class="badge warn">含主观题，待管理员最终阅卷核分</span>'}
           </div>
           ${sub.details.map((d, i) => `
             <div class="panel" style="padding:10px;margin-bottom:8px;">
-              <div><strong>${i + 1}. ${escapeHtml(d.title)}</strong> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : "错误"}</span></div>
+              <div class="row-gap" style="justify-content:space-between;">
+                <strong>${i + 1}. ${escapeHtml(d.title)}</strong>
+                <span><span class="badge">${d.earnedScore ?? 0} / ${d.maxScore ?? fallbackScore} 分</span> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : (d.needManual ? "待阅卷" : "错误")}</span></span>
+              </div>
               ${(d.images || []).length ? `<div class="row-gap" style="margin:6px 0;">${d.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-              <div class="muted-text">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")} · 正确答案：${escapeHtml((d.expected || []).join(" | "))}</div>
+              <div class="muted-text">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")}${d.answerHidden ? " · 管理员设置交卷后暂不公开参考答案" : ` · 正确答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
             </div>
           `).join("")}
         </div>
@@ -310,12 +237,8 @@ const startExamSession = (container, exam, student) => {
     if (timer) clearInterval(timer);
     document.removeEventListener("visibilitychange", onVis);
   };
-
   const onVis = () => {
-    if (!container.querySelector("#er-submit")) {
-      cleanupSession();
-      return;
-    }
+    if (!container.querySelector("#er-submit")) return cleanupSession();
     if (document.hidden && !finished) {
       tabSwitches += 1;
       showToast(`警告：检测到切屏 (${tabSwitches}/${exam.maxTabSwitches})`, "bad");
@@ -348,7 +271,7 @@ const startExamSession = (container, exam, student) => {
       <div style="margin-top:14px;display:flex;flex-direction:column;gap:16px;">
         ${questions.map((q, idx) => `
           <div class="panel" data-qid="${escapeHtml(q.id)}">
-            <div><span class="badge">${TYPE_LABELS[q.type] || "其他"}</span> <strong>${idx + 1}. ${escapeHtml(q.title)}</strong></div>
+            <div><span class="badge">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>${idx + 1}. ${escapeHtml(q.title)}</strong></div>
             ${(q.images || []).length ? `<div class="row-gap" style="margin-top:8px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
             ${q.options?.length ? `
               <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
@@ -371,8 +294,7 @@ const startExamSession = (container, exam, student) => {
   container.querySelectorAll("input[type=radio], input[type=checkbox]").forEach((inp) => {
     inp.addEventListener("change", () => {
       const qid = inp.closest("[data-qid]").dataset.qid;
-      const checked = [...container.querySelectorAll(`[data-qid="${qid}"] input:checked`)].map((i) => i.value);
-      answers[qid] = checked;
+      answers[qid] = [...container.querySelectorAll(`[data-qid="${qid}"] input:checked`)].map((i) => i.value);
     });
   });
   container.querySelectorAll(".er-fill").forEach((inp) => {

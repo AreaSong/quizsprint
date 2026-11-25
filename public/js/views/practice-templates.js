@@ -1,5 +1,26 @@
 import { escapeHtml, LETTERS, TYPE_LABELS } from "../api.js";
 
+export const shuffleArray = (arr) => {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+export const computeChapterStats = (questions, records) => {
+  const map = new Map();
+  for (const q of questions) {
+    const name = String(q.chapter || "").trim() || "未分章节";
+    const cur = map.get(name) || { name, total: 0, done: 0 };
+    cur.total += 1;
+    if (records[q.id]) cur.done += 1;
+    map.set(name, cur);
+  }
+  return [...map.values()];
+};
+
 export const normText = (v) => String(v || "").trim().toLowerCase();
 export const isMultiChoice = (q) => q.type === "1" || q.type === "5";
 
@@ -77,7 +98,10 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
           <strong style="color:var(--ok);">正确答案：${escapeHtml((q.answers || []).join(" | "))}</strong>
           ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}" style="margin-left:8px;">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
         </div>
-        <button id="btn-ai-explain" class="btn ghost tiny">AI 深度解析</button>
+        <div class="row-gap">
+          ${record && !examSession ? `<button type="button" id="btn-redo-q" class="btn ghost tiny">重做本题</button>` : ""}
+          <button id="btn-ai-explain" class="btn ghost tiny">AI 深度解析</button>
+        </div>
       </div>
       ${selfEvalHtml}
       ${q.analysis ? `<div style="margin-top:8px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
@@ -127,6 +151,12 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         <option value="unansweredFirst" ${settings.strategy === "unansweredFirst" ? "selected" : ""}>未做题优先</option>
       </select>
     </div>
+    <div class="switch-row">
+      <span>错题移出条件</span>
+      <select class="js-sw-streak" style="padding:3px 6px;font-size:12px;">
+        ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(settings.wrongClearStreak || 1) === n ? "selected" : ""}>连续答对 ${n} 次</option>`).join("")}
+      </select>
+    </div>
     ${mode === "wrong" && list.length ? `<button class="btn ghost tiny js-export-wrong" style="width:100%;margin-top:8px;">导出/打印错题本</button>` : ""}
   `;
 };
@@ -159,30 +189,73 @@ export const buildNotesAsideHtml = (list, q, bankState) => {
   `;
 };
 
-export const buildExamSetupHtml = (bankName, maxCount) => `
-  <div class="panel" style="max-width:560px;margin:0 auto;">
-    <h2 style="margin-top:0;">${escapeHtml(bankName)} · 模拟考试配置</h2>
-    <form id="exam-setup-form" class="stack-form">
-      <label><span>抽取题数（最多 ${maxCount} 题）</span>
-        <input id="ex-count" type="number" min="1" max="${maxCount}" value="${Math.min(20, maxCount)}" required>
-      </label>
-      <label><span>考试时长（分钟）</span><input id="ex-mins" type="number" min="1" max="240" value="30" required></label>
-      <label><span>及格分数（满分 100 分）</span><input id="ex-pass" type="number" min="1" max="100" value="60" required></label>
-      <div class="row-gap">
-        <button type="submit" class="btn primary">开始模拟考试</button>
-        <button type="button" id="ex-cancel" class="btn ghost">返回练习</button>
+export const buildExamSetupHtml = (bankName, allQuestions) => {
+  const counts = {};
+  for (const q of allQuestions) counts[q.type] = (counts[q.type] || 0) + 1;
+  const typeRows = Object.entries(TYPE_LABELS)
+    .filter(([k]) => counts[k] > 0)
+    .map(([k, label]) => `
+      <div class="row-gap" style="justify-content:space-between;" data-type-row="${k}">
+        <span style="min-width:110px;">${label}（共 ${counts[k]} 题）</span>
+        <label class="row-gap" style="font-weight:400;">抽 <input class="ex-tc-cnt" data-type="${k}" type="number" min="0" max="${counts[k]}" value="${Math.min(5, counts[k])}" style="width:68px;"> 题</label>
+        <label class="row-gap" style="font-weight:400;">每题 <input class="ex-tc-score" data-type="${k}" type="number" min="0.5" step="0.5" value="2" style="width:68px;"> 分</label>
       </div>
-    </form>
+    `).join("");
+
+  return `
+    <div class="panel" style="max-width:600px;margin:0 auto;">
+      <h2 style="margin-top:0;">${escapeHtml(bankName)} · 模拟考试配置</h2>
+      <form id="exam-setup-form" class="stack-form">
+        <div class="row-gap">
+          <label class="row-gap" style="flex-direction:row;cursor:pointer;"><input type="radio" name="ex-mode" value="quick" checked> 快速随机抽题</label>
+          <label class="row-gap" style="flex-direction:row;cursor:pointer;"><input type="radio" name="ex-mode" value="byType"> 按题型抽题设分</label>
+        </div>
+        <div id="ex-quick-box">
+          <label><span>抽取题数（最多 ${allQuestions.length} 题，总分 100 分）</span>
+            <input id="ex-count" type="number" min="1" max="${allQuestions.length}" value="${Math.min(20, allQuestions.length)}">
+          </label>
+        </div>
+        <div id="ex-type-box" class="stack-form" style="padding:10px;background:var(--surface-soft);border:1px solid var(--line);border-radius:8px;" hidden>
+          ${typeRows}
+          <div class="muted-text">当前卷面总分：<strong id="ex-total-preview">0</strong> 分</div>
+        </div>
+        <div class="row-gap">
+          <label style="flex:1;"><span>考试时长（分钟）</span><input id="ex-mins" type="number" min="1" max="240" value="30" required></label>
+          <label style="flex:1;"><span>及格分数线</span><input id="ex-pass" type="number" min="1" value="60" required></label>
+        </div>
+        <div class="row-gap">
+          <button type="submit" class="btn primary">开始模拟考试</button>
+          <button type="button" id="ex-cancel" class="btn ghost">返回练习</button>
+        </div>
+      </form>
+    </div>
+  `;
+};
+
+export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) => `
+  <div class="immersive-bar">
+    <div class="row-gap">
+      <button id="btn-exit-immersive" class="btn ghost tiny">← 退出沉浸</button>
+      <strong>${escapeHtml(bankName)}</strong>
+      <span class="muted-text">${currentIndex + 1} / ${total}</span>
+    </div>
+    <div class="row-gap">
+      <button id="btn-imm-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}">背题</button>
+      <button id="btn-imm-eye" class="btn tiny ${settings.eyeCare ? "ok" : "ghost"}">护眼</button>
+      <button class="btn primary tiny js-open-ai-modal">问 AI</button>
+      <button class="btn ghost tiny js-open-sheet">答题卡</button>
+    </div>
   </div>
 `;
 
-export const buildModeBarHtml = ({ bank, mode, bankState, typeFilter, examSession, settings }) => `
+export const buildModeBarHtml = ({ bank, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings }) => `
   <div class="panel practice-modebar" style="margin-bottom:14px;padding:10px 14px;">
     <div class="row-gap" style="justify-content:space-between;">
       <div class="row-gap">
         <strong>${escapeHtml(bank.name)}</strong>
         ${[
           ["order", "顺序练习"],
+          ["chapter", "章节练习"],
           ["random", "随机练习"],
           ["type", "题型练习"],
           ["wrong", `错题本 (${(bankState.wrongIds || []).length})`],
@@ -193,6 +266,12 @@ export const buildModeBarHtml = ({ bank, mode, bankState, typeFilter, examSessio
           <select id="p-type-filter" style="padding:3px 8px;font-size:12px;">
             <option value="">全部题型</option>
             ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${typeFilter === k ? "selected" : ""}>${v}</option>`).join("")}
+          </select>
+        ` : ""}
+        ${mode === "chapter" ? `
+          <select id="p-chapter-filter" style="padding:3px 8px;font-size:12px;">
+            <option value="">全部章节 (${chapterStats.reduce((s, c) => s + c.total, 0)} 题)</option>
+            ${chapterStats.map((c) => `<option value="${escapeHtml(c.name)}" ${chapterFilter === c.name ? "selected" : ""}>${escapeHtml(c.name)} (${c.done}/${c.total})</option>`).join("")}
           </select>
         ` : ""}
       </div>

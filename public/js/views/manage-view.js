@@ -6,6 +6,7 @@ import {
   showToast,
   TYPE_LABELS
 } from "../api.js";
+import { openFormDialog } from "../dialog.js";
 
 const normalizeKey = (t) => String(t || "").replace(/[\s\p{P}]/gu, "").toLowerCase();
 
@@ -176,14 +177,27 @@ export const renderManageView = async (container, ctx) => {
     container.querySelector("#btn-batch-del")?.addEventListener("click", () => {
       if (confirm(`确定删除选中的 ${state.selectedIds.size} 道试题吗？`)) runBatch({ action: "delete" }, "批量删除成功");
     });
-    container.querySelector("#btn-batch-chapter")?.addEventListener("click", () => {
-      const chapter = prompt("请输入新的章节名称：");
-      if (chapter !== null) runBatch({ action: "update", chapter }, "批量修改章节成功");
+    container.querySelector("#btn-batch-chapter")?.addEventListener("click", async () => {
+      const form = await openFormDialog({
+        title: `批量修改章节（已选 ${state.selectedIds.size} 题）`,
+        fields: [{ name: "chapter", label: "新的章节名称", placeholder: "如：第一章 绪论" }],
+        submitText: "应用修改"
+      });
+      if (form) runBatch({ action: "update", chapter: form.chapter.trim() }, "批量修改章节成功");
     });
-    container.querySelector("#btn-batch-type")?.addEventListener("click", () => {
-      const hint = Object.entries(TYPE_LABELS).map(([k, v]) => `${k}:${v}`).join(" ");
-      const type = prompt(`请输入题型编号 (${hint})：`);
-      if (type && TYPE_LABELS[type]) runBatch({ action: "update", type }, "批量修改题型成功");
+    container.querySelector("#btn-batch-type")?.addEventListener("click", async () => {
+      const form = await openFormDialog({
+        title: `批量修改题型（已选 ${state.selectedIds.size} 题）`,
+        fields: [{
+          name: "type",
+          label: "目标题型",
+          type: "select",
+          value: "0",
+          options: Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v }))
+        }],
+        submitText: "应用修改"
+      });
+      if (form && TYPE_LABELS[form.type]) runBatch({ action: "update", type: form.type }, "批量修改题型成功");
     });
 
     container.querySelectorAll("button[data-act]").forEach((btn) => {
