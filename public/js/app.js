@@ -62,13 +62,21 @@ let requireAdminPrompt = false;
 let userDropdownOpen = false;
 let focusBackTarget = "banks";
 
-const applyAppearance = () => {
+let themeSwitchTimer = null;
+
+const applyAppearance = (animate = false) => {
+  const root = document.documentElement;
+  if (animate) {
+    root.classList.add("theme-switching");
+    if (themeSwitchTimer) clearTimeout(themeSwitchTimer);
+    themeSwitchTimer = setTimeout(() => root.classList.remove("theme-switching"), 240);
+  }
   const settings = getGlobalSettings();
   const theme = THEME_CYCLE.includes(settings.theme) ? settings.theme : "light";
   const accent = ACCENT_LIST.includes(settings.accent) ? settings.accent : "indigo";
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.dataset.accent = accent;
-  document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
+  root.dataset.theme = theme;
+  root.dataset.accent = accent;
+  root.style.colorScheme = theme === "dark" ? "dark" : "light";
   appearanceMenu?.querySelectorAll("[data-set-theme]").forEach((b) => b.classList.toggle("active", b.dataset.setTheme === theme));
   appearanceMenu?.querySelectorAll("[data-set-accent]").forEach((b) => b.classList.toggle("active", b.dataset.setAccent === accent));
 };
@@ -191,8 +199,13 @@ const syncShellMode = (nextRoute, params = {}) => {
   else setFocusMode(false);
 };
 
+let hasNavigatedOnce = false;
+let routeAnimTimer = null;
+
 const navigate = (route, params = {}) => {
   const nextRoute = VALID_ROUTES.has(route) ? route : "banks";
+  const routeChanged = !hasNavigatedOnce || nextRoute !== appState.route;
+  hasNavigatedOnce = true;
   appState.route = nextRoute;
   appState.routeParams = params;
   appMain.classList.toggle("practice-full", nextRoute === "practice");
@@ -203,6 +216,13 @@ const navigate = (route, params = {}) => {
   }
   document.querySelectorAll("[data-route]").forEach((btn) => btn.classList.toggle("active", btn.dataset.route === nextRoute));
   renderCurrentView();
+  if (routeChanged) {
+    clearTimeout(routeAnimTimer);
+    appMain.classList.remove("route-enter");
+    void appMain.offsetWidth;
+    appMain.classList.add("route-enter");
+    routeAnimTimer = setTimeout(() => appMain.classList.remove("route-enter"), 220);
+  }
 };
 
 const renderCurrentView = () => {
@@ -243,7 +263,7 @@ const cycleTheme = () => {
   settings.theme = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
   settings.eyeCare = settings.theme === "paper";
   saveGlobalSettings(settings);
-  applyAppearance();
+  applyAppearance(true);
 };
 
 const doLogout = async () => {
@@ -338,7 +358,7 @@ appearanceMenu?.addEventListener("click", (e) => {
   }
   if (accentPick) settings.accent = accentPick.dataset.setAccent;
   saveGlobalSettings(settings);
-  applyAppearance();
+  applyAppearance(true);
 });
 
 document.getElementById("user-close").addEventListener("click", () => { userModal.hidden = true; });

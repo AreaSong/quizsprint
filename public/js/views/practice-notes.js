@@ -43,37 +43,49 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
     showToast("已写入本题笔记", "ok");
   };
 
+  let currentQid = "";
+  let currentOnOpenDesktop = null;
+
+  const bindOnce = (el, handler) => {
+    if (!el || el.dataset.noteBound === "1") return;
+    el.dataset.noteBound = "1";
+    handler(el);
+  };
+
   const bind = (qid, onOpenDesktop) => {
+    currentQid = qid;
+    currentOnOpenDesktop = onOpenDesktop;
     const schedule = (val) => {
-      pending = { qid, val };
+      pending = { qid: currentQid, val };
       const stEl = container.querySelector("#note-save-status");
       if (stEl) stEl.textContent = "保存中...";
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(flush, 600);
     };
     ["#aside-note-input", "#modal-note-input"].forEach((sel) => {
-      const el = container.querySelector(sel);
-      el?.addEventListener("input", (e) => schedule(e.target.value));
-      el?.addEventListener("change", flush);
+      bindOnce(container.querySelector(sel), (el) => {
+        el.addEventListener("input", (e) => schedule(e.target.value));
+        el.addEventListener("change", flush);
+      });
     });
     const modal = container.querySelector("#notes-modal");
-    container.querySelectorAll(".js-open-notes-modal").forEach((b) => b.addEventListener("click", () => { if (modal) modal.hidden = false; }));
-    container.querySelector("#notes-modal-close")?.addEventListener("click", () => { flush(); if (modal) modal.hidden = true; });
-    container.querySelector("#btn-jump-note")?.addEventListener("click", () => {
+    container.querySelectorAll(".js-open-notes-modal").forEach((b) => bindOnce(b, (el) => el.addEventListener("click", () => { if (modal) modal.hidden = false; })));
+    bindOnce(container.querySelector("#notes-modal-close"), (el) => el.addEventListener("click", () => { flush(); if (modal) modal.hidden = true; }));
+    bindOnce(container.querySelector("#btn-jump-note"), (el) => el.addEventListener("click", () => {
       if (window.innerWidth <= 960 || document.body.classList.contains("immersive-mode")) {
         if (modal) { modal.hidden = false; container.querySelector("#modal-note-input")?.focus(); }
         return;
       }
-      onOpenDesktop?.();
-    });
+      currentOnOpenDesktop?.();
+    }));
     container.querySelectorAll(".note-history-list").forEach((wrap) => {
-      wrap.addEventListener("click", (e) => {
+      bindOnce(wrap, (el) => el.addEventListener("click", (e) => {
         const btn = e.target.closest("button[data-jump]");
         if (!btn) return;
         flush();
         if (modal) modal.hidden = true;
         onJump?.(Number(btn.dataset.jump));
-      });
+      }));
     });
   };
 

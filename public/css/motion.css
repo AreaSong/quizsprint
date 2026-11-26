@@ -1,0 +1,106 @@
+/* QuizSprint 全局动效、触感反馈、键盘焦点环与主题平滑过渡 */
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 键盘可访问焦点环 & 高频控件防误选 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
+.btn, .mode-pill, .subject-pill, .top-nav-btn, .admin-sub-btn, .aside-tab-btn, .mode-tile {
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 核心关键帧 */
+@keyframes viewFadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes maskFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalPopIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes menuDropIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastOut {
+  to { opacity: 0; transform: translateY(8px) scale(0.96); }
+}
+@keyframes optOkPop {
+  0% { transform: scale(0.985); }
+  55% { transform: scale(1.012); }
+  100% { transform: scale(1); }
+}
+@keyframes optWrongShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  55% { transform: translateX(4px); }
+  80% { transform: translateX(-2px); }
+}
+@keyframes barGrowY {
+  from { transform: scaleY(0); opacity: 0.4; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+@keyframes immSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 路由切换 & 弹窗 / 菜单 / Toast */
+.app-main.route-enter > * { animation: viewFadeIn 180ms var(--ease-out-expo); }
+.modal-backdrop:not([hidden]) { animation: maskFadeIn 150ms ease; }
+.modal-backdrop:not([hidden]) > .modal-card { animation: modalPopIn 220ms var(--ease-out-expo); }
+.dropdown-menu:not([hidden]) { transform-origin: top right; animation: menuDropIn 150ms var(--ease-out-expo); }
+.clean-menu:not([hidden]) { transform-origin: top left; }
+.toast { animation: toastIn 220ms var(--ease-spring); }
+.toast.toast-out { animation: toastOut 210ms ease forwards; pointer-events: none; }
+
+/* 刷题签名交互（切题微浮、对错瞬时反馈、拖拽微抬、AI气泡、沉浸滑入） */
+.answer-box, .ai-msg { animation: viewFadeIn 170ms var(--ease-out-expo); }
+.q-body-scroll.q-enter { animation: viewFadeIn 160ms var(--ease-out-expo); }
+.option-item { transition: border-color 0.14s ease, background-color 0.14s ease, transform 0.12s var(--ease-out-expo), box-shadow 0.14s ease; }
+.option-item:hover:not(:disabled):not(.correct):not(.wrong) { transform: translateX(2px); }
+.option-item:active:not(:disabled) { transform: scale(0.99); }
+.option-item.correct { animation: optOkPop 260ms var(--ease-out-expo); }
+.option-item.wrong { animation: optWrongShake 260ms ease; }
+.order-item:hover, .match-chip:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+body.immersive-mode .immersive-bar { animation: immSlideDown 200ms var(--ease-out-expo); }
+
+/* 工作台、题库卡片与统计柱微交互 */
+.mode-tile, .bank-card, .kpi-card.is-clickable {
+  transition: transform 0.16s var(--ease-out-expo), border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.16s ease;
+}
+.mode-tile:hover, .bank-card:hover, .kpi-card.is-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.mode-tile:active { transform: scale(0.985); }
+.mode-tile-icon { transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s var(--ease-out-expo); }
+.mode-tile:hover .mode-tile-icon { background: var(--accent-soft); color: var(--accent-fg); transform: scale(1.05); }
+.chart-bar.has-val { transform-origin: bottom; animation: barGrowY 360ms var(--ease-out-expo); }
+
+/* 主动切换外观主题时短暂过渡底色与卡片色，避免首屏闪烁 */
+html.theme-switching,
+html.theme-switching body,
+html.theme-switching .panel,
+html.theme-switching .app-topbar,
+html.theme-switching .question-box,
+html.theme-switching .bank-workbench,
+html.theme-switching .modal-card {
+  transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

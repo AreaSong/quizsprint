@@ -62,7 +62,8 @@ export const showToast = (msg, kind = "") => {
   el.className = `toast ${kind}`.trim();
   el.textContent = msg;
   container.appendChild(el);
-  setTimeout(() => el.remove(), 2600);
+  setTimeout(() => el.classList.add("toast-out"), 2400);
+  setTimeout(() => el.remove(), 2640);
 };
 
 export const apiRequest = async (url, options = {}) => {

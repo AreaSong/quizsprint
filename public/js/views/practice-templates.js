@@ -350,3 +350,61 @@ export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter
     </div>
   </div>
 `;
+
+export const buildPracticeShellHtml = () => `
+  <div class="practice-shell">
+    <div id="p-modebar-slot"></div>
+    <div id="p-immbar-slot"></div>
+    <div id="p-examres-slot"></div>
+    <div id="p-empty-slot" class="panel" hidden><p class="muted-text" style="margin:0;">当前模式下暂无题目（比如错题本/收藏夹/所选章节为空）。</p></div>
+    <div class="practice-layout">
+      <aside id="p-notes-slot" class="practice-notes panel"></aside>
+      <div class="pane-resizer" data-resize="notes" title="左右拖动调节笔记栏宽度（双击恢复默认）"></div>
+      <section class="question-box">
+        <div class="q-progress-track"><span id="p-progress-fill"></span></div>
+        <div id="p-q-head" class="row-gap q-head" style="justify-content:space-between;"></div>
+        <div id="p-q-body" class="q-body-scroll"></div>
+        <div id="p-q-footer" class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);"></div>
+      </section>
+      <div class="pane-resizer" data-resize="aside" title="左右拖动调节辅助栏宽度（双击恢复默认）"></div>
+      <aside class="practice-aside panel">
+        <div id="p-aside-tabs" class="aside-tabs"></div>
+        <div id="p-aside-body" class="aside-body-scroll"></div>
+      </aside>
+    </div>
+    <div id="notes-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>题目笔记</h3><button id="notes-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-notes-body"></div></div></div>
+    <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-sheet-body"></div></div></div>
+    <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny" data-modal-close>关闭</button></div><div id="modal-ai-chat"></div></div></div>
+  </div>
+`;
+
+export const buildQuestionHeadHtml = ({ q, currentIndex, total, examSession, scoreVal, streakBadge, isFav, isMastered }) => `
+  <div class="row-gap">
+    <span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span>
+    ${q.chapter ? `<span class="tag-pill">${escapeHtml(q.chapter)}</span>` : ""}
+    ${examSession ? `<span class="badge ok">${scoreVal} 分</span>` : ""}
+    ${streakBadge}
+    <span class="muted-text" style="font-variant-numeric:tabular-nums;">第 ${currentIndex + 1} / ${total} 题</span>
+  </div>
+  <div class="row-gap">
+    <button class="btn ghost tiny js-fav-btn">${iconSvg("star", 13)}<span>${isFav ? "已收藏" : "收藏"}</span></button>
+    <button id="btn-master" class="btn tiny ${isMastered ? "ok" : "ghost"}">${iconSvg("check", 13)}<span>${isMastered ? "已斩题" : "斩题"}</span></button>
+  </div>
+`;
+
+export const buildQuestionBodyHtml = ({ q, opts, record, multiDraft, showAnswerNow, bankState, examSession, orderItems, matchState }) => `
+  <div class="q-title md-content">${renderRichMarkdown(q.title)}</div>
+  ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+  ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems, matchState })}
+  ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
+`;
+
+export const buildQuestionFooterHtml = (currentIndex, total) => `
+  <button id="btn-prev" class="btn ghost tiny" ${currentIndex === 0 ? "disabled" : ""}>${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
+  <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
+  <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
+  <button class="btn ghost tiny mobile-only-btn js-open-notes-modal">笔记</button>
+  <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
+  <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
+  <button id="btn-next" class="btn primary tiny" ${currentIndex >= total - 1 ? "disabled" : ""}><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
+`;

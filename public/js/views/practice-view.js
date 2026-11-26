@@ -1,16 +1,15 @@
 import {
   escapeHtml, fetchBankQuestionsSafe, getBankPracticeState, getGlobalSettings,
-  LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast, TYPE_LABELS
+  LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast
 } from "../api.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
-import { renderRichMarkdown } from "../markdown.js";
 import { bindPaneResizers, createNotesController } from "./practice-notes.js";
-import { iconSvg } from "../icons.js";
 import { bindDragQuestionEvents, initMatchState, initOrderItems, isMatchType, isOrderType, isSubjectiveType } from "./practice-drag.js";
+import { mountExamSetup } from "./practice-exam.js";
 import {
-  buildAnswerPanelHtml, buildExamSetupHtml, buildImmersiveBarHtml, buildInteractionHtml,
-  buildModeBarHtml, buildNoteHistoryItemsHtml, buildNotesPanelHtml, buildSheetInnerHtml,
-  computeChapterStats, isAnswerCorrect, isMultiChoice, shuffleArray
+  buildImmersiveBarHtml, buildModeBarHtml, buildNotesPanelHtml,
+  buildPracticeShellHtml, buildQuestionBodyHtml, buildQuestionFooterHtml, buildQuestionHeadHtml,
+  buildSheetInnerHtml, computeChapterStats, isAnswerCorrect, isMultiChoice, shuffleArray
 } from "./practice-templates.js";
 
 let activePracticeCleanup = null;
@@ -58,6 +57,9 @@ export const renderPracticeView = async (container, ctx) => {
   let keydownHandler = null;
   let aiWide = Number(settings.asideWidth || 332) >= 460;
   let pendingAiPrompt = "";
+  let shellMounted = false;
+  let lastRenderedQid = null;
+  let lastRenderedAsideTab = "";
   const optionCache = new Map();
   const orderDraftMap = new Map();
   const matchDraftMap = new Map();
@@ -166,47 +168,14 @@ export const renderPracticeView = async (container, ctx) => {
     renderMain();
   };
 
-  const renderExamSetup = () => {
-    container.innerHTML = `<div class="view-scroll">${buildExamSetupHtml(bank.name, allQuestions)}</div>`;
-    const quickBox = container.querySelector("#ex-quick-box");
-    const typeBox = container.querySelector("#ex-type-box");
-    const totalEl = container.querySelector("#ex-total-preview");
-    const passEl = container.querySelector("#ex-pass");
-    const calcTypePreview = () => {
-      let sum = 0;
-      container.querySelectorAll("[data-type-row]").forEach((row) => { sum += Number(row.querySelector(".ex-tc-cnt").value || 0) * Number(row.querySelector(".ex-tc-score").value || 0); });
-      const rounded = round1(sum);
-      if (totalEl) totalEl.textContent = String(rounded);
-      return rounded;
-    };
-    container.querySelectorAll('input[name="ex-mode"]').forEach((r) => r.addEventListener("change", () => {
-      const byType = r.value === "byType" && r.checked;
-      quickBox.hidden = byType; typeBox.hidden = !byType;
-      passEl.value = String(Math.max(1, Math.round((byType ? calcTypePreview() : 100) * 0.6)));
-    }));
-    typeBox?.addEventListener("input", () => { passEl.value = String(Math.max(1, Math.round(calcTypePreview() * 0.6))); });
-    container.querySelector("#ex-cancel").addEventListener("click", () => { mode = "order"; buildList(); renderMain(); });
-    container.querySelector("#exam-setup-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const isByType = container.querySelector('input[name="ex-mode"]:checked')?.value === "byType";
-      const scoreMap = {};
-      if (isByType) {
-        list = [];
-        container.querySelectorAll("[data-type-row]").forEach((row) => {
-          const picked = shuffleArray(allQuestions.filter((q) => String(q.type) === row.dataset.typeRow)).slice(0, Math.max(0, Number(row.querySelector(".ex-tc-cnt").value || 0)));
-          const sc = Math.max(0.5, Number(row.querySelector(".ex-tc-score").value || 2));
-          for (const q of picked) { list.push(q); scoreMap[q.id] = sc; }
-        });
-        if (!list.length) return showToast("请至少抽取 1 道题", "bad");
-      } else {
-        const count = Math.min(allQuestions.length, Math.max(1, Number(container.querySelector("#ex-count").value)));
-        list = shuffleArray(allQuestions).slice(0, count);
-        for (const q of list) scoreMap[q.id] = 100 / list.length;
-      }
-      const totalScore = round1(list.reduce((s, q) => s + Number(scoreMap[q.id] || 0), 0));
-      const mins = Math.max(1, Number(container.querySelector("#ex-mins").value));
-      currentIndex = 0;
-      examSession = { answers: {}, scoreMap, totalScore, submitted: false, passScore: Math.max(1, Number(passEl.value)), remainSec: mins * 60 };
+  const renderExamSetup = () => mountExamSetup({
+    container,
+    bankName: bank.name,
+    allQuestions,
+    onCancel: () => { mode = "order"; buildList(); renderMain(); },
+    onStart: ({ list: picked, scoreMap, totalScore, passScore, mins }) => {
+      list = picked; currentIndex = 0;
+      examSession = { answers: {}, scoreMap, totalScore, submitted: false, passScore, remainSec: mins * 60 };
       examTimer = setInterval(() => {
         if (!examSession || examSession.submitted || (location.hash && location.hash !== "#practice")) return stopTimer();
         examSession.remainSec -= 1;
@@ -215,8 +184,8 @@ export const renderPracticeView = async (container, ctx) => {
         if (examSession.remainSec <= 0) submitExam();
       }, 1000);
       renderMain();
-    });
-  };
+    }
+  });
 
   const bindKeyboardAndTouch = (q, opts, showAnswerNow) => {
     clearKeydown();
@@ -246,7 +215,30 @@ export const renderPracticeView = async (container, ctx) => {
     };
     keydownHandler = onKeyDown;
     window.addEventListener("keydown", onKeyDown);
+  };
 
+  const getAiOpts = (q, allowWide, autoPrompt = "") => ({
+    isWide: aiWide,
+    onToggleWide: allowWide ? () => {
+      aiWide = !aiWide; settings.asideWidth = aiWide ? 520 : 332; saveGlobalSettings(settings);
+      container.querySelector(".practice-shell")?.style.setProperty("--aside-w", `${settings.asideWidth}px`);
+      renderMain({ forceAi: true });
+    } : null,
+    onAppendNote: (text) => notesCtrl.append(q.id, text),
+    initialState: bankState.aiChats?.[q.id] || null,
+    onHistoryChange: (st) => {
+      bankState.aiChats = bankState.aiChats || {};
+      if (st) bankState.aiChats[q.id] = st; else delete bankState.aiChats[q.id];
+      saveBankPracticeState(bank.id, bankState);
+    },
+    autoPrompt
+  });
+
+  const bindPersistentShell = () => {
+    bindPaneResizers({
+      container, settings,
+      onSave: (side, w) => { if (side === "notes") settings.notesWidth = w; else { settings.asideWidth = w; aiWide = w >= 460; } saveGlobalSettings(settings); }
+    });
     const qBox = container.querySelector(".question-box");
     let tx = 0; let ty = 0;
     qBox?.addEventListener("touchstart", (e) => { tx = e.changedTouches[0].clientX; ty = e.changedTouches[0].clientY; }, { passive: true });
@@ -257,9 +249,57 @@ export const renderPracticeView = async (container, ctx) => {
         if (dx < 0) goNext(); else goPrev();
       }
     }, { passive: true });
+    container.querySelector("#sheet-modal-close")?.addEventListener("click", () => {
+      const m = container.querySelector("#sheet-modal");
+      if (m) m.hidden = true;
+    });
+    container.querySelector("#ai-chat-modal-close")?.addEventListener("click", () => {
+      const aiModal = container.querySelector("#ai-chat-modal");
+      const asideAiRoot = container.querySelector("#aside-ai-chat");
+      const q = list[currentIndex];
+      if (aiModal) aiModal.hidden = true;
+      if (q && asideAiRoot && asideTab === "ai") mountAiChatWidget(asideAiRoot, q, getAiOpts(q, true));
+    });
   };
 
-  const bindMainEvents = (q, opts, showAnswerNow) => {
+  const bindSheetScope = (scope) => {
+    if (!scope) return;
+    const sheetModal = container.querySelector("#sheet-modal");
+    scope.querySelectorAll("button[data-jump]").forEach((b) => b.addEventListener("click", () => {
+      flushPendingNote(); currentIndex = Number(b.dataset.jump); multiDraft.clear();
+      if (sheetModal) sheetModal.hidden = true;
+      renderMain();
+    }));
+    scope.querySelector(".js-reset-progress")?.addEventListener("click", () => {
+      if (!confirm("确定清空本题库的刷题记录吗？")) return;
+      bankState.records = {}; bankState.lastIndex = 0; drillRecords = {}; saveBankPracticeState(bank.id, bankState); currentIndex = 0; renderMain();
+    });
+    scope.querySelector(".js-sw-recite")?.addEventListener("change", (e) => { settings.reciteMode = e.target.checked; saveGlobalSettings(settings); renderMain(); });
+    scope.querySelector(".js-sw-auto")?.addEventListener("change", (e) => { settings.autoNext = e.target.checked; saveGlobalSettings(settings); });
+    scope.querySelector(".js-sw-shuffle")?.addEventListener("change", (e) => { settings.shuffleOptions = e.target.checked; saveGlobalSettings(settings); renderMain(); });
+    scope.querySelector(".js-sw-strategy")?.addEventListener("change", (e) => { settings.strategy = e.target.value; saveGlobalSettings(settings); buildList(); renderMain(); });
+    scope.querySelector(".js-sw-streak")?.addEventListener("change", (e) => { settings.wrongClearStreak = Number(e.target.value || 1); saveGlobalSettings(settings); renderMain(); });
+    scope.querySelector(".js-export-wrong")?.addEventListener("click", () => printQuestionsDocument(`${bank.name} - 错题本`, list, true));
+  };
+
+  const bindBarEvents = () => {
+    container.querySelector("#p-bank-select")?.addEventListener("change", (e) => {
+      flushPendingNote();
+      const nextId = e.target.value;
+      ctx.onSelectBank?.(nextId);
+      renderPracticeView(container, { ...ctx, activeBankId: nextId, routeParams: { mode } });
+    });
+    container.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { flushPendingNote(); mode = b.dataset.mode; buildList(); renderMain(); }));
+    container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { flushPendingNote(); typeFilter = e.target.value; buildList(); renderMain(); });
+    container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { flushPendingNote(); chapterFilter = e.target.value; buildList(); renderMain(); });
+    container.querySelector("#btn-submit-exam")?.addEventListener("click", submitExam);
+    container.querySelector("#btn-quick-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
+    container.querySelector("#btn-toggle-notes")?.addEventListener("click", () => { settings.notesCollapsed = !isNotesCollapsed(); saveGlobalSettings(settings); renderMain(); });
+    container.querySelector("#btn-toggle-aside")?.addEventListener("click", () => { settings.asideCollapsed = !settings.asideCollapsed; saveGlobalSettings(settings); renderMain(); });
+    container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => { settings.immersive = !settings.immersive; saveGlobalSettings(settings); document.body.classList.toggle("immersive-mode", settings.immersive); renderMain(); });
+  };
+
+  const bindCommonControls = (q) => {
     container.querySelector("#btn-prev")?.addEventListener("click", goPrev);
     container.querySelector("#btn-next")?.addEventListener("click", goNext);
     container.querySelectorAll(".js-fav-btn").forEach((b) => b.addEventListener("click", () => {
@@ -272,10 +312,21 @@ export const renderPracticeView = async (container, ctx) => {
       if (set.has(q.id)) set.delete(q.id); else { set.add(q.id); bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); }
       bankState.masteredIds = [...set]; saveBankPracticeState(bank.id, bankState); renderMain();
     });
+    container.querySelector("#btn-exit-immersive")?.addEventListener("click", () => { settings.immersive = false; saveGlobalSettings(settings); document.body.classList.remove("immersive-mode"); renderMain(); });
+    container.querySelector("#btn-imm-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
+    container.querySelector("#btn-imm-theme")?.addEventListener("click", () => onToggleTheme?.());
+    container.querySelectorAll(".js-open-sheet").forEach((b) => b.addEventListener("click", () => { const m = container.querySelector("#sheet-modal"); if (m) m.hidden = false; }));
+    container.querySelectorAll(".js-open-ai-modal").forEach((b) => b.addEventListener("click", () => {
+      const aiModal = container.querySelector("#ai-chat-modal");
+      if (aiModal) { mountAiChatWidget(container.querySelector("#modal-ai-chat"), q, getAiOpts(q, false)); aiModal.hidden = false; }
+    }));
     notesCtrl.bind(q.id, () => {
       settings.notesCollapsed = false; saveGlobalSettings(settings); renderMain();
       container.querySelector("#aside-note-input")?.focus();
     });
+  };
+
+  const bindQuestionInteractive = (q, showAnswerNow) => {
     const curSel = () => bankState.records[q.id]?.selected || ["已查看"];
     container.querySelector("#btn-eval-master")?.addEventListener("click", () => {
       recordAnswer(q, curSel(), true, false);
@@ -293,202 +344,155 @@ export const renderPracticeView = async (container, ctx) => {
       delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear(); orderDraftMap.delete(q.id); matchDraftMap.delete(q.id);
       saveBankPracticeState(bank.id, bankState); renderMain();
     });
-    container.querySelector("#btn-exit-immersive")?.addEventListener("click", () => { settings.immersive = false; saveGlobalSettings(settings); document.body.classList.remove("immersive-mode"); renderMain(); });
-    container.querySelector("#btn-imm-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
-    container.querySelector("#btn-imm-theme")?.addEventListener("click", () => onToggleTheme?.());
-
-    container.querySelectorAll(".js-aside-tab").forEach((b) => b.addEventListener("click", () => { asideTab = b.dataset.tab; renderMain(); }));
-    const aiModal = container.querySelector("#ai-chat-modal");
-    const asideAiRoot = container.querySelector("#aside-ai-chat");
-    const modalAiRoot = container.querySelector("#modal-ai-chat");
-    const aiOpts = (allowWide, autoPrompt = "") => ({
-      isWide: aiWide,
-      onToggleWide: allowWide ? () => { aiWide = !aiWide; settings.asideWidth = aiWide ? 520 : 332; saveGlobalSettings(settings); renderMain(); } : null,
-      onAppendNote: (text) => notesCtrl.append(q.id, text),
-      initialState: bankState.aiChats?.[q.id] || null,
-      onHistoryChange: (st) => { bankState.aiChats = bankState.aiChats || {}; if (st) bankState.aiChats[q.id] = st; else delete bankState.aiChats[q.id]; saveBankPracticeState(bank.id, bankState); },
-      autoPrompt
-    });
-    bindPaneResizers({
-      container, settings,
-      onSave: (side, w) => { if (side === "notes") settings.notesWidth = w; else { settings.asideWidth = w; aiWide = w >= 460; } saveGlobalSettings(settings); }
-    });
-    if (asideAiRoot && asideTab === "ai") {
-      const prompt = pendingAiPrompt;
-      pendingAiPrompt = "";
-      mountAiChatWidget(asideAiRoot, q, aiOpts(true, prompt));
-    }
-    container.querySelectorAll(".js-open-ai-modal").forEach((b) => b.addEventListener("click", () => {
-      if (aiModal) { mountAiChatWidget(modalAiRoot, q, aiOpts(false)); aiModal.hidden = false; }
-    }));
-    container.querySelector("#ai-chat-modal-close")?.addEventListener("click", () => {
-      if (aiModal) aiModal.hidden = true;
-      if (asideAiRoot && asideTab === "ai") mountAiChatWidget(asideAiRoot, q, aiOpts(true));
-    });
-    const sheetModal = container.querySelector("#sheet-modal");
-    container.querySelectorAll(".js-open-sheet").forEach((b) => b.addEventListener("click", () => { if (sheetModal) sheetModal.hidden = false; }));
-    container.querySelector("#sheet-modal-close")?.addEventListener("click", () => { if (sheetModal) sheetModal.hidden = true; });
-    container.querySelectorAll("button[data-jump]").forEach((b) => b.addEventListener("click", () => {
-      if (b.closest(".note-history-list")) return;
-      flushPendingNote(); currentIndex = Number(b.dataset.jump); multiDraft.clear(); if (sheetModal) sheetModal.hidden = true; renderMain();
-    }));
-    container.querySelectorAll(".js-reset-progress").forEach((b) => b.addEventListener("click", () => {
-      if (!confirm("确定清空本题库的刷题记录吗？")) return;
-      bankState.records = {}; bankState.lastIndex = 0; drillRecords = {}; saveBankPracticeState(bank.id, bankState); currentIndex = 0; renderMain();
-    }));
-
-    container.querySelectorAll(".js-sw-recite").forEach((el) => el.addEventListener("change", (e) => { settings.reciteMode = e.target.checked; saveGlobalSettings(settings); renderMain(); }));
-    container.querySelectorAll(".js-sw-auto").forEach((el) => el.addEventListener("change", (e) => { settings.autoNext = e.target.checked; saveGlobalSettings(settings); }));
-    container.querySelectorAll(".js-sw-shuffle").forEach((el) => el.addEventListener("change", (e) => { settings.shuffleOptions = e.target.checked; saveGlobalSettings(settings); renderMain(); }));
-    container.querySelectorAll(".js-sw-strategy").forEach((el) => el.addEventListener("change", (e) => { settings.strategy = e.target.value; saveGlobalSettings(settings); buildList(); renderMain(); }));
-    container.querySelectorAll(".js-sw-streak").forEach((el) => el.addEventListener("change", (e) => { settings.wrongClearStreak = Number(e.target.value || 1); saveGlobalSettings(settings); renderMain(); }));
-    container.querySelectorAll(".js-export-wrong").forEach((el) => el.addEventListener("click", () => printQuestionsDocument(`${bank.name} - 错题本`, list, true)));
     container.querySelector("#btn-ai-explain")?.addEventListener("click", () => {
       const prompt = "请详细解析这道题：说明正确答案的核心依据，逐项分析错误选项，并提炼 1-2 条记忆要点。";
       if (window.innerWidth <= 960 || settings.immersive) {
-        if (aiModal) { mountAiChatWidget(modalAiRoot, q, aiOpts(false, prompt)); aiModal.hidden = false; }
+        const aiModal = container.querySelector("#ai-chat-modal");
+        if (aiModal) { mountAiChatWidget(container.querySelector("#modal-ai-chat"), q, getAiOpts(q, false, prompt)); aiModal.hidden = false; }
         return;
       }
       settings.asideCollapsed = false; saveGlobalSettings(settings);
       asideTab = "ai"; pendingAiPrompt = prompt; renderMain();
     });
-
-    if (!showAnswerNow) {
-      bindDragQuestionEvents({
-        container, q, getOrderItems: () => getOrderItems(q), setOrderItems: (arr) => orderDraftMap.set(q.id, arr),
-        getMatchState: () => getMatchState(q), onRerender: renderMain,
-        onSubmit: (sel) => { recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain(); }
-      });
-      container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
-        const val = optBtn.dataset.opt;
-        if (isMultiChoice(q)) { if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val); renderMain(); }
-        else {
-          const correct = isAnswerCorrect(q, [val]);
-          recordAnswer(q, [val], correct); renderMain();
-          if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) setTimeout(goNext, 420);
-        }
-      }));
-      container.querySelector("#btn-confirm-multi")?.addEventListener("click", () => {
-        if (!multiDraft.size) return showToast("请至少选择一个选项", "bad");
-        recordAnswer(q, [...multiDraft], isAnswerCorrect(q, [...multiDraft])); multiDraft.clear(); renderMain();
-      });
-      container.querySelector("#btn-confirm-fill")?.addEventListener("click", () => {
-        const raw = container.querySelector("#fill-input").value.trim();
-        if (!raw) return showToast("请输入答案", "bad");
-        const sel = raw.split("|").map((s) => s.trim()).filter(Boolean);
-        recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain();
-      });
-      container.querySelector("#btn-confirm-essay")?.addEventListener("click", () => {
-        const raw = container.querySelector("#essay-input").value.trim();
-        recordAnswer(q, [raw || "（已查看参考答案）"], raw ? isAnswerCorrect(q, [raw]) : true); renderMain();
-      });
-    }
-    bindKeyboardAndTouch(q, opts, showAnswerNow);
+    if (showAnswerNow) return;
+    bindDragQuestionEvents({
+      container, q, getOrderItems: () => getOrderItems(q), setOrderItems: (arr) => orderDraftMap.set(q.id, arr),
+      getMatchState: () => getMatchState(q), onRerender: renderMain,
+      onSubmit: (sel) => { recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain(); }
+    });
+    container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
+      const val = optBtn.dataset.opt;
+      if (isMultiChoice(q)) { if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val); renderMain(); return; }
+      const correct = isAnswerCorrect(q, [val]);
+      recordAnswer(q, [val], correct); renderMain();
+      if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) setTimeout(goNext, 420);
+    }));
+    container.querySelector("#btn-confirm-multi")?.addEventListener("click", () => {
+      if (!multiDraft.size) return showToast("请至少选择一个选项", "bad");
+      recordAnswer(q, [...multiDraft], isAnswerCorrect(q, [...multiDraft])); multiDraft.clear(); renderMain();
+    });
+    container.querySelector("#btn-confirm-fill")?.addEventListener("click", () => {
+      const raw = container.querySelector("#fill-input").value.trim();
+      if (!raw) return showToast("请输入答案", "bad");
+      const sel = raw.split("|").map((s) => s.trim()).filter(Boolean);
+      recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain();
+    });
+    container.querySelector("#btn-confirm-essay")?.addEventListener("click", () => {
+      const raw = container.querySelector("#essay-input").value.trim();
+      recordAnswer(q, [raw || "（已查看参考答案）"], raw ? isAnswerCorrect(q, [raw]) : true); renderMain();
+    });
   };
 
-  const renderMain = () => {
-    clearKeydown();
-    if (mode === "exam" && !examSession) return renderExamSetup();
-    const chapterStats = computeChapterStats(allQuestions, bankState.records || {});
-    const notesCollapsed = isNotesCollapsed();
-    const modeBar = buildModeBarHtml({ bank, banks, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings, notesCollapsed });
-    const bindBar = () => {
-      container.querySelector("#p-bank-select")?.addEventListener("change", (e) => {
-        flushPendingNote();
-        const nextId = e.target.value;
-        ctx.onSelectBank?.(nextId);
-        renderPracticeView(container, { ...ctx, activeBankId: nextId, routeParams: { mode } });
-      });
-      container.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { flushPendingNote(); mode = b.dataset.mode; buildList(); renderMain(); }));
-      container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { flushPendingNote(); typeFilter = e.target.value; buildList(); renderMain(); });
-      container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { flushPendingNote(); chapterFilter = e.target.value; buildList(); renderMain(); });
-      container.querySelector("#btn-submit-exam")?.addEventListener("click", submitExam);
-      container.querySelector("#btn-quick-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
-      container.querySelector("#btn-toggle-notes")?.addEventListener("click", () => { settings.notesCollapsed = !isNotesCollapsed(); saveGlobalSettings(settings); renderMain(); });
-      container.querySelector("#btn-toggle-aside")?.addEventListener("click", () => { settings.asideCollapsed = !settings.asideCollapsed; saveGlobalSettings(settings); renderMain(); });
-      container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => { settings.immersive = !settings.immersive; saveGlobalSettings(settings); document.body.classList.toggle("immersive-mode", settings.immersive); renderMain(); });
-    };
-    if (!list.length) {
-      container.innerHTML = `<div class="practice-shell">${modeBar}<div class="panel"><p class="muted-text" style="margin:0;">当前模式下暂无题目（比如错题本/收藏夹/所选章节为空）。</p></div></div>`;
-      bindBar(); return;
+  const updateAsidePanel = (q, sheetInnerHtml, activeAsideTab, wasMounted, qChanged, forceAi) => {
+    const tabsEl = container.querySelector("#p-aside-tabs");
+    const bodyEl = container.querySelector("#p-aside-body");
+    const modalSheetEl = container.querySelector("#modal-sheet-body");
+    tabsEl.innerHTML = [["sheet", "答题卡"], ["ai", "AI 助教"]].map(([k, lbl]) =>
+      `<button type="button" class="aside-tab-btn js-aside-tab ${activeAsideTab === k ? "active" : ""}" data-tab="${k}">${lbl}</button>`
+    ).join("");
+    tabsEl.querySelectorAll(".js-aside-tab").forEach((b) => b.addEventListener("click", () => { asideTab = b.dataset.tab; renderMain(); }));
+    modalSheetEl.innerHTML = sheetInnerHtml;
+    bindSheetScope(modalSheetEl);
+    if (activeAsideTab === "ai") {
+      bodyEl.className = "aside-body-scroll is-ai-tab";
+      const prompt = pendingAiPrompt;
+      pendingAiPrompt = "";
+      const needMount = !wasMounted || qChanged || lastRenderedAsideTab !== "ai" || Boolean(prompt) || forceAi || !bodyEl.querySelector("#aside-ai-chat");
+      if (needMount) {
+        bodyEl.innerHTML = '<div id="aside-ai-chat"></div>';
+        mountAiChatWidget(bodyEl.querySelector("#aside-ai-chat"), q, getAiOpts(q, true, prompt));
+      }
+    } else {
+      const prevScroll = wasMounted && lastRenderedAsideTab === "sheet" ? bodyEl.scrollTop : 0;
+      const wasOpen = Boolean(wasMounted && lastRenderedAsideTab === "sheet" && bodyEl.querySelector(".sheet-settings")?.open);
+      bodyEl.className = "aside-body-scroll";
+      bodyEl.innerHTML = sheetInnerHtml;
+      if (wasOpen) { const det = bodyEl.querySelector(".sheet-settings"); if (det) det.open = true; }
+      bodyEl.scrollTop = prevScroll;
+      bindSheetScope(bodyEl);
     }
+    lastRenderedAsideTab = activeAsideTab;
+  };
+
+  const renderMain = (renderOpts = {}) => {
+    clearKeydown();
+    if (mode === "exam" && !examSession) {
+      shellMounted = false; lastRenderedQid = null; lastRenderedAsideTab = "";
+      return renderExamSetup();
+    }
+    const wasMounted = shellMounted;
+    if (!shellMounted) {
+      container.innerHTML = buildPracticeShellHtml();
+      bindPersistentShell();
+      shellMounted = true;
+    }
+    const notesCollapsed = isNotesCollapsed();
+    const activeAsideTab = asideTab === "ai" ? "ai" : "sheet";
+    const shell = container.querySelector(".practice-shell");
+    shell.classList.toggle("notes-collapsed", notesCollapsed);
+    shell.classList.toggle("aside-collapsed", Boolean(settings.asideCollapsed));
+    shell.classList.toggle("ai-wide", activeAsideTab === "ai" && aiWide);
+
+    const chapterStats = computeChapterStats(allQuestions, bankState.records || {});
+    container.querySelector("#p-modebar-slot").innerHTML = buildModeBarHtml({
+      bank, banks, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings, notesCollapsed
+    });
+    bindBarEvents();
+
+    const emptyEl = container.querySelector("#p-empty-slot");
+    const layoutEl = container.querySelector(".practice-layout");
+    const immEl = container.querySelector("#p-immbar-slot");
+    const examResEl = container.querySelector("#p-examres-slot");
+    if (!list.length) {
+      emptyEl.hidden = false; layoutEl.hidden = true; immEl.innerHTML = ""; examResEl.innerHTML = "";
+      lastRenderedQid = null;
+      return;
+    }
+    emptyEl.hidden = true; layoutEl.hidden = false;
 
     const q = list[currentIndex];
+    const qChanged = q.id !== lastRenderedQid;
     const isDrillMode = mode === "wrong" || mode === "hotWrong";
     const activeRecords = examSession ? examSession.answers : (isDrillMode ? drillRecords : bankState.records);
     const record = activeRecords[q.id];
     const showAnswerNow = (!examSession && settings.reciteMode) || (examSession ? examSession.submitted : Boolean(record));
     const opts = cachedOptions(q);
-    const isFav = (bankState.favoriteIds || []).includes(q.id);
-    const isMastered = (bankState.masteredIds || []).includes(q.id);
     const examRes = examSession?.submitted ? calcExamScore() : null;
-    const sheetInnerHtml = buildSheetInnerHtml({ list, currentIndex, activeRecords, examSession, settings, mode });
-    const pct = Math.round(((currentIndex + 1) / list.length) * 100);
     const needStreak = Math.max(1, Number(settings.wrongClearStreak || 1));
     const curStreak = Number((bankState.wrongStreaks || {})[q.id] || 0);
-    const streakBadge = needStreak > 1 && (bankState.wrongIds || []).includes(q.id)
-      ? `<span class="badge warn">巩固 ${curStreak}/${needStreak}</span>` : "";
+    const streakBadge = needStreak > 1 && (bankState.wrongIds || []).includes(q.id) ? `<span class="badge warn">巩固 ${curStreak}/${needStreak}</span>` : "";
 
-    const activeAsideTab = asideTab === "ai" ? "ai" : "sheet";
-    const asideBody = activeAsideTab === "ai" ? '<div id="aside-ai-chat"></div>' : sheetInnerHtml;
+    immEl.innerHTML = buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings);
+    examResEl.innerHTML = examRes ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : "";
+    container.querySelector("#p-progress-fill").style.width = `${Math.round(((currentIndex + 1) / list.length) * 100)}%`;
+    container.querySelector("#p-q-head").innerHTML = buildQuestionHeadHtml({
+      q, currentIndex, total: list.length, examSession, scoreVal: examSession ? round1(examSession.scoreMap[q.id] || 0) : 0,
+      streakBadge, isFav: (bankState.favoriteIds || []).includes(q.id), isMastered: (bankState.masteredIds || []).includes(q.id)
+    });
 
-    container.innerHTML = `
-      <div class="practice-shell ${notesCollapsed ? "notes-collapsed" : ""} ${settings.asideCollapsed ? "aside-collapsed" : ""} ${activeAsideTab === "ai" && aiWide ? "ai-wide" : ""}">
-        ${modeBar}
-        ${buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings)}
-        ${examRes ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : ""}
-        <div class="practice-layout">
-          <aside class="practice-notes panel">
-            ${buildNotesPanelHtml(list, q, bankState, "aside-note-input")}
-          </aside>
-          <div class="pane-resizer" data-resize="notes" title="左右拖动调节笔记栏宽度（双击恢复默认）"></div>
-          <section class="question-box">
-            <div class="q-progress-track"><span style="width:${pct}%"></span></div>
-            <div class="row-gap q-head" style="justify-content:space-between;">
-              <div class="row-gap">
-                <span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span>
-                ${q.chapter ? `<span class="tag-pill">${escapeHtml(q.chapter)}</span>` : ""}
-                ${examSession ? `<span class="badge ok">${round1(examSession.scoreMap[q.id] || 0)} 分</span>` : ""}
-                ${streakBadge}
-                <span class="muted-text" style="font-variant-numeric:tabular-nums;">第 ${currentIndex + 1} / ${list.length} 题</span>
-              </div>
-              <div class="row-gap">
-                <button class="btn ghost tiny js-fav-btn">${iconSvg("star", 13)}<span>${isFav ? "已收藏" : "收藏"}</span></button>
-                <button id="btn-master" class="btn tiny ${isMastered ? "ok" : "ghost"}">${iconSvg("check", 13)}<span>${isMastered ? "已斩题" : "斩题"}</span></button>
-              </div>
-            </div>
-            <div class="q-body-scroll">
-              <div class="q-title md-content">${renderRichMarkdown(q.title)}</div>
-              ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-              ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null })}
-              ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
-            </div>
-            <div class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);">
-              <button id="btn-prev" class="btn ghost tiny" ${currentIndex === 0 ? "disabled" : ""}>${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
-              <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
-              <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
-              <button class="btn ghost tiny mobile-only-btn js-open-notes-modal">笔记</button>
-              <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
-              <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
-              <button id="btn-next" class="btn primary tiny" ${currentIndex >= list.length - 1 ? "disabled" : ""}><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
-            </div>
-          </section>
-          <div class="pane-resizer" data-resize="aside" title="左右拖动调节辅助栏宽度（双击恢复默认）"></div>
-          <aside class="practice-aside panel">
-            <div class="aside-tabs">
-              ${[["sheet", "答题卡"], ["ai", "AI 助教"]].map(([k, lbl]) => `
-                <button type="button" class="aside-tab-btn js-aside-tab ${activeAsideTab === k ? "active" : ""}" data-tab="${k}">${lbl}</button>
-              `).join("")}
-            </div>
-            <div class="aside-body-scroll ${activeAsideTab === "ai" ? "is-ai-tab" : ""}">${asideBody}</div>
-          </aside>
-        </div>
-        <div id="notes-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>题目笔记</h3><button id="notes-modal-close" class="btn ghost tiny">关闭</button></div>${buildNotesPanelHtml(list, q, bankState, "modal-note-input")}</div></div>
-        <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div></div>
-        <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny" data-modal-close>关闭</button></div><div id="modal-ai-chat"></div></div></div>
-      </div>
-    `;
-    bindBar(); bindMainEvents(q, opts, showAnswerNow);
+    const qBodyEl = container.querySelector("#p-q-body");
+    const prevQScroll = !qChanged && wasMounted ? qBodyEl.scrollTop : 0;
+    qBodyEl.innerHTML = buildQuestionBodyHtml({
+      q, opts, record, multiDraft, showAnswerNow, bankState, examSession,
+      orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null
+    });
+    if (qChanged) {
+      qBodyEl.scrollTop = 0; qBodyEl.classList.remove("q-enter"); void qBodyEl.offsetWidth; qBodyEl.classList.add("q-enter");
+    } else {
+      qBodyEl.classList.remove("q-enter"); qBodyEl.scrollTop = prevQScroll;
+    }
+
+    container.querySelector("#p-q-footer").innerHTML = buildQuestionFooterHtml(currentIndex, list.length);
+    if (!wasMounted || qChanged) {
+      container.querySelector("#p-notes-slot").innerHTML = buildNotesPanelHtml(list, q, bankState, "aside-note-input");
+      container.querySelector("#modal-notes-body").innerHTML = buildNotesPanelHtml(list, q, bankState, "modal-note-input");
+    }
+    const sheetInnerHtml = buildSheetInnerHtml({ list, currentIndex, activeRecords, examSession, settings, mode });
+    updateAsidePanel(q, sheetInnerHtml, activeAsideTab, wasMounted, qChanged, Boolean(renderOpts.forceAi));
+    lastRenderedQid = q.id;
+    bindCommonControls(q);
+    bindQuestionInteractive(q, showAnswerNow);
+    bindKeyboardAndTouch(q, opts, showAnswerNow);
   };
 
   buildList();
