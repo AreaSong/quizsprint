@@ -1,6 +1,8 @@
-/* QuizSprint 全局动效、触感反馈、键盘焦点环与主题平滑过渡 */
+/* QuizSprint 全局动效、渐变光影、平滑微交互与主题过渡 */
 :root {
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -14,17 +16,30 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* 核心关键帧 */
 @keyframes viewFadeIn {
-  from { opacity: 0; transform: translateY(5px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes maskFadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes modalPopIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes maskFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes maskFadeOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modalPopIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes modalPopOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(6px) scale(0.97); }
 }
 @keyframes menuDropIn {
   from { opacity: 0; transform: translateY(-4px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes detailReveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(10px) scale(0.96); }
@@ -34,8 +49,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   to { opacity: 0; transform: translateY(8px) scale(0.96); }
 }
 @keyframes optOkPop {
-  0% { transform: scale(0.985); }
-  55% { transform: scale(1.012); }
+  0% { transform: scale(0.992); }
+  55% { transform: scale(1.005); }
   100% { transform: scale(1); }
 }
 @keyframes optWrongShake {
@@ -53,47 +68,94 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 弹窗 / 菜单 / Toast */
-.modal-backdrop:not([hidden]) { animation: maskFadeIn 150ms ease; }
-.modal-backdrop:not([hidden]) > .modal-card { animation: modalPopIn 220ms var(--ease-out-expo); }
-.dropdown-menu:not([hidden]) { transform-origin: top right; animation: menuDropIn 150ms var(--ease-out-expo); }
+/* 弹窗进出 / 菜单 / Toast / 折叠展开 */
+.modal-backdrop:not([hidden]) { animation: maskFadeIn 180ms var(--ease-soft); }
+.modal-backdrop:not([hidden]) > .modal-card { animation: modalPopIn 240ms var(--ease-smooth); }
+.modal-backdrop.modal-closing { animation: maskFadeOut 150ms ease forwards; pointer-events: none; }
+.modal-backdrop.modal-closing > .modal-card { animation: modalPopOut 150ms ease forwards; }
+.dropdown-menu:not([hidden]) { transform-origin: top right; animation: menuDropIn 160ms var(--ease-smooth); }
 .clean-menu:not([hidden]) { transform-origin: top left; }
-.toast { animation: toastIn 220ms var(--ease-spring); }
+.toast { animation: toastIn 240ms var(--ease-spring); }
 .toast.toast-out { animation: toastOut 210ms ease forwards; pointer-events: none; }
+.search-item[open] .search-detail-body,
+.sheet-settings[open] > div { animation: detailReveal 220ms var(--ease-smooth); }
+
+/* 柔和渐变进度条、柱状图与主题按钮光影 */
+.progress-bar > span, .q-progress-track > span, .imm-progress-fill, .rank-track > span {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2, var(--accent)));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 28%, transparent);
+  transition: width 0.42s var(--ease-smooth);
+}
+.chart-bar.has-val {
+  background: linear-gradient(180deg, var(--accent-2, var(--accent)), var(--accent));
+}
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2, var(--accent)));
+}
+.btn.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.bank-workbench {
+  background-image: radial-gradient(ellipse at top right, color-mix(in srgb, var(--accent) 8%, color-mix(in srgb, var(--accent-2, var(--accent)) 5%, transparent)), transparent 64%);
+}
+
+/* 高频控件平滑渐变过渡 & 三栏折叠缓动 */
+.btn, .top-nav-btn, .admin-sub-btn, .mode-pill, .subject-pill, .aside-tab-btn,
+.view-seg-btn, .sheet-cell, .note-history-item, .dropdown-item, .search-summary, .bank-row {
+  transition: background-color 0.22s var(--ease-smooth), border-color 0.22s var(--ease-smooth),
+    color 0.22s var(--ease-smooth), box-shadow 0.22s var(--ease-smooth), transform 0.2s var(--ease-smooth);
+}
+.sheet-cell.current { transition: border-color 0.22s var(--ease-smooth), box-shadow 0.24s var(--ease-smooth); }
+.practice-layout { transition: grid-template-columns 0.26s var(--ease-smooth); }
+body.is-resizing .practice-layout { transition: none; }
 
 /* 刷题签名交互（仅新回答瞬时反馈、拖拽微抬、AI气泡、沉浸滑入） */
-.ai-msg { animation: viewFadeIn 170ms var(--ease-out-expo); }
-.q-body-scroll.is-just-answered .answer-box { animation: viewFadeIn 150ms var(--ease-out-expo); }
-.option-item { transition: border-color 0.14s ease, background-color 0.14s ease, transform 0.12s var(--ease-out-expo), box-shadow 0.14s ease; }
+.q-body-scroll { padding: 2px 6px 6px 4px; }
+.ai-msg { animation: viewFadeIn 190ms var(--ease-smooth); }
+.q-body-scroll.is-just-answered .answer-box { animation: viewFadeIn 180ms var(--ease-smooth); }
+.option-item { transition: border-color 0.18s var(--ease-smooth), background-color 0.18s var(--ease-smooth), transform 0.16s var(--ease-smooth), box-shadow 0.18s var(--ease-smooth); }
+.option-item:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 32%, transparent); }
+.option-item.correct:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 32%, transparent); }
+.option-item.wrong:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 32%, transparent); }
 .option-item:hover:not(:disabled):not(.correct):not(.wrong) { transform: translateX(2px); }
 .option-item:active:not(:disabled) { transform: scale(0.99); }
-.q-body-scroll.is-just-answered .option-item.correct { animation: optOkPop 240ms var(--ease-out-expo); }
+.q-body-scroll.is-just-answered .option-item.correct { animation: optOkPop 240ms var(--ease-smooth); }
 .q-body-scroll.is-just-answered .option-item.wrong { animation: optWrongShake 240ms ease; }
 .order-item:hover, .match-chip:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-body.immersive-mode .immersive-bar { animation: immSlideDown 200ms var(--ease-out-expo); }
+body.immersive-mode .immersive-bar { animation: immSlideDown 220ms var(--ease-smooth); }
 
-/* 工作台、题库卡片与统计柱微交互 */
+/* 工作台、题库卡片柔和错峰入场与悬停 */
+.mode-tile, .bank-card, .bank-row, .kpi-card {
+  animation: cardFadeIn 260ms var(--ease-smooth) backwards;
+}
+.mode-tile:nth-child(2), .bank-card:nth-child(2), .bank-row:nth-child(2), .kpi-card:nth-child(2) { animation-delay: 18ms; }
+.mode-tile:nth-child(3), .bank-card:nth-child(3), .bank-row:nth-child(3), .kpi-card:nth-child(3) { animation-delay: 36ms; }
+.mode-tile:nth-child(4), .bank-card:nth-child(4), .bank-row:nth-child(4), .kpi-card:nth-child(4) { animation-delay: 54ms; }
+.mode-tile:nth-child(5), .bank-card:nth-child(5), .bank-row:nth-child(5) { animation-delay: 72ms; }
+.mode-tile:nth-child(6), .bank-card:nth-child(6), .bank-row:nth-child(6) { animation-delay: 90ms; }
+.mode-tile:nth-child(7), .bank-card:nth-child(7), .bank-row:nth-child(7) { animation-delay: 108ms; }
+.mode-tile:nth-child(8), .bank-card:nth-child(8), .bank-row:nth-child(8) { animation-delay: 126ms; }
+
 .mode-tile, .bank-card, .kpi-card.is-clickable {
-  transition: transform 0.16s var(--ease-out-expo), border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.16s ease;
+  transition: transform 0.22s var(--ease-smooth), border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.22s var(--ease-smooth);
 }
 .mode-tile:hover, .bank-card:hover, .kpi-card.is-clickable:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 .mode-tile:active { transform: scale(0.985); }
-.mode-tile-icon { transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s var(--ease-out-expo); }
-.mode-tile:hover .mode-tile-icon { background: var(--accent-soft); color: var(--accent-fg); transform: scale(1.05); }
-.chart-bar.has-val { transform-origin: bottom; animation: barGrowY 360ms var(--ease-out-expo); }
+.mode-tile-icon { transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s var(--ease-smooth); }
+.mode-tile:hover .mode-tile-icon { background: var(--accent-soft); color: var(--accent-fg); transform: scale(1.06); }
+.chart-bar.has-val { transform-origin: bottom; animation: barGrowY 400ms var(--ease-smooth); }
 
-/* 主动切换外观主题时短暂过渡底色与卡片色，避免首屏闪烁 */
-html.theme-switching,
-html.theme-switching body,
-html.theme-switching .panel,
-html.theme-switching .app-topbar,
-html.theme-switching .question-box,
-html.theme-switching .bank-workbench,
+/* 主动切换外观主题时平滑渐变底色与卡片色 */
+html.theme-switching, html.theme-switching body, html.theme-switching .panel,
+html.theme-switching .app-topbar, html.theme-switching .app-footer, html.theme-switching .question-box, html.theme-switching .bank-workbench,
+html.theme-switching .bank-card, html.theme-switching .mode-tile, html.theme-switching .practice-aside,
+html.theme-switching .practice-notes, html.theme-switching .btn, html.theme-switching .kpi-card,
 html.theme-switching .modal-card {
-  transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+  transition: background-color 0.32s ease, color 0.32s ease, border-color 0.32s ease, box-shadow 0.32s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

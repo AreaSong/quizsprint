@@ -6,13 +6,28 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
   let pending = null;
 
   const syncUi = (statusText) => {
-    const stEl = container.querySelector("#note-save-status");
-    if (stEl && statusText) stEl.textContent = statusText;
+    if (statusText) container.querySelectorAll(".js-note-status").forEach((el) => { el.textContent = statusText; });
+    const hasCur = Boolean(String((bankState.notes || {})[currentQid] || "").trim());
+    container.querySelectorAll(".js-clear-cur-note").forEach((b) => { b.hidden = !hasCur; });
     const { count, html } = buildNoteHistoryItemsHtml(getList(), bankState.notes || {});
-    const cntEl = container.querySelector("#note-history-count");
-    const wrapEl = container.querySelector("#note-history-wrap");
-    if (cntEl) cntEl.textContent = String(count);
-    if (wrapEl) wrapEl.innerHTML = html;
+    container.querySelectorAll(".js-note-history-count").forEach((el) => { el.textContent = String(count); });
+    container.querySelectorAll(".js-note-history-wrap").forEach((el) => { el.innerHTML = html; });
+  };
+
+  const removeNote = (targetQid) => {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (pending?.qid === targetQid) pending = null;
+    bankState.notes = bankState.notes || {};
+    delete bankState.notes[targetQid];
+    saveBankPracticeState(bankId, bankState);
+    if (targetQid === currentQid) {
+      ["#aside-note-input", "#modal-note-input"].forEach((sel) => {
+        const el = container.querySelector(sel);
+        if (el) el.value = "";
+      });
+    }
+    syncUi("已删除");
+    showToast("已删除笔记", "ok");
   };
 
   const flush = () => {
@@ -57,8 +72,7 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
     currentOnOpenDesktop = onOpenDesktop;
     const schedule = (val) => {
       pending = { qid: currentQid, val };
-      const stEl = container.querySelector("#note-save-status");
-      if (stEl) stEl.textContent = "保存中...";
+      container.querySelectorAll(".js-note-status").forEach((el) => { el.textContent = "保存中..."; });
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(flush, 600);
     };
@@ -78,8 +92,11 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
       }
       currentOnOpenDesktop?.();
     }));
+    container.querySelectorAll(".js-clear-cur-note").forEach((b) => bindOnce(b, (el) => el.addEventListener("click", () => removeNote(currentQid))));
     container.querySelectorAll(".note-history-list").forEach((wrap) => {
       bindOnce(wrap, (el) => el.addEventListener("click", (e) => {
+        const delBtn = e.target.closest("button[data-del-note]");
+        if (delBtn) return removeNote(delBtn.dataset.delNote);
         const btn = e.target.closest("button[data-jump]");
         if (!btn) return;
         flush();
@@ -89,7 +106,11 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
     });
   };
 
-  const setQid = (qid) => { currentQid = qid; };
+  const setQid = (qid) => {
+    currentQid = qid;
+    const hasCur = Boolean(String((bankState.notes || {})[currentQid] || "").trim());
+    container.querySelectorAll(".js-clear-cur-note").forEach((b) => { b.hidden = !hasCur; });
+  };
 
   return { flush, append, bind, setQid };
 };

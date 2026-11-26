@@ -1,5 +1,5 @@
 import { apiRequest, escapeHtml, getCloudUser, showToast } from "../api.js";
-import { openFormDialog } from "../dialog.js";
+import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 
 const buildUsersShellHtml = (regPolicy) => `
@@ -17,7 +17,7 @@ const buildUsersShellHtml = (regPolicy) => `
         <div class="row-gap" style="justify-content:space-between;flex-wrap:wrap;">
           <div>
             <strong>公网注册门禁</strong>
-            <span class="muted-text" style="font-size:12px;margin-left:8px;">控制未登录访客是否可自主注册学员账号</span>
+            <span class="muted-text" style="font-size:0.75rem;margin-left:8px;">控制未登录访客是否可自主注册学员账号</span>
           </div>
           <div class="row-gap" style="flex-wrap:wrap;">
             <div class="exam-seg">
@@ -66,8 +66,10 @@ const buildUsersRowsHtml = (filtered, me) => {
         <td class="muted-text">${escapeHtml((u.createdAt || "").slice(0, 16).replace("T", " "))}</td>
         <td>
           <div class="row-gap" style="gap:6px;">
+            <button type="button" class="btn ghost tiny js-usr-nick">改昵称</button>
             <button type="button" class="btn ghost tiny js-usr-pwd">重置密码</button>
             <button type="button" class="btn ghost tiny js-usr-role" data-next="${u.role === "admin" ? "student" : "admin"}" ${isMe ? 'disabled title="不能降级当前登录账号"' : ""}>${u.role === "admin" ? "设为学员" : "设为管理"}</button>
+            <button type="button" class="btn ghost tiny js-usr-clr">清进度</button>
             <button type="button" class="btn ghost-danger tiny js-usr-del" ${isMe ? 'disabled title="不能删除当前登录账号"' : ""}>删除</button>
           </div>
         </td>
@@ -82,7 +84,7 @@ export const renderUsersView = async (container, ctx) => {
     container.innerHTML = `
       <div class="panel empty-state">
         <div class="empty-state-icon">${iconSvg("lock", 22)}</div>
-        <strong style="font-size:16px;">需要管理员权限</strong>
+        <strong style="font-size:1rem;">需要管理员权限</strong>
         <p class="muted-text" style="margin:0;">用户管理仅对管理员账号开放，请先使用管理员账号登录。</p>
         <button id="u-go-admin" class="btn primary tiny">管理员账号登录</button>
       </div>
@@ -168,6 +170,21 @@ export const renderUsersView = async (container, ctx) => {
   tbodyEl.addEventListener("click", async (e) => {
     const uid = e.target.closest("tr")?.dataset.uid;
     if (!uid) return;
+    if (e.target.closest(".js-usr-nick")) {
+      const targetUser = users.find((x) => x.id === uid);
+      const form = await openFormDialog({ title: "修改账号信息", fields: [{ name: "nickname", label: "显示昵称", value: targetUser?.nickname || "", required: true }], submitText: "保存修改" });
+      if (!form || !form.nickname.trim()) return;
+      try { await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/profile`, { method: "PUT", body: JSON.stringify({ nickname: form.nickname.trim() }) }); showToast("账号昵称已更新", "ok"); await loadUsers(); renderListPart(); }
+      catch (err) { showToast(err.message, "bad"); }
+      return;
+    }
+    if (e.target.closest(".js-usr-clr")) {
+      const ok = await openConfirmDialog({ title: "清空刷题进度", message: "确定清空该账号在所有题库的练习记录、笔记与学习统计吗？", confirmText: "确认清空", danger: true });
+      if (!ok) return;
+      try { await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/progress`, { method: "DELETE" }); showToast("已清空该账号刷题进度", "ok"); }
+      catch (err) { showToast(err.message, "bad"); }
+      return;
+    }
     if (e.target.closest(".js-usr-pwd")) {
       const form = await openFormDialog({ title: "重置账号密码", fields: [{ name: "newPassword", label: "新密码（至少 4 位）", type: "password", required: true }], submitText: "保存新密码" });
       if (!form) return;
@@ -182,7 +199,8 @@ export const renderUsersView = async (container, ctx) => {
       return;
     }
     if (e.target.closest(".js-usr-del")) {
-      if (!confirm("确定删除该账号及其练习进度吗？")) return;
+      const ok = await openConfirmDialog({ title: "删除账号", message: "确定删除该账号及其全部练习进度吗？", confirmText: "确认删除", danger: true });
+      if (!ok) return;
       try { await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}`, { method: "DELETE" }); showToast("账号已删除", "ok"); await loadUsers(); renderListPart(); }
       catch (err) { showToast(err.message, "bad"); }
     }

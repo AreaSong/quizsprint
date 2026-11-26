@@ -35,7 +35,7 @@ export const buildOrderQuestionHtml = ({ q, items, record, showAnswerNow }) => {
   const active = showAnswerNow && record?.selected?.length ? record.selected : (showAnswerNow ? q.answers : items);
   const expected = q.answers || [];
   return `
-    <div class="muted-text" style="font-size:12.5px;">拖动下列卡片调整为正确顺序，或使用右侧上下箭头微调</div>
+    <div class="muted-text" style="font-size:0.7813rem;">拖动下列卡片调整为正确顺序，或使用右侧上下箭头微调</div>
     <div class="order-list" id="order-list">
       ${active.map((text, idx) => {
         const cls = showAnswerNow ? (normText(text) === normText(expected[idx]) ? "is-ok" : "is-bad") : "";
@@ -73,7 +73,7 @@ export const buildMatchQuestionHtml = ({ q, state, record, showAnswerNow }) => {
   const allFilled = pairs.length > 0 && pairs.every((p) => Boolean(activeAssign[p.left]));
 
   return `
-    <div class="muted-text" style="font-size:12.5px;">将下方选项拖入对应右侧槽位（也可先点选选项再点击槽位，点已填槽位可撤回）</div>
+    <div class="muted-text" style="font-size:0.7813rem;">将下方选项拖入对应右侧槽位（也可先点选选项再点击槽位，点已填槽位可撤回）</div>
     <div class="match-board">
       ${pairs.map((p) => {
         const val = activeAssign[p.left] || "";
@@ -85,7 +85,7 @@ export const buildMatchQuestionHtml = ({ q, state, record, showAnswerNow }) => {
             <span class="muted-text match-arrow">${iconSvg("chevronRight", 14)}</span>
             <div class="match-slot ${cls}" data-left="${escapeHtml(p.left)}" draggable="${Boolean(val && !showAnswerNow)}">
               <span>${val ? escapeHtml(val) : "拖放或点击填入..."}</span>
-              ${val && !showAnswerNow ? '<span class="muted-text" style="font-size:12px;">×</span>' : ""}
+              ${val && !showAnswerNow ? '<span class="muted-text" style="font-size:0.75rem;">×</span>' : ""}
             </div>
           </div>
         `;
@@ -95,7 +95,7 @@ export const buildMatchQuestionHtml = ({ q, state, record, showAnswerNow }) => {
       <div class="match-pool" id="match-pool">
         ${remainPool.length ? remainPool.map((r) => `
           <div class="match-chip ${selectedChip === r ? "selected" : ""}" draggable="true" data-chip="${escapeHtml(r)}">${escapeHtml(r)}</div>
-        `).join("") : '<span class="muted-text" style="font-size:12.5px;">已全部填入，可点击下方「提交配对」或点击槽位撤回调整</span>'}
+        `).join("") : '<span class="muted-text" style="font-size:0.7813rem;">已全部填入，可点击下方「提交配对」或点击槽位撤回调整</span>'}
       </div>
       <div class="row-gap" style="margin-top:12px;">
         <button type="button" id="btn-confirm-match" class="btn primary" ${allFilled ? "" : "disabled"}>提交配对</button>

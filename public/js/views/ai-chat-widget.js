@@ -1,5 +1,5 @@
 import { aiRequest, escapeHtml, getCloudUser, showToast } from "../api.js";
-import { openFormDialog } from "../dialog.js";
+import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { renderRichMarkdown } from "../markdown.js";
 
 export { renderRichMarkdown as renderLightMarkdown };
@@ -99,7 +99,7 @@ const renderMessagesBodyHtml = (sess, sending, elapsedSec, hasNoteHook) => {
   if (!messages.length && !sending) {
     return `
       <div class="ai-empty-state">
-        <div class="muted-text" style="font-size:12.5px;">点击快捷问题，或直接在下方输入疑问</div>
+        <div class="muted-text" style="font-size:0.7813rem;">点击快捷问题，或直接在下方输入疑问</div>
         <div class="ai-quick-row">
           ${QUICK_PROMPTS.map((p) => `<button type="button" class="btn ghost tiny js-ai-quick" data-q="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")}
         </div>
@@ -107,21 +107,22 @@ const renderMessagesBodyHtml = (sess, sending, elapsedSec, hasNoteHook) => {
     `;
   }
   const timeBanner = sess?.updatedAt
-    ? `<div class="muted-text" style="text-align:center;font-size:11px;opacity:.8;">最近活跃 · ${escapeHtml(formatChatTime(sess.updatedAt))}</div>`
+    ? `<div class="muted-text" style="text-align:center;font-size:0.6875rem;opacity:.8;">最近活跃 · ${escapeHtml(formatChatTime(sess.updatedAt))}</div>`
     : "";
   const items = messages.map((m, idx) => {
     const isUser = m.role === "user";
     const bodyHtml = isUser ? escapeHtml(m.content) : renderRichMarkdown(m.content);
     const tLabel = formatChatTime(m.ts);
-    const actionsHtml = !isUser ? `
+    const actionsHtml = `
       <div class="ai-msg-actions" style="justify-content:space-between;align-items:center;">
         <div class="row-gap" style="gap:10px;">
-          <button type="button" class="ai-act-btn js-ai-copy" data-idx="${idx}">复制</button>
-          ${hasNoteHook ? `<button type="button" class="ai-act-btn js-ai-to-note" data-idx="${idx}">写入笔记</button>` : ""}
+          ${!isUser ? `<button type="button" class="ai-act-btn js-ai-copy" data-idx="${idx}">复制</button>` : ""}
+          ${!isUser && hasNoteHook ? `<button type="button" class="ai-act-btn js-ai-to-note" data-idx="${idx}">写入笔记</button>` : ""}
+          <button type="button" class="ai-act-btn js-ai-del-msg" data-idx="${idx}">删除</button>
         </div>
-        ${tLabel ? `<span class="muted-text" style="font-size:11px;font-variant-numeric:tabular-nums;">${escapeHtml(tLabel)}</span>` : ""}
+        ${tLabel ? `<span class="muted-text" style="font-size:0.6875rem;font-variant-numeric:tabular-nums;">${escapeHtml(tLabel)}</span>` : ""}
       </div>
-    ` : "";
+    `;
     return `<div class="ai-msg ${m.role}"><div class="ai-msg-bubble">${bodyHtml}${actionsHtml}</div></div>`;
   }).join("");
   const thinkingHtml = sending ? `
@@ -146,7 +147,7 @@ const buildAiHeadHtml = (qState, canWide) => {
           return `<option value="${escapeHtml(s.id)}" ${s.id === qState.activeId ? "selected" : ""}>${escapeHtml(sessionTitleOf(s))}${tStr ? ` · ${tStr}` : ""} (${s.messages.length})</option>`;
         }).join("")}
       </select>`
-    : '<span class="muted-text" style="font-size:12px;">围绕本题随时追问</span>';
+    : '<span class="muted-text" style="font-size:0.75rem;">围绕本题随时追问</span>';
   return `
     <div class="ai-head-bar">
       ${leftHtml}
@@ -232,8 +233,12 @@ export const mountAiChatWidget = (rootEl, question, options = {}) => {
     render();
   };
 
-  const deleteActiveSession = () => {
+  const deleteActiveSession = async () => {
     if (sending) return;
+    const cur = getActiveSession();
+    if (!cur.messages.length && qState.sessions.length <= 1) return;
+    const ok = await openConfirmDialog({ title: "删除对话", message: "确定删除当前这段 AI 对话记录吗？", confirmText: "确认删除", danger: true });
+    if (!ok) return;
     if (qState.sessions.length > 1) {
       qState.sessions = qState.sessions.filter((s) => s.id !== qState.activeId);
       qState.activeId = qState.sessions[0].id;
@@ -275,6 +280,12 @@ export const mountAiChatWidget = (rootEl, question, options = {}) => {
     rootEl.querySelectorAll(".js-ai-to-note").forEach((btn) => btn.addEventListener("click", () => {
       const msg = cur.messages[Number(btn.dataset.idx)];
       if (msg) onAppendNote?.(msg.content);
+    }));
+    rootEl.querySelectorAll(".js-ai-del-msg").forEach((btn) => btn.addEventListener("click", () => {
+      if (sending) return;
+      cur.messages.splice(Number(btn.dataset.idx), 1);
+      syncHistory();
+      render();
     }));
     rootEl.querySelector(".js-ai-form").addEventListener("submit", (e) => {
       e.preventDefault();

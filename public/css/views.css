@@ -143,7 +143,7 @@
 }
 .wb-title {
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -153,7 +153,7 @@
 }
 .wb-sub {
   margin-top: 3px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -172,8 +172,8 @@
 .wb-ring { width: 38px; height: 38px; transform: rotate(-90deg); }
 .wb-ring-bg { fill: none; stroke: var(--line-strong); stroke-width: 3.5; }
 .wb-ring-val { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
-.wb-ring-text strong { display: block; font-size: 14px; line-height: 1.1; color: var(--ink); }
-.wb-ring-text span { display: block; font-size: 11.5px; color: var(--muted); }
+.wb-ring-text strong { display: block; font-size: 0.875rem; line-height: 1.1; color: var(--ink); }
+.wb-ring-text span { display: block; font-size: 0.7188rem; color: var(--muted); }
 
 /* 8 项练习模式磁贴 */
 .mode-tiles {
@@ -217,11 +217,11 @@
 .mode-tile.is-bad .mode-tile-icon { color: var(--bad); }
 .mode-tile.is-warn .mode-tile-icon { color: var(--warn); }
 .mode-tile-body { min-width: 0; }
-.mode-tile-body strong { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.25; }
+.mode-tile-body strong { display: block; font-size: 0.8438rem; font-weight: 600; line-height: 1.25; }
 .mode-tile-body span {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -242,14 +242,14 @@
 .banks-scroll-body { padding-bottom: 120px; }
 .section-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--ink);
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.section-count { font-size: 12.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.section-count { font-size: 0.7813rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
 .view-seg {
   display: inline-flex;
   padding: 3px;
@@ -266,7 +266,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   padding: 5px 10px;
   border-radius: 6px;
@@ -277,7 +277,7 @@
   color: var(--ink);
   box-shadow: var(--shadow-sm);
 }
-.banks-filter-input { width: 210px; padding: 5px 10px; font-size: 12.5px; }
+.banks-filter-input { width: 210px; padding: 5px 10px; font-size: 0.7813rem; }
 
 /* 横条列表（无 overflow: hidden 防止裁切菜单） */
 .bank-list {
@@ -317,13 +317,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14.5px;
+  font-size: 0.9063rem;
   font-weight: 600;
   color: var(--ink);
 }
 .bank-row-meta {
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: 0.7813rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -331,7 +331,7 @@
   text-overflow: ellipsis;
 }
 .tag-pill {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 5px;
@@ -356,7 +356,7 @@
   font-variant-numeric: tabular-nums;
 }
 .bank-row-prog .progress-bar { flex: 1; height: 5px; }
-.bank-pct-num { font-size: 12.5px; font-weight: 600; color: var(--muted); min-width: 32px; text-align: right; }
+.bank-pct-num { font-size: 0.7813rem; font-weight: 600; color: var(--muted); min-width: 32px; text-align: right; }
 
 /* 卡片网格（兼容考试中心 .cards-grid / .bank-card） */
 .cards-grid {
@@ -379,10 +379,10 @@
 }
 .bank-card:hover { border-color: var(--line-strong); }
 .bank-card.selected { border-color: var(--line-strong); }
-.bank-card h3 { margin: 0; font-size: 15.5px; }
+.bank-card h3 { margin: 0; font-size: 0.9688rem; }
 .bank-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.bank-card-title { margin: 0; font-size: 15.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-.bank-card-meta { margin-top: 4px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bank-card-title { margin: 0; font-size: 0.9688rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.bank-card-meta { margin-top: 4px; font-size: 0.7813rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .card-more-wrap { position: relative; flex: none; }
 .card-more-wrap .dropdown-menu { z-index: 55; }
 
@@ -396,7 +396,7 @@
   .view-frame, .view-scroll { flex: none; overflow: visible; }
   .banks-scroll-body { padding-bottom: 24px; }
   .bank-workbench { padding: 16px; }
-  .wb-title { font-size: 17px; }
+  .wb-title { font-size: 1.0625rem; }
   .mode-tiles { gap: 8px; margin-top: 14px; }
   .mode-tile { padding: 10px 11px; gap: 9px; }
   .mode-tile-icon { width: 30px; height: 30px; }
@@ -446,7 +446,7 @@ body.immersive-mode .question-box {
   padding: 32px 24px 20px;
 }
 body.immersive-mode .q-progress-track { display: none; }
-body.immersive-mode .q-title { font-size: 20px; line-height: 1.75; }
+body.immersive-mode .q-title { font-size: 1.25rem; line-height: 1.75; }
 body.immersive-mode .option-item:not(.selected):not(.correct):not(.wrong) {
   background: var(--surface);
 }
@@ -470,11 +470,11 @@ body.immersive-mode .practice-nav-footer {
 .search-sum-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .search-q-title { font-weight: 600; color: var(--ink); word-break: break-word; }
 .search-sum-right { flex: none; display: flex; align-items: center; gap: 8px; }
-.search-ans-preview { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--ok); background: var(--ok-soft); padding: 2px 9px; border-radius: 999px; }
+.search-ans-preview { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7813rem; font-weight: 600; color: var(--ok); background: var(--ok-soft); padding: 2px 9px; border-radius: 999px; }
 .search-chevron { color: var(--muted); display: inline-flex; transition: transform .16s ease; }
 .search-item[open] .search-chevron { transform: rotate(90deg); }
 .search-detail-body { padding: 12px 14px 14px; border-top: 1px solid var(--line); background: var(--surface-soft); display: flex; flex-direction: column; gap: 8px; }
-.search-opt { padding: 7px 10px; border-radius: 7px; font-size: 13.5px; background: var(--surface); border: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.search-opt { padding: 7px 10px; border-radius: 7px; font-size: 0.8438rem; background: var(--surface); border: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .search-opt.is-correct { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); font-weight: 600; }
 .search-ai-card { padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); margin-bottom: 10px; }
 .search-ai-card .ai-msg-bubble { max-width: none; background: transparent; border: 0; padding: 8px 0 0; }

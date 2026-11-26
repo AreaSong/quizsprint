@@ -73,17 +73,17 @@ export const openBankCreateModal = async ({ subjects, defaultSubjectId = "", onC
 };
 
 export const openBankConfigModal = async ({ bank, subjects, onSaved }) => {
-  const form = await openFormDialog({
-    title: "题库设置与加密",
-    fields: [
-      { name: "name", label: "题库名称", value: bank?.name || "", required: true },
-      { name: "subjectId", label: "所属科目", type: "select", value: bank?.subjectId || "", options: buildSubjectOptions(subjects) },
-      { name: "category", label: "题库性质", type: "select", value: bank?.category || "theory", options: CATEGORY_OPTIONS },
-      { name: "description", label: "题库简介（可选）", value: bank?.description || "" },
-      { name: "password", label: "访问密码（留空表示公开不加密）", type: "password", placeholder: "留空不修改或公开" }
-    ],
-    submitText: "保存设置"
-  });
+  const fields = [
+    { name: "name", label: "题库名称", value: bank?.name || "", required: true },
+    { name: "subjectId", label: "所属科目", type: "select", value: bank?.subjectId || "", options: buildSubjectOptions(subjects) },
+    { name: "category", label: "题库性质", type: "select", value: bank?.category || "theory", options: CATEGORY_OPTIONS },
+    { name: "description", label: "题库简介（可选）", value: bank?.description || "" },
+    { name: "password", label: "访问密码（留空表示不修改）", type: "password", placeholder: bank?.locked ? "输入新密码以修改，留空保持原密码" : "输入密码以加密，留空公开" }
+  ];
+  if (bank?.locked) {
+    fields.push({ name: "clearPassword", type: "checkbox", label: "取消访问密码（恢复公开题库）", value: false });
+  }
+  const form = await openFormDialog({ title: "题库设置与加密", fields, submitText: "保存设置" });
   if (!form || !form.name.trim()) return;
   try {
     const payload = {
@@ -92,7 +92,12 @@ export const openBankConfigModal = async ({ bank, subjects, onSaved }) => {
       category: form.category || "theory",
       description: form.description.trim()
     };
-    if (form.password !== "") payload.password = form.password;
+    if (form.clearPassword) {
+      payload.password = "";
+      try { sessionStorage.removeItem(`as_qb_pwd_${bank.id}`); } catch { /* ignore */ }
+    } else if (form.password !== "") {
+      payload.password = form.password;
+    }
     await apiRequest(`/api/banks/${encodeURIComponent(bank.id)}`, {
       method: "PUT",
       body: JSON.stringify(payload)

@@ -15,7 +15,7 @@ const renderFieldHtml = (f) => {
     const selected = new Set((f.value || []).map(String));
     return `
       <div>
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">${escapeHtml(f.label)}</div>
+        <div style="font-size:0.8125rem;font-weight:600;margin-bottom:6px;">${escapeHtml(f.label)}</div>
         <div style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--surface-soft);">
           ${(f.options || []).map((o) => `
             <label class="row-gap" style="flex-direction:row;font-weight:400;cursor:pointer;">
@@ -25,6 +25,14 @@ const renderFieldHtml = (f) => {
           `).join("")}
         </div>
       </div>
+    `;
+  }
+  if (f.type === "checkbox") {
+    return `
+      <label class="switch-row" style="cursor:pointer;">
+        <span>${escapeHtml(f.label)}</span>
+        <input id="${id}" name="${escapeHtml(f.name)}" type="checkbox" ${f.value ? "checked" : ""}>
+      </label>
     `;
   }
   const type = f.type || "text";
@@ -40,6 +48,48 @@ const renderFieldHtml = (f) => {
     </label>
   `;
 };
+
+const closeAnimatedBackdrop = (backdrop, done) => {
+  if (backdrop._isClosing) return;
+  backdrop._isClosing = true;
+  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) { backdrop.remove(); done(); return; }
+  backdrop.classList.add("modal-closing");
+  setTimeout(() => { backdrop.remove(); done(); }, 150);
+};
+
+export const openConfirmDialog = ({
+  title = "确认操作",
+  message = "",
+  confirmText = "确定",
+  cancelText = "取消",
+  danger = false,
+  threeState = false
+} = {}) =>
+  new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.innerHTML = `
+      <div class="modal-card" style="max-width:420px;">
+        <div class="modal-head">
+          <h3>${escapeHtml(title)}</h3>
+          <button type="button" class="btn ghost tiny js-dlg-dismiss">关闭</button>
+        </div>
+        ${message ? `<p class="muted-text" style="margin:4px 0 14px;line-height:1.65;">${escapeHtml(message)}</p>` : ""}
+        <div class="modal-actions">
+          <button type="button" class="btn ghost js-dlg-no">${escapeHtml(cancelText)}</button>
+          <button type="button" class="btn ${danger ? "danger" : "primary"} js-dlg-yes">${escapeHtml(confirmText)}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const finish = (val) => closeAnimatedBackdrop(backdrop, () => resolve(val));
+    backdrop._closeModal = () => finish(threeState ? null : false);
+    backdrop.querySelector(".js-dlg-dismiss").addEventListener("click", () => finish(threeState ? null : false));
+    backdrop.querySelector(".js-dlg-no").addEventListener("click", () => finish(false));
+    backdrop.querySelector(".js-dlg-yes").addEventListener("click", () => finish(true));
+    backdrop.querySelector(".js-dlg-yes").focus();
+  });
 
 export const openFormDialog = ({ title = "输入信息", description = "", fields = [], submitText = "确定" }) =>
   new Promise((resolve) => {
@@ -63,10 +113,7 @@ export const openFormDialog = ({ title = "输入信息", description = "", field
     `;
     document.body.appendChild(backdrop);
 
-    const close = (val) => {
-      backdrop.remove();
-      resolve(val);
-    };
+    const close = (val) => closeAnimatedBackdrop(backdrop, () => resolve(val));
     backdrop._closeModal = () => close(null);
 
     backdrop.querySelectorAll(".js-dlg-cancel").forEach((b) => b.addEventListener("click", () => close(null)));
@@ -78,7 +125,7 @@ export const openFormDialog = ({ title = "输入信息", description = "", field
           out[f.name] = [...backdrop.querySelectorAll(`input[name="${f.name}"]:checked`)].map((i) => i.value);
         } else {
           const el = backdrop.querySelector(`#dlg_f_${f.name}`);
-          out[f.name] = f.type === "number" ? Number(el.value) : el.value;
+          out[f.name] = f.type === "checkbox" ? Boolean(el.checked) : (f.type === "number" ? Number(el.value) : el.value);
         }
       }
       close(out);

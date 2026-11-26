@@ -7,17 +7,11 @@ import {
   showToast,
   TYPE_LABELS
 } from "../api.js";
-import { openFormDialog } from "../dialog.js";
+import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { openQuestionEditorModal } from "./question-editor-modal.js";
 
 const normalizeKey = (t) => String(t || "").replace(/[\s\p{P}]/gu, "").toLowerCase();
-
-const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result || ""));
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
-});
 
 const buildManageShellHtml = (bank, banks, isAdmin) => `
   <div class="panel view-frame">
@@ -48,6 +42,7 @@ const buildManageShellHtml = (bank, banks, isAdmin) => `
         <div class="row-gap">
           <button id="btn-batch-chapter" type="button" class="btn ghost tiny">批量改章节</button>
           <button id="btn-batch-type" type="button" class="btn ghost tiny">批量改题型</button>
+          <button id="btn-batch-diff" type="button" class="btn ghost tiny">批量改难度</button>
           <button id="btn-batch-del" type="button" class="btn ghost-danger tiny">批量删除</button>
           <button id="btn-batch-clear" type="button" class="btn ghost tiny">取消选择</button>
         </div>
@@ -69,9 +64,9 @@ const buildManageShellHtml = (bank, banks, isAdmin) => `
       </table>
     </div>
     <div id="m-foot" class="row-gap view-foot" style="justify-content:space-between;">
-      <span id="m-page-info" class="muted-text" style="font-size:12px;"></span>
+      <span id="m-page-info" class="muted-text" style="font-size:0.75rem;"></span>
       <div class="row-gap">
-        <select id="pg-size" style="padding:4px 8px;font-size:12px;">
+        <select id="pg-size" style="padding:4px 8px;font-size:0.75rem;">
           ${[30, 50, 100].map((n) => `<option value="${n}">每页 ${n} 题</option>`).join("")}
         </select>
         <button type="button" id="pg-prev" class="btn ghost tiny">上一页</button>
@@ -105,7 +100,7 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
         </details>
       </td>
       <td style="color:var(--ok);font-weight:600;">${escapeHtml((q.answers || []).join(" / ").split(/\r?\n/)[0].slice(0, 60))}</td>
-      <td class="muted-text">${escapeHtml(q.chapter || "-")}</td>
+      <td class="muted-text">${escapeHtml(q.chapter || "-")} <span class="bank-pill">${escapeHtml(q.difficulty || "中等")}</span></td>
       <td>
         ${isAdmin ? `
           <div class="row-gap" style="gap:6px;">
@@ -116,146 +111,6 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
       </td>
     </tr>
   `).join("");
-};
-
-const buildEditorShellHtml = (item, imageCount, ansImgCount) => {
-  const t = item?.type || "0";
-  const ansVal = (t === "4" || t === "6") ? (item?.answers || []).join("\n\n") : (t === "7" || t === "8" ? (item?.answers || []).join("\n") : (item?.answers || []).join(" | "));
-  return `
-  <div class="modal-card modal-shell" style="max-width:640px;">
-    <div class="modal-head"><h3>${item ? "编辑试题" : "单题录入"}</h3><button id="ed-close" type="button" class="btn ghost tiny">关闭</button></div>
-    <form id="ed-form">
-      <div class="modal-body stack-form">
-        <div class="row-gap">
-          <label style="flex:1;"><span>题型</span><select id="ed-type">${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${t === k ? "selected" : ""}>${v}</option>`).join("")}</select></label>
-          <label style="flex:1;"><span>章节</span><input id="ed-chapter" value="${escapeHtml(item?.chapter || "")}" placeholder="可选"></label>
-          <label style="flex:1;"><span>难度</span><select id="ed-diff">${["简单", "中等", "困难"].map((d) => `<option ${item?.difficulty === d ? "selected" : ""}>${d}</option>`).join("")}</select></label>
-        </div>
-        <label><span>题干（支持 Markdown 与直接 Ctrl/Cmd+V 粘贴题干截图）</span><textarea id="ed-title" rows="3" required>${escapeHtml(item?.title || "")}</textarea></label>
-        <div>
-          <div class="row-gap" style="justify-content:space-between;margin-bottom:6px;">
-            <span style="font-size:13px;font-weight:600;">题干配图（<span id="ed-img-cnt">${imageCount}</span> 张，看题可见）</span>
-            <label class="btn ghost tiny">上传题干图<input id="ed-img-file" type="file" accept="image/*" hidden></label>
-          </div>
-          <div id="ed-img-list" class="row-gap"></div>
-        </div>
-        <label id="ed-opt-wrap"><span>选项（每行一个；填空/简答/实操/拖动题留空）</span><textarea id="ed-options" rows="3">${escapeHtml((item?.options || []).join("\n"))}</textarea></label>
-        <label>
-          <span id="ed-ans-label">答案</span>
-          <textarea id="ed-answers" rows="4" required placeholder="输入标准答案...">${escapeHtml(ansVal)}</textarea>
-          <span id="ed-ans-hint" class="muted-text" style="font-size:11.5px;font-weight:400;"></span>
-        </label>
-        <div>
-          <div class="row-gap" style="justify-content:space-between;margin-bottom:6px;">
-            <span style="font-size:13px;font-weight:600;">答案配图（<span id="ed-ans-img-cnt">${ansImgCount}</span> 张，流程图/运行图，翻看答案后显示 · 支持答案框粘贴截图）</span>
-            <label class="btn ghost tiny">上传答案图<input id="ed-ans-img-file" type="file" accept="image/*" hidden></label>
-          </div>
-          <div id="ed-ans-img-list" class="row-gap"></div>
-        </div>
-        <label><span>解析（支持 Markdown 代码与表格）</span><textarea id="ed-analysis" rows="2">${escapeHtml(item?.analysis || "")}</textarea></label>
-      </div>
-      <div class="modal-foot">
-        <span class="muted-text">支持截图粘贴自动上传</span>
-        <div class="row-gap">
-          <button type="button" id="ed-cancel" class="btn ghost">取消</button>
-          <button type="submit" class="btn primary">保存试题</button>
-        </div>
-      </div>
-    </form>
-  </div>
-`;
-};
-
-const ANS_HINTS = {
-  "0": "填正确选项正文或字母（如 A）",
-  "1": "多个选项用 | 分隔，也可直接填字母如 AB",
-  "2": "多个空用 | 分隔，按空顺序判分",
-  "3": "填 正确 或 错误",
-  "4": "支持多行与 Markdown（加粗/列表/代码块）",
-  "5": "多个选项用 | 分隔，或填字母组合",
-  "6": "支持多行与 Markdown 代码块（```）、表格（| col |），不拆 | 符号",
-  "7": "每行一步，按【正确顺序】依次录入（刷题时自动打乱供拖动）",
-  "8": "每行一组配对，格式：左侧项目 => 右侧对应项（刷题时自动打乱右侧）"
-};
-
-const openQuestionEditorModal = (modal, { bankId, item, onSaved }) => {
-  const isNew = !item;
-  const images = [...(item?.images || [])];
-  const answerImages = [...(item?.answerImages || [])];
-  modal.hidden = false;
-  modal.innerHTML = buildEditorShellHtml(item, images.length, answerImages.length);
-
-  const renderThumbs = (arr, listSel, cntSel, cls) => {
-    modal.querySelector(cntSel).textContent = String(arr.length);
-    modal.querySelector(listSel).innerHTML = arr.map((src, i) => `
-      <div style="position:relative;">
-        <img src="${escapeHtml(src)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--line);">
-        <button type="button" class="btn danger tiny ${cls}" data-idx="${i}" style="position:absolute;top:-6px;right:-6px;padding:1px 5px;">×</button>
-      </div>
-    `).join("");
-  };
-  const syncAllThumbs = () => {
-    renderThumbs(images, "#ed-img-list", "#ed-img-cnt", "js-rm-img");
-    renderThumbs(answerImages, "#ed-ans-img-list", "#ed-ans-img-cnt", "js-rm-ans-img");
-  };
-  const syncTypeHint = () => {
-    const t = modal.querySelector("#ed-type").value;
-    modal.querySelector("#ed-ans-hint").textContent = ANS_HINTS[t] || "";
-    modal.querySelector("#ed-opt-wrap").hidden = ["2", "3", "4", "6", "7", "8"].includes(t);
-  };
-  const uploadDataUrl = async (dataUrl, targetArr) => {
-    try {
-      const res = await apiRequest("/api/upload/image", { method: "POST", body: JSON.stringify({ dataUrl }) });
-      targetArr.push(res.url);
-      syncAllThumbs();
-      showToast("图片已上传", "ok");
-    } catch (err) { showToast(err.message, "bad"); }
-  };
-  const bindPasteUpload = (el, targetArr) => el.addEventListener("paste", async (e) => {
-    const imgItem = [...(e.clipboardData?.items || [])].find((it) => it.type.startsWith("image/"));
-    if (imgItem) { e.preventDefault(); await uploadDataUrl(await fileToDataUrl(imgItem.getAsFile()), targetArr); }
-  });
-
-  syncAllThumbs();
-  syncTypeHint();
-  const closeModal = () => { modal.hidden = true; };
-  modal.querySelector("#ed-close").addEventListener("click", closeModal);
-  modal.querySelector("#ed-cancel").addEventListener("click", closeModal);
-  modal.querySelector("#ed-type").addEventListener("change", syncTypeHint);
-  modal.querySelector("#ed-img-list").addEventListener("click", (e) => { const rm = e.target.closest(".js-rm-img"); if (rm) { images.splice(Number(rm.dataset.idx), 1); syncAllThumbs(); } });
-  modal.querySelector("#ed-ans-img-list").addEventListener("click", (e) => { const rm = e.target.closest(".js-rm-ans-img"); if (rm) { answerImages.splice(Number(rm.dataset.idx), 1); syncAllThumbs(); } });
-  modal.querySelector("#ed-img-file").addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (f) await uploadDataUrl(await fileToDataUrl(f), images); e.target.value = ""; });
-  modal.querySelector("#ed-ans-img-file").addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (f) await uploadDataUrl(await fileToDataUrl(f), answerImages); e.target.value = ""; });
-  bindPasteUpload(modal.querySelector("#ed-title"), images);
-  bindPasteUpload(modal.querySelector("#ed-answers"), answerImages);
-
-  modal.querySelector("#ed-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const typeVal = modal.querySelector("#ed-type").value;
-    const rawAns = modal.querySelector("#ed-answers").value;
-    let answers;
-    if (typeVal === "4" || typeVal === "6") answers = rawAns.trim() ? [rawAns.trim()] : [];
-    else if (typeVal === "7" || typeVal === "8") answers = rawAns.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    else answers = rawAns.split("|").map((s) => s.trim()).filter(Boolean);
-    const payload = {
-      type: typeVal,
-      chapter: modal.querySelector("#ed-chapter").value.trim(),
-      difficulty: modal.querySelector("#ed-diff").value,
-      title: modal.querySelector("#ed-title").value.trim(),
-      images,
-      answerImages,
-      options: modal.querySelector("#ed-options").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
-      answers,
-      analysis: modal.querySelector("#ed-analysis").value.trim()
-    };
-    try {
-      const url = `/api/banks/${encodeURIComponent(bankId)}/questions${isNew ? "" : `/${encodeURIComponent(item.id)}`}`;
-      await apiRequest(url, { method: isNew ? "POST" : "PUT", body: JSON.stringify(payload) });
-      modal.hidden = true;
-      showToast("保存成功", "ok");
-      await onSaved();
-    } catch (err) { showToast(err.message, "bad"); }
-  });
 };
 
 export const renderManageView = async (container, ctx) => {
@@ -372,7 +227,8 @@ export const renderManageView = async (container, ctx) => {
     if (!btn) return;
     const qid = btn.closest("tr").dataset.qid;
     if (btn.dataset.act === "edit") return openQuestionEditorModal(modal, { bankId: bank.id, item: questions.find((q) => q.id === qid), onSaved: reloadQuestions });
-    if (!confirm("确定删除该试题吗？")) return;
+    const ok = await openConfirmDialog({ title: "删除试题", message: "确定删除该试题吗？删除后无法恢复。", confirmText: "确认删除", danger: true });
+    if (!ok) return;
     try {
       await apiRequest(`/api/banks/${encodeURIComponent(bank.id)}/questions/${encodeURIComponent(qid)}`, { method: "DELETE" });
       state.selectedIds.delete(qid);
@@ -381,7 +237,10 @@ export const renderManageView = async (container, ctx) => {
     } catch (err) { showToast(err.message, "bad"); }
   });
   container.querySelector("#btn-batch-clear")?.addEventListener("click", () => { state.selectedIds.clear(); renderListPart(); });
-  container.querySelector("#btn-batch-del")?.addEventListener("click", () => { if (confirm(`确定删除选中的 ${state.selectedIds.size} 道试题吗？`)) runBatch({ action: "delete" }, "批量删除成功"); });
+  container.querySelector("#btn-batch-del")?.addEventListener("click", async () => {
+    const ok = await openConfirmDialog({ title: "批量删除试题", message: `确定删除选中的 ${state.selectedIds.size} 道试题吗？`, confirmText: "确认删除", danger: true });
+    if (ok) runBatch({ action: "delete" }, "批量删除成功");
+  });
   container.querySelector("#btn-batch-chapter")?.addEventListener("click", async () => {
     const form = await openFormDialog({ title: `批量修改章节（已选 ${state.selectedIds.size} 题）`, fields: [{ name: "chapter", label: "新的章节名称", placeholder: "如：第一章 绪论" }], submitText: "应用修改" });
     if (form) runBatch({ action: "update", chapter: form.chapter.trim() }, "批量修改章节成功");
@@ -389,6 +248,10 @@ export const renderManageView = async (container, ctx) => {
   container.querySelector("#btn-batch-type")?.addEventListener("click", async () => {
     const form = await openFormDialog({ title: `批量修改题型（已选 ${state.selectedIds.size} 题）`, fields: [{ name: "type", label: "目标题型", type: "select", value: "0", options: Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v })) }], submitText: "应用修改" });
     if (form && TYPE_LABELS[form.type]) runBatch({ action: "update", type: form.type }, "批量修改题型成功");
+  });
+  container.querySelector("#btn-batch-diff")?.addEventListener("click", async () => {
+    const form = await openFormDialog({ title: `批量修改难度（已选 ${state.selectedIds.size} 题）`, fields: [{ name: "difficulty", label: "目标难度", type: "select", value: "中等", options: ["简单", "中等", "困难"].map((d) => ({ value: d, label: d })) }], submitText: "应用修改" });
+    if (form?.difficulty) runBatch({ action: "update", difficulty: form.difficulty }, "批量修改难度成功");
   });
 
   renderListPart();

@@ -1,10 +1,27 @@
 import { escapeHtml } from "./api.js";
 
+const prettifyMath = (expr) => String(expr || "")
+  .replace(/\\(?:rightarrow|to)\b/g, "→")
+  .replace(/\\leftarrow\b/g, "←")
+  .replace(/\\leftrightarrow\b/g, "↔")
+  .replace(/\\(?:leq|le)\b/g, "≤")
+  .replace(/\\(?:geq|ge)\b/g, "≥")
+  .replace(/\\(?:neq|ne)\b/g, "≠")
+  .replace(/\\times\b/g, "×")
+  .replace(/\\cdot\b/g, "·")
+  .replace(/\\approx\b/g, "≈")
+  .replace(/\\infty\b/g, "∞")
+  .replace(/\\pm\b/g, "±")
+  .replace(/\\[,;! ]/g, " ")
+  .replace(/\\text\{([^}]*)\}/g, "$1")
+  .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)")
+  .trim();
+
 const formatInlineMd = (text) =>
   text
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\\\((.+?)\\\)/g, "<code>$1</code>");
+    .replace(/\\\((.+?)\\\)/g, (_m, expr) => `<code>${prettifyMath(expr)}</code>`);
 
 const renderTableHtml = (rows) => {
   if (rows.length < 2) return rows.map((r) => `<p>${formatInlineMd(r)}</p>`).join("");
@@ -28,7 +45,7 @@ export const renderRichMarkdown = (rawText) => {
   };
   const withPlaceholders = safe
     .replace(/```[^\n]*\n?([\s\S]*?)```/g, (_m, code) => pushBlock(`<pre><code>${code.trimEnd()}</code></pre>`))
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, expr) => pushBlock(`<div class="md-math">${expr.trim()}</div>`));
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, expr) => pushBlock(`<div class="md-math">${prettifyMath(expr)}</div>`));
 
   const lines = withPlaceholders.split("\n");
   const out = [];

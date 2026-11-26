@@ -1,4 +1,5 @@
-import { apiRequest, escapeHtml, getCloudUser, getLocalDailyStats, TYPE_LABELS } from "../api.js";
+import { apiRequest, escapeHtml, getCloudUser, getLocalDailyStats, showToast, TYPE_LABELS } from "../api.js";
+import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 
 const computeStatsSummary = (days) => {
@@ -29,7 +30,7 @@ const renderKpiGridHtml = (s, { hotList, examCount, user }) => `
   <div class="kpi-grid">
     <div class="kpi-card">
       <div class="kpi-head"><span class="muted-text">近 30 天刷题量</span><span class="kpi-icon">${iconSvg("book", 15)}</span></div>
-      <div class="kpi-val">${s.total30} <span class="muted-text" style="font-size:13px;font-weight:500;">题</span></div>
+      <div class="kpi-val">${s.total30} <span class="muted-text" style="font-size:0.8125rem;font-weight:500;">题</span></div>
       <div class="kpi-sub">今日 ${s.todayCount} 题 · 活跃 ${s.activeDays} 天 · 连续 ${s.streakDays} 天</div>
     </div>
     <div class="kpi-card">
@@ -39,12 +40,12 @@ const renderKpiGridHtml = (s, { hotList, examCount, user }) => `
     </div>
     <div class="kpi-card">
       <div class="kpi-head"><span class="muted-text">全班高频易错题</span><span class="kpi-icon">${iconSvg("alert", 15)}</span></div>
-      <div class="kpi-val" style="color:var(--bad);">${hotList.length} <span class="muted-text" style="font-size:13px;font-weight:500;">道</span></div>
+      <div class="kpi-val" style="color:var(--bad);">${hotList.length} <span class="muted-text" style="font-size:0.8125rem;font-weight:500;">道</span></div>
       <div class="kpi-sub">${hotList.length ? `最高错误率 ${hotList[0].wrongRate}%` : "暂无聚合错题"}</div>
     </div>
     <div id="${user ? "stats-go-subs" : ""}" class="kpi-card ${user ? "is-clickable" : ""}" title="${user ? "点击查看我的考试成绩单" : ""}">
       <div class="kpi-head"><span class="muted-text">历史正式考试</span><span class="kpi-icon">${iconSvg("clock", 15)}</span></div>
-      <div class="kpi-val" style="color:var(--accent);">${examCount} <span class="muted-text" style="font-size:13px;font-weight:500;">场</span></div>
+      <div class="kpi-val" style="color:var(--accent);">${examCount} <span class="muted-text" style="font-size:0.8125rem;font-weight:500;">场</span></div>
       <div class="kpi-sub">${user ? "点击查看个人成绩单 →" : "登录后记录正式考试成绩"}</div>
     </div>
   </div>
@@ -99,12 +100,12 @@ const renderLeaderboardHtml = (leaderboard, user) => {
   `;
 };
 
-const renderHotWrongSectionHtml = (hotList, selectedBankId) => {
+const renderHotWrongSectionHtml = (hotList, selectedBankId, isAdmin = false) => {
   const bankMap = new Map();
   hotList.forEach((it) => { if (!bankMap.has(it.bankId)) bankMap.set(it.bankId, it.bankName); });
   const visible = selectedBankId ? hotList.filter((i) => i.bankId === selectedBankId) : hotList;
   const body = !hotList.length
-    ? `<div class="empty-state" style="margin:12px auto;"><div class="empty-state-icon">${iconSvg("check", 20)}</div><strong style="font-size:14px;">暂无高频错题</strong><p class="muted-text" style="margin:0;">同学们开始刷题后将自动汇总高错误率题目。</p></div>`
+    ? `<div class="empty-state" style="margin:12px auto;"><div class="empty-state-icon">${iconSvg("check", 20)}</div><strong style="font-size:0.875rem;">暂无高频错题</strong><p class="muted-text" style="margin:0;">同学们开始刷题后将自动汇总高错误率题目。</p></div>`
     : `<div class="search-list" style="margin-top:12px;">
         ${visible.map((item, idx) => `
           <div class="hot-row">
@@ -116,7 +117,10 @@ const renderHotWrongSectionHtml = (hotList, selectedBankId) => {
               </div>
               <div style="margin-top:6px;font-weight:600;">${escapeHtml(item.title)}</div>
             </div>
-            <button type="button" class="btn ghost tiny js-practice-hot" data-bank="${escapeHtml(item.bankId)}">刷同库错题</button>
+            <div class="row-gap" style="gap:6px;flex-wrap:nowrap;">
+              <button type="button" class="btn ghost tiny js-practice-hot" data-bank="${escapeHtml(item.bankId)}">刷同库错题</button>
+              ${isAdmin ? `<button type="button" class="btn ghost-danger tiny js-del-hot" data-bank="${escapeHtml(item.bankId)}" data-qid="${escapeHtml(item.questionId)}">移除</button>` : ""}
+            </div>
           </div>
         `).join("")}
       </div>`;
@@ -125,7 +129,7 @@ const renderHotWrongSectionHtml = (hotList, selectedBankId) => {
     <section class="panel">
       <div class="row-gap" style="justify-content:space-between;">
         <div>
-          <h3 style="margin:0;font-size:16px;">全班高频易错题 Top ${hotList.length || 20}</h3>
+          <h3 style="margin:0;font-size:1rem;">全班高频易错题 Top ${hotList.length || 20}</h3>
           <span class="muted-text">汇总公开题库中答错最多的题目，建议按题库集中攻克</span>
         </div>
         ${hotList.length ? `
@@ -136,6 +140,7 @@ const renderHotWrongSectionHtml = (hotList, selectedBankId) => {
                 ${[...bankMap.entries()].map(([id, name]) => `<option value="${escapeHtml(id)}" ${id === selectedBankId ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}
               </select>
             ` : ""}
+            ${isAdmin ? '<button type="button" id="stats-hot-clear" class="btn ghost-danger tiny">重置错题榜</button>' : ""}
             <button type="button" id="stats-hot-start" class="btn primary tiny">${iconSvg("play", 13)}<span>专项攻克高频错题</span></button>
           </div>
         ` : ""}
@@ -193,10 +198,10 @@ export const renderStatsView = async (container, ctx = {}) => {
             <section class="panel">
               <div class="row-gap" style="justify-content:space-between;">
                 <div class="row-gap">
-                  <h2 style="margin:0;font-size:17px;">每日练习趋势</h2>
+                  <h2 style="margin:0;font-size:1.0625rem;">每日练习趋势</h2>
                   <span class="badge">${statusLabel}</span>
                 </div>
-                <div class="theme-seg" style="width:140px;">
+                <div class="seg-row cols-2" style="width:auto;min-width:156px;">
                   ${[14, 30].map((r) => `<button type="button" class="theme-seg-btn ${rangeDays === r ? "active" : ""} js-stats-range" data-range="${r}">近 ${r} 天</button>`).join("")}
                 </div>
               </div>
@@ -205,13 +210,13 @@ export const renderStatsView = async (container, ctx = {}) => {
             </section>
             <aside class="panel">
               <div class="row-gap" style="justify-content:space-between;margin-bottom:10px;">
-                <h3 style="margin:0;font-size:16px;">同学刷题排行榜</h3>
-                <span class="muted-text" style="font-size:12px;">${(data.leaderboard || []).length} 人</span>
+                <h3 style="margin:0;font-size:1rem;">同学刷题排行榜</h3>
+                <span class="muted-text" style="font-size:0.75rem;">${(data.leaderboard || []).length} 人</span>
               </div>
               ${renderLeaderboardHtml(data.leaderboard || [], user)}
             </aside>
           </div>
-          ${renderHotWrongSectionHtml(hotList, selectedHotBank)}
+          ${renderHotWrongSectionHtml(hotList, selectedHotBank, isAdmin)}
         </div>
       </div>
     `;
@@ -235,6 +240,25 @@ export const renderStatsView = async (container, ctx = {}) => {
     container.querySelector("#stats-hot-bank")?.addEventListener("change", (e) => { selectedHotBank = e.target.value; renderPage(); });
     container.querySelector("#stats-hot-start")?.addEventListener("click", () => startHotPractice(selectedHotBank));
     container.querySelectorAll(".js-practice-hot").forEach((b) => b.addEventListener("click", () => startHotPractice(b.dataset.bank)));
+    container.querySelector("#stats-hot-clear")?.addEventListener("click", async () => {
+      const ok = await openConfirmDialog({ title: "重置全班错题榜", message: selectedHotBank ? "确定清空所选题库的全班错题聚合统计吗？" : "确定清空全部公开题库的全班错题统计吗？", confirmText: "确认重置", danger: true });
+      if (!ok) return;
+      try {
+        const qs = selectedHotBank ? `?bankId=${encodeURIComponent(selectedHotBank)}` : "";
+        await apiRequest(`/api/admin/wrong-stats${qs}`, { method: "DELETE" });
+        showToast("已重置高频错题统计", "ok");
+        renderStatsView(container, ctx);
+      } catch (err) { showToast(err.message, "bad"); }
+    });
+    container.querySelectorAll(".js-del-hot").forEach((b) => b.addEventListener("click", async () => {
+      const ok = await openConfirmDialog({ title: "移除错题记录", message: "确定从全班高频错题榜中移除该题的累计记录吗？", confirmText: "确认移除", danger: true });
+      if (!ok) return;
+      try {
+        await apiRequest(`/api/admin/wrong-stats?bankId=${encodeURIComponent(b.dataset.bank)}&questionId=${encodeURIComponent(b.dataset.qid)}`, { method: "DELETE" });
+        showToast("已移除该题错题统计", "ok");
+        renderStatsView(container, ctx);
+      } catch (err) { showToast(err.message, "bad"); }
+    }));
   };
 
   renderPage();

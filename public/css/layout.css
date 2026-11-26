@@ -26,10 +26,10 @@
   justify-content: center;
   flex: none;
 }
-.brand-text strong { display: block; font-size: 15px; line-height: 1.15; color: var(--ink); }
-.brand-text span { display: block; font-size: 11px; color: var(--muted); }
+.brand-text strong { display: block; font-size: 0.9375rem; line-height: 1.15; color: var(--ink); }
+.brand-text span { display: block; font-size: 0.6875rem; color: var(--muted); }
 .side-label {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   color: var(--muted);
   letter-spacing: 0.04em;
@@ -54,7 +54,7 @@
 .topbar-left, .topbar-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .app-topbar .btn { white-space: nowrap; flex-shrink: 0; }
 .focus-bar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.focus-title { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+.focus-title { font-size: 0.875rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
 
 .top-nav { display: flex; align-items: center; gap: 4px; overflow-x: auto; }
 .top-nav-btn {
@@ -62,7 +62,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   font-weight: 600;
   padding: 7px 12px;
   border-radius: 8px;
@@ -93,7 +93,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   padding: 5px 11px;
   border-radius: 7px;
@@ -105,7 +105,7 @@
 
 .bank-select-inline {
   padding: 4px 10px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 700;
   border-radius: 8px;
   background: var(--surface-soft);
@@ -123,7 +123,7 @@
   border-radius: 999px;
   padding: 4px 10px 4px 5px;
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -135,7 +135,7 @@
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -165,7 +165,7 @@
   background: var(--surface);
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 /* 刷题工作台 */
@@ -189,12 +189,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--ink);
   padding: 4px 8px 4px 2px;
 }
-.toolbar-sub-select { padding: 4px 9px; font-size: 12.5px; border-radius: 8px; }
+.toolbar-sub-select { padding: 4px 9px; font-size: 0.7813rem; border-radius: 8px; }
 .mode-pills {
   display: inline-flex;
   align-items: center;
@@ -211,7 +211,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.7813rem;
   font-weight: 600;
   padding: 5px 11px;
   border-radius: 7px;
@@ -252,7 +252,7 @@
   background: var(--accent);
   transition: width 0.25s ease;
 }
-.q-title { font-size: 18.5px; font-weight: 600; margin: 16px 0 20px; white-space: pre-wrap; line-height: 1.72; }
+.q-title { font-size: 1.1563rem; font-weight: 600; margin: 16px 0 20px; white-space: pre-wrap; line-height: 1.72; }
 .options-list { display: flex; flex-direction: column; gap: 10px; }
 .option-item {
   display: flex;
@@ -282,7 +282,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 .answer-box {
@@ -314,7 +314,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.7813rem;
   font-weight: 600;
   padding: 6px 4px;
   border-radius: 6px;
@@ -338,7 +338,7 @@
   border-radius: 7px;
   height: 34px;
   padding: 0;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
@@ -347,12 +347,12 @@
 .sheet-cell.ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
 .sheet-cell.bad { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
 .sheet-settings { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
-.sheet-settings summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); }
+.sheet-settings summary { cursor: pointer; font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
 .note-textarea { width: 100%; min-height: 140px; resize: vertical; line-height: 1.6; }
 .note-history-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
 .note-history-item {
   text-align: left; padding: 8px 10px; border: 1px solid var(--line);
-  border-radius: 8px; background: var(--surface-soft); cursor: pointer; font: inherit; font-size: 12px; color: var(--ink);
+  border-radius: 8px; background: var(--surface-soft); cursor: pointer; font: inherit; font-size: 0.75rem; color: var(--ink);
 }
 
 /* 统计页专属栅格 & 导题分栏 */
@@ -370,8 +370,8 @@
 }
 .kpi-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kpi-icon { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-soft); color: var(--muted); }
-.kpi-val { font-size: 24px; font-weight: 800; margin-top: 4px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.kpi-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.kpi-val { font-size: 1.5rem; font-weight: 800; margin-top: 4px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi-sub { font-size: 0.75rem; color: var(--muted); margin-top: 6px; }
 .kpi-card.is-clickable { cursor: pointer; transition: border-color .15s ease; }
 .kpi-card.is-clickable:hover { border-color: var(--accent); }
 .chart-stage {
@@ -384,7 +384,7 @@
 .chart-bar.has-val { background: var(--accent); opacity: .78; }
 .chart-col:hover .chart-bar.has-val, .chart-col.active .chart-bar.has-val { opacity: 1; transform: scaleY(1.03); transform-origin: bottom; }
 .chart-col.active .chart-bar:not(.has-val) { background: var(--line-strong); }
-.chart-axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chart-axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.7188rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rank-list { display: flex; flex-direction: column; gap: 6px; max-height: 224px; overflow-y: auto; padding-right: 2px; }
 .rank-row { padding: 7px 9px; border-radius: 8px; border: 1px solid transparent; display: flex; flex-direction: column; gap: 5px; }
 .rank-row.is-me { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
@@ -406,7 +406,7 @@
 .split-col { display: flex; flex-direction: column; min-height: 0; }
 .workbench-textarea {
   width: 100%; flex: 1; min-height: 0; resize: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8125rem; line-height: 1.5;
 }
 .preview-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 
@@ -466,7 +466,7 @@ body.immersive-mode .immersive-bar { display: flex; }
   }
   .m-tab-btn {
     border: 0; background: transparent; color: var(--muted); font: inherit;
-    font-size: 11px; font-weight: 600; padding: 8px 2px; cursor: pointer;
+    font-size: 0.6875rem; font-weight: 600; padding: 8px 2px; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; gap: 2px;
   }
   .m-tab-btn.active { color: var(--accent-fg); }

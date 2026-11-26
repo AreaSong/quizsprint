@@ -2,6 +2,7 @@ import {
   escapeHtml, fetchBankQuestionsSafe, getBankPracticeState, getGlobalSettings,
   LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast
 } from "../api.js";
+import { openConfirmDialog } from "../dialog.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
 import { bindPaneResizers, bindSwipeNav, createNotesController } from "./practice-notes.js";
 import { bindDragQuestionEvents, initMatchState, initOrderItems, isMatchType, isOrderType, isSubjectiveType } from "./practice-drag.js";
@@ -23,10 +24,8 @@ export const renderPracticeView = async (container, ctx) => {
     container.querySelector("#p-go-login")?.addEventListener("click", onRequireUserLogin);
     return;
   }
-
   const bank = banks.find((b) => b.id === activeBankId);
   if (!bank) { container.innerHTML = '<div class="panel"><p class="muted-text">请先在“题库中心”选择一个题库。</p></div>'; return; }
-
   let allQuestions = [];
   try { allQuestions = (await fetchBankQuestionsSafe(bank.id)).questions || []; }
   catch (err) { container.innerHTML = `<div class="panel"><p class="muted-text">${escapeHtml(err.message)}</p></div>`; return; }
@@ -38,31 +37,13 @@ export const renderPracticeView = async (container, ctx) => {
   document.body.classList.toggle("immersive-mode", Boolean(settings.immersive));
   let mode = routeParams.mode || "order";
   if (mode === "recite") { settings.reciteMode = true; saveGlobalSettings(settings); mode = "order"; }
-
-  let typeFilter = "";
-  let chapterFilter = "";
-  let asideTab = "sheet";
-  let list = [];
-  let currentIndex = 0;
-  let multiDraft = new Set();
-  let drillRecords = {};
-  let examSession = null;
-  let examTimer = null;
-  let keydownHandler = null;
-  let aiWide = Number(settings.asideWidth || 332) >= 460;
-  let pendingAiPrompt = "";
-  let shellMounted = false;
-  let lastRenderedQid = null;
-  let lastRenderedAsideTab = "";
-  let lastModeBarKey = "";
-  let lastSheetKey = "";
-  let lastNotesListVer = -1;
-  let listVersion = 0;
-  let sheetVersion = 0;
-  let justAnsweredQid = null;
-  const optionCache = new Map();
-  const orderDraftMap = new Map();
-  const matchDraftMap = new Map();
+  let typeFilter = ""; let chapterFilter = ""; let asideTab = "sheet"; let list = []; let currentIndex = 0;
+  let multiDraft = new Set(); let drillRecords = {}; let examSession = null; let examTimer = null; let keydownHandler = null;
+  let aiWide = Number(settings.asideWidth || 332) >= 460; let pendingAiPrompt = "";
+  let shellMounted = false; let lastRenderedQid = null; let lastRenderedAsideTab = "";
+  let lastModeBarKey = ""; let lastSheetKey = ""; let lastNotesListVer = -1;
+  let listVersion = 0; let sheetVersion = 0; let justAnsweredQid = null; let qBodyAnim = null;
+  const optionCache = new Map(); const orderDraftMap = new Map(); const matchDraftMap = new Map();
   const getOrderItems = (q) => { if (!orderDraftMap.has(q.id)) orderDraftMap.set(q.id, initOrderItems(q)); return orderDraftMap.get(q.id); };
   const getMatchState = (q) => { if (!matchDraftMap.has(q.id)) matchDraftMap.set(q.id, initMatchState(q)); return matchDraftMap.get(q.id); };
 
@@ -76,7 +57,8 @@ export const renderPracticeView = async (container, ctx) => {
   const cachedOptions = (q) => {
     const key = `${q.id}_${settings.shuffleOptions}`;
     if (!optionCache.has(key)) {
-      const opts = q.options || [];
+      const rawOpts = q.options || [];
+      const opts = !rawOpts.length && String(q.type) === "3" ? ["正确", "错误"] : rawOpts;
       optionCache.set(key, !settings.shuffleOptions || q.type === "3" || opts.length < 2 ? opts : shuffleArray(opts));
     }
     return optionCache.get(key);
@@ -146,9 +128,7 @@ export const renderPracticeView = async (container, ctx) => {
 
   const calcExamScore = () => {
     let earned = 0; let correctCount = 0;
-    for (const q of list) {
-      if (examSession.answers[q.id]?.correct) { correctCount += 1; earned += Number(examSession.scoreMap[q.id] || 0); }
-    }
+    for (const q of list) if (examSession.answers[q.id]?.correct) { correctCount += 1; earned += Number(examSession.scoreMap[q.id] || 0); }
     return { score: round1(earned), correctCount };
   };
 
@@ -232,6 +212,14 @@ export const renderPracticeView = async (container, ctx) => {
     notesCtrl.bind(q.id, openNotesDesktop);
   };
 
+  const clearBankList = async (field, title, message, toastMsg) => {
+    if (!(await openConfirmDialog({ title, message, confirmText: "确认清空", danger: true }))) return;
+    bankState[field] = []; if (field === "wrongIds") bankState.wrongStreaks = {};
+    sheetVersion += 1; saveBankPracticeState(bank.id, bankState);
+    if ((field === "wrongIds" && mode === "wrong") || (field === "masteredIds" && mode === "random")) buildList();
+    showToast(toastMsg, "ok"); renderMain();
+  };
+
   const bindSheetScope = (scope) => {
     if (!scope) return;
     const sheetModal = container.querySelector("#sheet-modal");
@@ -240,11 +228,13 @@ export const renderPracticeView = async (container, ctx) => {
       if (sheetModal) sheetModal.hidden = true;
       renderMain();
     }));
-    scope.querySelector(".js-reset-progress")?.addEventListener("click", () => {
-      if (!confirm("确定清空本题库的刷题记录吗？")) return;
+    scope.querySelector(".js-reset-progress")?.addEventListener("click", async () => {
+      if (!(await openConfirmDialog({ title: "清空刷题记录", message: "确定清空本题库的刷题记录吗？清空后错题与已做统计需重新积累。", confirmText: "确认清空", danger: true }))) return;
       bankState.records = {}; bankState.lastIndex = 0; drillRecords = {}; sheetVersion += 1;
       saveBankPracticeState(bank.id, bankState); currentIndex = 0; renderMain();
     });
+    scope.querySelector(".js-clear-wrong")?.addEventListener("click", () => clearBankList("wrongIds", "清空错题本", "确定清空本题库错题本标记吗？（不影响已完成记录）", "已清空错题本"));
+    scope.querySelector(".js-clear-mastered")?.addEventListener("click", () => clearBankList("masteredIds", "清空已斩题", "确定恢复全部已斩题以便重新练习吗？", "已重置斩题标记"));
     scope.querySelector(".js-sw-recite")?.addEventListener("change", (e) => { settings.reciteMode = e.target.checked; saveGlobalSettings(settings); renderMain(); });
     scope.querySelector(".js-sw-auto")?.addEventListener("change", (e) => { settings.autoNext = e.target.checked; saveGlobalSettings(settings); });
     scope.querySelector(".js-sw-shuffle")?.addEventListener("change", (e) => { settings.shuffleOptions = e.target.checked; saveGlobalSettings(settings); renderMain(); });
@@ -270,7 +260,7 @@ export const renderPracticeView = async (container, ctx) => {
     if (e.target.closest(".js-open-sheet")) {
       const m = container.querySelector("#sheet-modal");
       const body = container.querySelector("#modal-sheet-body");
-      body.innerHTML = buildSheetInnerHtml({ list, currentIndex, activeRecords: activeRecordsMap(), examSession, settings, mode });
+      body.innerHTML = buildSheetInnerHtml({ list, currentIndex, activeRecords: activeRecordsMap(), examSession, settings, mode, bankState });
       bindSheetScope(body);
       if (m) m.hidden = false;
     } else if (e.target.closest(".js-open-notes-modal")) {
@@ -326,7 +316,12 @@ export const renderPracticeView = async (container, ctx) => {
     container.querySelector("#btn-master")?.addEventListener("click", () => {
       const set = new Set(bankState.masteredIds || []);
       if (set.has(q.id)) set.delete(q.id); else { set.add(q.id); bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); }
-      bankState.masteredIds = [...set]; saveBankPracticeState(bank.id, bankState); renderMain();
+      bankState.masteredIds = [...set]; sheetVersion += 1; saveBankPracticeState(bank.id, bankState); renderMain();
+    });
+    container.querySelector("#btn-rm-wrong")?.addEventListener("click", () => {
+      bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); delete bankState.wrongStreaks[q.id];
+      sheetVersion += 1; saveBankPracticeState(bank.id, bankState); showToast("已移出错题本", "ok");
+      if (mode === "wrong") buildList(); renderMain();
     });
     container.querySelector("#btn-eval-master")?.addEventListener("click", () => markSubj(true, "已标记秒会并斩题", true));
     container.querySelector("#btn-eval-fuzzy")?.addEventListener("click", () => markSubj(true, "已记录为模糊，保留后续复习"));
@@ -383,9 +378,8 @@ export const renderPracticeView = async (container, ctx) => {
       lastNotesListVer = listVersion;
     } else if (qChanged) {
       const inputEl = container.querySelector("#aside-note-input");
-      const stEl = container.querySelector("#note-save-status");
       if (inputEl) inputEl.value = (bankState.notes || {})[q.id] || "";
-      if (stEl) stEl.textContent = "自动保存";
+      container.querySelectorAll(".js-note-status").forEach((el) => { el.textContent = "自动保存"; });
       notesCtrl.setQid(q.id);
     }
     notesCtrl.bind(q.id, openNotesDesktop);
@@ -402,7 +396,7 @@ export const renderPracticeView = async (container, ctx) => {
         mountAiChatWidget(bodyEl.querySelector("#aside-ai-chat"), q, getAiOpts(q, true, prompt));
       }
     } else {
-      const sheetKey = [mode, list.length, sheetVersion, settings.reciteMode, settings.shuffleOptions, settings.strategy, settings.wrongClearStreak, Boolean(examSession), Boolean(examSession?.submitted), examSession && !examSession.submitted ? currentIndex : ""].join("|");
+      const sheetKey = [mode, list.length, sheetVersion, (bankState.wrongIds || []).length, (bankState.masteredIds || []).length, settings.reciteMode, settings.shuffleOptions, settings.strategy, settings.wrongClearStreak, Boolean(examSession), Boolean(examSession?.submitted), examSession && !examSession.submitted ? currentIndex : ""].join("|");
       if (wasMounted && lastRenderedAsideTab === "sheet" && sheetKey === lastSheetKey) {
         bodyEl.querySelectorAll(".sheet-cell.current").forEach((c) => c.classList.remove("current"));
         bodyEl.querySelector(`.sheet-cell[data-jump="${currentIndex}"]`)?.classList.add("current");
@@ -410,7 +404,7 @@ export const renderPracticeView = async (container, ctx) => {
         const prevScroll = wasMounted && lastRenderedAsideTab === "sheet" ? bodyEl.scrollTop : 0;
         const wasOpen = Boolean(wasMounted && lastRenderedAsideTab === "sheet" && bodyEl.querySelector(".sheet-settings")?.open);
         bodyEl.className = "aside-body-scroll";
-        bodyEl.innerHTML = buildSheetInnerHtml({ list, currentIndex, activeRecords, examSession, settings, mode });
+        bodyEl.innerHTML = buildSheetInnerHtml({ list, currentIndex, activeRecords, examSession, settings, mode, bankState });
         if (wasOpen) { const det = bodyEl.querySelector(".sheet-settings"); if (det) det.open = true; }
         bodyEl.scrollTop = prevScroll;
         bindSheetScope(bodyEl);
@@ -438,7 +432,10 @@ export const renderPracticeView = async (container, ctx) => {
     qBodyEl.innerHTML = buildQuestionBodyHtml({ q, opts, record: activeRecords[q.id], multiDraft, showAnswerNow, bankState, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null });
     if (qChanged) {
       qBodyEl.scrollTop = 0;
-      if (typeof qBodyEl.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) qBodyEl.animate([{ opacity: 0.65 }, { opacity: 1 }], { duration: 110, easing: "ease-out" });
+      if (typeof qBodyEl.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        qBodyAnim?.cancel();
+        qBodyAnim = qBodyEl.animate([{ opacity: 0, transform: "translate3d(0, 5px, 0)" }, { opacity: 1, transform: "translate3d(0, 0, 0)" }], { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+      }
     } else qBodyEl.scrollTop = prevQScroll;
   };
 

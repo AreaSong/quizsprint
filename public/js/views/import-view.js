@@ -32,7 +32,7 @@ const buildImportShellHtml = (banks, targetBank, isAdmin) => `
             ${buildBankOptionsHtml(banks, targetBank.id, { prefix: "导入到：" })}
           </select>
           <input id="imp-chapter" type="text" placeholder="默认章节（可选）" style="width:134px;">
-          <label class="row-gap" style="font-size:13px;cursor:pointer;"><input id="imp-skip" type="checkbox" checked> 跳过已有题</label>
+          <label class="row-gap" style="font-size:0.8125rem;cursor:pointer;"><input id="imp-skip" type="checkbox" checked> 跳过已有题</label>
           <button id="imp-submit" type="button" class="btn primary">${isAdmin ? "确认导入 (0)" : "登录后导入"}</button>
         </div>
       </div>
@@ -81,7 +81,7 @@ const buildPreviewHtml = ({ questions, errors }) => {
     return `
       <div class="empty-state" style="margin:auto;">
         <div class="empty-state-icon">${iconSvg("note", 22)}</div>
-        <strong style="font-size:14px;">等待输入或导入试题</strong>
+        <strong style="font-size:0.875rem;">等待输入或导入试题</strong>
         <p class="muted-text" style="margin:0;">在左侧粘贴文本，或点上方导入 Word / Excel / JSON，此处实时校验并预览。</p>
       </div>
     `;
@@ -96,7 +96,7 @@ const buildPreviewHtml = ({ questions, errors }) => {
     <div class="panel" style="padding:10px;">
       <div class="row-gap" style="justify-content:space-between;">
         <span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span>
-        <span class="muted-text" style="font-size:12px;">#${idx + 1}</span>
+        <span class="muted-text" style="font-size:0.75rem;">#${idx + 1}</span>
       </div>
       <div style="font-weight:600;margin:6px 0;">${escapeHtml(q.title)}</div>
       ${(q.options || []).map((o, i) => `<div class="muted-text">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}

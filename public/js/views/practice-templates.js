@@ -120,12 +120,13 @@ const renderAnswerContentHtml = (q) => {
   return `<strong style="color:var(--ok);">正确答案：${escapeHtml(ansList.join(" | "))}</strong>`;
 };
 
-export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) => {
+export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, examSession }) => {
   if (!showAnswerNow) return "";
   const isSubj = isSubjectiveType(q);
+  const inWrong = !examSession && (bankState?.wrongIds || []).includes(q.id);
   const selfEvalHtml = isSubj && !examSession ? `
     <div class="flashcard-bar">
-      <span class="muted-text" style="font-size:12.5px;">掌握程度自评：</span>
+      <span class="muted-text" style="font-size:0.7813rem;">掌握程度自评：</span>
       <button type="button" id="btn-eval-master" class="btn ok tiny">✓ 秒会 · 斩题</button>
       <button type="button" id="btn-eval-fuzzy" class="btn ghost tiny">? 模糊 · 留待再背</button>
       <button type="button" id="btn-eval-bad" class="btn ghost-danger tiny">✕ 不会 · 入错题本</button>
@@ -133,7 +134,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) 
   ` : "";
   const ansImgsHtml = (q.answerImages || []).length ? `
     <div class="answer-img-wrap">
-      <div class="muted-text" style="font-size:12px;font-weight:600;margin-bottom:6px;">参考答案配图（流程图 / 运行结果）</div>
+      <div class="muted-text" style="font-size:0.75rem;font-weight:600;margin-bottom:6px;">参考答案配图（流程图 / 运行结果）</div>
       <div class="row-gap">${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>
     </div>
   ` : "";
@@ -146,6 +147,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) 
           ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
         </div>
         <div class="row-gap">
+          ${inWrong ? '<button type="button" id="btn-rm-wrong" class="btn ghost tiny">移出错题本</button>' : ""}
           ${record && !examSession ? `<button type="button" id="btn-redo-q" class="btn ghost tiny">${iconSvg("rotate", 13)}<span>重做</span></button>` : ""}
           ${examSession ? "" : `<button type="button" id="btn-jump-note" class="btn ghost tiny">${iconSvg("note", 13)}<span>记笔记</span></button>`}
           <button type="button" id="btn-ai-explain" class="btn ghost tiny">${iconSvg("sparkles", 13)}<span>AI 解析</span></button>
@@ -159,14 +161,16 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) 
   `;
 };
 
-export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSession, settings, mode }) => {
+export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSession, settings, mode, bankState }) => {
   const correctCount = list.filter((item) => activeRecords[item.id]?.correct === true).length;
   const wrongCount = list.filter((item) => activeRecords[item.id]?.correct === false).length;
   const doneCount = correctCount + wrongCount;
   const rate = doneCount ? Math.round((correctCount / doneCount) * 100) : 0;
+  const wrongLen = !examSession ? (bankState?.wrongIds || []).length : 0;
+  const masterLen = !examSession ? (bankState?.masteredIds || []).length : 0;
 
   return `
-    <div class="row-gap" style="justify-content:space-between;font-size:12px;">
+    <div class="row-gap" style="justify-content:space-between;font-size:0.75rem;">
       <div class="row-gap muted-text" style="font-variant-numeric:tabular-nums;">
         <span style="color:var(--ok);font-weight:600;">对 ${correctCount}</span>
         <span style="color:var(--bad);font-weight:600;">错 ${wrongCount}</span>
@@ -184,6 +188,12 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         return `<button class="${cls.join(" ")}" data-jump="${idx}">${idx + 1}</button>`;
       }).join("")}
     </div>
+    ${wrongLen || masterLen ? `
+      <div class="row-gap" style="gap:6px;margin-bottom:6px;">
+        ${wrongLen ? `<button type="button" class="btn ghost tiny js-clear-wrong">清错题 (${wrongLen})</button>` : ""}
+        ${masterLen ? `<button type="button" class="btn ghost tiny js-clear-mastered">清斩题 (${masterLen})</button>` : ""}
+      </div>
+    ` : ""}
     ${mode === "wrong" && list.length ? `<button class="btn ghost tiny js-export-wrong" style="width:100%;margin-top:8px;">导出/打印错题本</button>` : ""}
     <details class="sheet-settings">
       <summary>练习偏好设置 ▾</summary>
@@ -193,7 +203,7 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         <label class="switch-row"><span>选项乱序</span><input class="js-sw-shuffle" type="checkbox" ${settings.shuffleOptions ? "checked" : ""}></label>
         <div class="switch-row">
           <span>选题策略</span>
-          <select class="js-sw-strategy" style="padding:3px 6px;font-size:12px;">
+          <select class="js-sw-strategy" style="padding:3px 6px;font-size:0.75rem;">
             <option value="default" ${settings.strategy === "default" ? "selected" : ""}>默认顺序</option>
             <option value="wrongFirst" ${settings.strategy === "wrongFirst" ? "selected" : ""}>错题优先</option>
             <option value="unansweredFirst" ${settings.strategy === "unansweredFirst" ? "selected" : ""}>未做题优先</option>
@@ -201,7 +211,7 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         </div>
         <div class="switch-row">
           <span>错题移出条件</span>
-          <select class="js-sw-streak" style="padding:3px 6px;font-size:12px;">
+          <select class="js-sw-streak" style="padding:3px 6px;font-size:0.75rem;">
             ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(settings.wrongClearStreak || 1) === n ? "selected" : ""}>连续答对 ${n} 次</option>`).join("")}
           </select>
         </div>
@@ -217,11 +227,14 @@ export const buildNoteHistoryItemsHtml = (list, notesMap = {}) => {
   return {
     count: notedEntries.length,
     html: notedEntries.map((entry) => `
-      <button type="button" class="note-history-item" data-jump="${entry.idx}">
-        <div style="font-weight:600;color:var(--accent-fg);">第 ${entry.idx + 1} 题 · ${escapeHtml(entry.item.title.slice(0, 18))}</div>
-        <div class="muted-text" style="margin-top:2px;">${escapeHtml(entry.note.slice(0, 40))}</div>
-      </button>
-    `).join("") || '<p class="muted-text" style="margin:4px 0;font-size:12px;">暂无历史笔记</p>'
+      <div class="row-gap" style="gap:4px;align-items:stretch;flex-wrap:nowrap;">
+        <button type="button" class="note-history-item" style="flex:1;min-width:0;" data-jump="${entry.idx}">
+          <div style="font-weight:600;color:var(--accent-fg);">第 ${entry.idx + 1} 题 · ${escapeHtml(entry.item.title.slice(0, 16))}</div>
+          <div class="muted-text" style="margin-top:2px;">${escapeHtml(entry.note.slice(0, 36))}</div>
+        </button>
+        <button type="button" class="btn ghost-danger tiny js-del-note" data-del-note="${escapeHtml(entry.item.id)}" title="删除此笔记" style="padding:0 6px;flex:none;">×</button>
+      </div>
+    `).join("") || '<p class="muted-text" style="margin:4px 0;font-size:0.75rem;">暂无历史笔记</p>'
   };
 };
 
@@ -233,11 +246,14 @@ export const buildNotesPanelHtml = (list, q, bankState, inputId = "aside-note-in
     <div class="notes-panel-body">
       <div class="row-gap" style="justify-content:space-between;flex:none;">
         <span class="row-gap" style="gap:6px;">${iconSvg("note", 14)}<strong>本题笔记</strong></span>
-        <span id="note-save-status" class="muted-text" style="font-size:12px;">自动保存</span>
+        <div class="row-gap" style="gap:6px;">
+          <button type="button" class="btn ghost tiny js-clear-cur-note" style="padding:1px 7px;" ${notesMap[q.id]?.trim() ? "" : "hidden"}>清空</button>
+          <span class="muted-text js-note-status" style="font-size:0.75rem;">自动保存</span>
+        </div>
       </div>
       <textarea id="${inputId}" class="note-textarea" placeholder="在此记录解题思路、记忆口诀或易错点（停笔自动保存）...">${escapeHtml(notesMap[q.id] || "")}</textarea>
-      <div style="flex:none;font-size:13px;"><strong>本卷已记 (<span id="note-history-count">${count}</span>)</strong></div>
-      <div id="note-history-wrap" class="note-history-list">${html}</div>
+      <div style="flex:none;font-size:0.8125rem;"><strong>本卷已记 (<span class="js-note-history-count">${count}</span>)</strong></div>
+      <div class="note-history-list js-note-history-wrap">${html}</div>
     </div>
   `;
 };
@@ -366,7 +382,7 @@ export const buildPracticeShellHtml = () => `
         <div id="p-q-body" class="q-body-scroll"></div>
         <div id="p-q-footer" class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);">
           <button id="btn-prev" class="btn ghost tiny">${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
-          <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
+          <span class="muted-text kbd-hint" style="font-size:0.75rem;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
           <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
           <button class="btn ghost tiny mobile-only-btn js-open-notes-modal">笔记</button>
           <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
@@ -383,8 +399,8 @@ export const buildPracticeShellHtml = () => `
         <div id="p-aside-body" class="aside-body-scroll"></div>
       </aside>
     </div>
-    <div id="notes-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>题目笔记</h3><button id="notes-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-notes-body"></div></div></div>
-    <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-sheet-body"></div></div></div>
+    <div id="notes-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>题目笔记</h3><button id="notes-modal-close" class="btn ghost tiny" data-modal-close>关闭</button></div><div id="modal-notes-body"></div></div></div>
+    <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny" data-modal-close>关闭</button></div><div id="modal-sheet-body"></div></div></div>
     <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny" data-modal-close>关闭</button></div><div id="modal-ai-chat"></div></div></div>
   </div>
 `;

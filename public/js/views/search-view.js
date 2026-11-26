@@ -1,6 +1,8 @@
 import { aiRequest, apiRequest, buildBankOptionsHtml, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
+import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 import { renderRichMarkdown } from "../markdown.js";
+import { openQuestionEditorModal } from "./question-editor-modal.js";
 
 const highlightText = (text, keyword) => {
   const safe = escapeHtml(text);
@@ -10,7 +12,7 @@ const highlightText = (text, keyword) => {
   return safe.replace(new RegExp(`(${escapedKw})`, "gi"), "<mark>$1</mark>");
 };
 
-const renderSearchItemHtml = (item, q, idx) => {
+const renderSearchItemHtml = (item, q, idx, isAdmin = false) => {
   const ansList = (item.answers || []).map((a) => String(a).trim()).filter(Boolean);
   const ansSet = new Set(ansList);
   const ansText = ansList.join(" / ");
@@ -49,6 +51,12 @@ const renderSearchItemHtml = (item, q, idx) => {
         </div>
         ${(item.answerImages || []).length ? `<div class="row-gap">${item.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:180px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
         ${item.analysis ? `<div><strong>解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(item.analysis)}</div></div>` : ""}
+        ${isAdmin ? `
+          <div class="row-gap" style="justify-content:flex-end;padding-top:6px;border-top:1px dashed var(--line);">
+            <button type="button" class="btn ghost tiny js-search-edit" data-idx="${idx}">编辑试题</button>
+            <button type="button" class="btn ghost-danger tiny js-search-del" data-idx="${idx}">删除试题</button>
+          </div>
+        ` : ""}
       </div>
     </details>
   `;
@@ -57,7 +65,7 @@ const renderSearchItemHtml = (item, q, idx) => {
 const renderEmptySearchHtml = (q) => `
   <div class="empty-state">
     <div class="empty-state-icon">${iconSvg("search", 22)}</div>
-    <strong style="font-size:15px;">${q ? "未在题库中匹配到相关题目" : "当前筛选条件下暂无题目"}</strong>
+    <strong style="font-size:0.9375rem;">${q ? "未在题库中匹配到相关题目" : "当前筛选条件下暂无题目"}</strong>
     <p class="muted-text" style="margin:0;">${q ? "可以缩短关键词重试，或直接交给 AI 解答该题目。" : "可切换题库、题型或输入关键词开始搜索。"}</p>
     ${q ? `<button type="button" id="search-empty-ai" class="btn soft-active tiny" style="margin-top:4px;">${iconSvg("sparkles", 14)}<span>交给 AI 解答</span></button>` : ""}
   </div>
@@ -93,11 +101,13 @@ const buildSearchViewShell = (banks, activeBankId) => `
       <div id="search-results"></div>
     </div>
   </div>
+  <div id="search-edit-modal" class="modal-backdrop" hidden></div>
 `;
 
 export const renderSearchView = (container, ctx) => {
-  const { banks, activeBankId, isLoggedIn, onRequireUserLogin } = ctx;
+  const { banks, activeBankId, isLoggedIn, isAdmin, onRequireUserLogin, onRefreshBanks } = ctx;
   container.innerHTML = buildSearchViewShell(banks, activeBankId);
+  const editModal = container.querySelector("#search-edit-modal");
 
   const inputEl = container.querySelector("#search-input");
   const bankEl = container.querySelector("#search-bank");
@@ -131,7 +141,7 @@ export const renderSearchView = (container, ctx) => {
         listEl.innerHTML = renderEmptySearchHtml(q);
         return;
       }
-      listEl.innerHTML = `<div class="search-list">${currentItems.map((it, idx) => renderSearchItemHtml(it, q, idx)).join("")}</div>`;
+      listEl.innerHTML = `<div class="search-list">${currentItems.map((it, idx) => renderSearchItemHtml(it, q, idx, Boolean(isAdmin))).join("")}</div>`;
       syncToggleLabel();
     } catch (err) {
       if (seq === searchSeq) showToast(err.message, "bad");
@@ -210,7 +220,7 @@ export const renderSearchView = (container, ctx) => {
       showToast("浏览器未授权读取剪贴板，请直接 Ctrl/Cmd+V 粘贴");
     }
   });
-  listEl.addEventListener("click", (e) => {
+  listEl.addEventListener("click", async (e) => {
     const copyBtn = e.target.closest(".js-copy-ans");
     if (copyBtn) {
       e.preventDefault();
@@ -219,6 +229,32 @@ export const renderSearchView = (container, ctx) => {
       const ans = (item?.answers || []).join(" / ");
       if (!ans) return showToast("该题暂无答案", "bad");
       navigator.clipboard?.writeText(ans).then(() => showToast("已复制答案", "ok")).catch(() => {});
+      return;
+    }
+    const editBtn = e.target.closest(".js-search-edit");
+    if (editBtn) {
+      const item = currentItems[Number(editBtn.dataset.idx)];
+      if (item && editModal) {
+        openQuestionEditorModal(editModal, {
+          bankId: item.bankId,
+          item,
+          onSaved: async () => { await onRefreshBanks?.(); await runSearch(); }
+        });
+      }
+      return;
+    }
+    const delBtn = e.target.closest(".js-search-del");
+    if (delBtn) {
+      const item = currentItems[Number(delBtn.dataset.idx)];
+      if (!item) return;
+      const ok = await openConfirmDialog({ title: "删除试题", message: `确定从「${item.bankName || "题库"}」中永久删除该试题吗？`, confirmText: "确认删除", danger: true });
+      if (!ok) return;
+      try {
+        await apiRequest(`/api/banks/${encodeURIComponent(item.bankId)}/questions/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+        showToast("已删除试题", "ok");
+        await onRefreshBanks?.();
+        await runSearch();
+      } catch (err) { showToast(err.message, "bad"); }
       return;
     }
     if (e.target.closest("#search-empty-ai")) runAiSolve();

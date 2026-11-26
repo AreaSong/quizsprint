@@ -1,6 +1,7 @@
 import { apiRequest, escapeHtml, getCloudUser, LETTERS, showToast, TYPE_LABELS } from "../api.js";
-import { openFormDialog } from "../dialog.js";
+import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { renderRichMarkdown } from "../markdown.js";
 import { openCreateExamModal, openEditExamModal, openMySubmissionsModal, openSubmissionsModal } from "./exam-modals.js";
 
 let activeExamCleanup = null;
@@ -61,7 +62,7 @@ const renderExamCardHtml = (ex, isAdmin) => {
           <h3 style="margin:0;display:flex;align-items:center;gap:6px;">${locked ? `<span style="display:inline-flex;color:var(--warn);" title="密码考试">${iconSvg("lock", 14)}</span>` : ""}${escapeHtml(ex.title)}</h3>
           <span class="badge ${st.cls}">${st.label}</span>
         </div>
-        <p class="muted-text" style="margin:8px 0;">来源：${escapeHtml(ex.bankName)} · ${ex.questionCount} 题 / ${ex.durationMinutes} 分钟 · 满分 ${ex.totalScore || 100}（及格 ${ex.passScore}）· 已交卷 ${ex.submissionCount} 人</p>
+        <p class="muted-text" style="margin:8px 0;">来源：${escapeHtml(ex.bankName)} · ${ex.questionCount} 题 / ${ex.durationMinutes} 分钟 · 满分 ${ex.totalScore || 100}（及格 ${ex.passScore}）· 已交卷 <span class="js-sub-cnt">${ex.submissionCount}</span> 人</p>
         <div class="row-gap">
           ${ex.disableCopy ? '<span class="badge warn">禁复制</span>' : ""}
           <span class="badge">限切屏 ${ex.maxTabSwitches} 次</span>
@@ -74,6 +75,7 @@ const renderExamCardHtml = (ex, isAdmin) => {
         <button class="btn ghost tiny" data-act="copy">复制链接</button>
         ${isAdmin ? `
           <button class="btn ghost tiny" data-act="edit">编辑</button>
+          <button class="btn ghost tiny" data-act="dup">复制</button>
           <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
           <button class="btn danger tiny" data-act="del">删除</button>
         ` : ""}
@@ -85,7 +87,7 @@ const renderExamCardHtml = (ex, isAdmin) => {
 const renderEmptyExamsHtml = (isAdmin) => `
   <div class="empty-state">
     <div class="empty-state-icon">${iconSvg("clock", 22)}</div>
-    <strong style="font-size:15px;">暂无在线考试</strong>
+    <strong style="font-size:0.9375rem;">暂无在线考试</strong>
     <p class="muted-text" style="margin:0;">管理员可发起在线考试，支持按题型配分、限时窗口、防切屏与简答题人工阅卷。</p>
     ${isAdmin ? '<button type="button" id="ex-empty-create" class="btn primary tiny" style="margin-top:4px;">+ 发起新考试</button>' : ""}
   </div>
@@ -189,7 +191,8 @@ export const renderExamsView = async (container, ctx) => {
         return;
       }
       if (act === "del") {
-        if (!confirm("确定删除该考试吗？")) return;
+        const ok = await openConfirmDialog({ title: "删除考试", message: "确定删除该考试及其全部成绩记录吗？", confirmText: "确认删除", danger: true });
+        if (!ok) return;
         try {
           await apiRequest(`/api/exams/${encodeURIComponent(eid)}`, { method: "DELETE" });
           showToast("已删除", "ok");
@@ -202,9 +205,28 @@ export const renderExamsView = async (container, ctx) => {
       if (act === "edit" && ex) {
         return openEditExamModal(modal, { exam: ex, onUpdated: () => renderExamsView(container, ctx) });
       }
+      if (act === "dup" && ex) {
+        const ok = await openConfirmDialog({ title: "复制考试", message: `确定复制「${ex.title}」生成一场新考试吗？（含相同试题与规则，不含历史成绩）`, confirmText: "确认复制" });
+        if (!ok) return;
+        try {
+          await apiRequest(`/api/exams/${encodeURIComponent(eid)}/duplicate`, { method: "POST" });
+          showToast("已复制新考试场次", "ok");
+          renderExamsView(container, ctx);
+        } catch (err) { showToast(err.message, "bad"); }
+        return;
+      }
       if (act === "subs") {
         try {
-          await openSubmissionsModal(modal, { exam: ex });
+          await openSubmissionsModal(modal, {
+            exam: ex,
+            onUpdated: (nextCnt) => {
+              if (typeof nextCnt === "number") {
+                ex.submissionCount = nextCnt;
+                const cntEl = card.querySelector(".js-sub-cnt");
+                if (cntEl) cntEl.textContent = String(nextCnt);
+              }
+            }
+          });
         } catch (err) {
           showToast(err.message, "bad");
         }
@@ -308,7 +330,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
               <button type="button" id="er-back-exams" class="btn ghost tiny">返回考试中心</button>
             </div>
             <div class="row-gap" style="margin-bottom:14px;">
-              <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:16px;">得分：${sub.score} / ${exam.totalScore || 100} 分（${sub.passed ? "及格" : "不及格"}）</span>
+              <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:1rem;">得分：${sub.score} / ${exam.totalScore || 100} 分（${sub.passed ? "及格" : "不及格"}）</span>
               <span class="badge">答对 ${sub.correctCount} / ${sub.totalCount}</span>
               <span class="badge warn">切屏 ${sub.tabSwitches} 次</span>
               ${sub.manualGraded ? "" : '<span class="badge warn">含主观题，待管理员最终阅卷核分</span>'}
@@ -376,13 +398,16 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
         </div>
       </div>
       <div class="view-scroll" style="margin-top:14px;display:flex;flex-direction:column;gap:16px;padding-right:4px;">
-        ${questions.map((q, idx) => `
+        ${questions.map((q, idx) => {
+          const examOpts = q.options?.length ? q.options : (String(q.type) === "3" ? ["正确", "错误"] : []);
+          return `
           <div class="panel" data-qid="${escapeHtml(q.id)}">
-            <div><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>${idx + 1}. ${escapeHtml(q.title)}</strong></div>
+            <div class="row-gap" style="margin-bottom:6px;"><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>第 ${idx + 1} 题</strong></div>
+            <div class="q-title md-content" style="margin:4px 0 8px;font-size:0.9375rem;">${renderRichMarkdown(q.title)}</div>
             ${(q.images || []).length ? `<div class="row-gap" style="margin-top:8px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-            ${q.options?.length ? `
+            ${examOpts.length ? `
               <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-                ${q.options.map((opt, oi) => `
+                ${examOpts.map((opt, oi) => `
                   <label class="row-gap" style="cursor:pointer;">
                     <input type="${q.type === "1" || q.type === "5" ? "checkbox" : "radio"}" name="q_${escapeHtml(q.id)}" value="${escapeHtml(opt)}">
                     <span>${LETTERS[oi] || oi + 1}. ${escapeHtml(opt)}</span>
@@ -393,7 +418,8 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
               ? `<textarea class="er-fill ${q.type === "7" || q.type === "8" ? "er-lines" : ""}" rows="4" placeholder="${q.type === "7" ? "每行输入一个正确顺序步骤..." : (q.type === "8" ? "每行输入一条配对（格式：左侧 => 右侧）..." : "请输入作答步骤 / 代码 / 简答内容...")}" style="width:100%;margin-top:8px;"></textarea>`
               : `<input class="er-fill" type="text" placeholder="请输入答案（多空用 | 分隔）" style="width:100%;margin-top:8px;">`)}
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     </div>
   `;
@@ -417,7 +443,8 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
   });
   restoreExamInputs(container, questions, answers);
   updateClock();
-  container.querySelector("#er-submit").addEventListener("click", () => {
-    if (confirm("确认交卷吗？")) submitNow();
+  container.querySelector("#er-submit").addEventListener("click", async () => {
+    const ok = await openConfirmDialog({ title: "确认交卷", message: "提交后本次考试将立即结束并评分，确定现在交卷吗？", confirmText: "立即交卷" });
+    if (ok) submitNow();
   });
 };

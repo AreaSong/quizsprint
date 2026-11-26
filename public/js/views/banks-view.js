@@ -8,6 +8,7 @@ import {
   printQuestionsDocument,
   showToast
 } from "../api.js";
+import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 import { openBankConfigModal, openBankCreateModal, openBankMergeModal, openSubjectModal } from "./banks-modals.js";
 
@@ -155,11 +156,11 @@ const renderSubjectOverviewHtml = (subject, subjectBanks, isAdmin) => {
     <div class="subject-overview">
       <div class="subject-ov-main">
         <div class="row-gap">
-          <strong style="font-size:15px;">${escapeHtml(subject.name)}</strong>
+          <strong style="font-size:0.9375rem;">${escapeHtml(subject.name)}</strong>
           ${subject.term ? `<span class="tag-pill">${escapeHtml(subject.term)}</span>` : ""}
           ${cd ? `<span class="badge ${cd.cls}">${escapeHtml(cd.text)}</span>` : ""}
         </div>
-        <div class="muted-text" style="font-size:12.5px;">共 ${subjectBanks.length} 个题库 · ${total} 题 · 已练 ${done} 题${subject.description ? ` · ${escapeHtml(subject.description)}` : ""}</div>
+        <div class="muted-text" style="font-size:0.7813rem;">共 ${subjectBanks.length} 个题库 · ${total} 题 · 已练 ${done} 题${subject.description ? ` · ${escapeHtml(subject.description)}` : ""}</div>
       </div>
       <div class="row-gap">
         <div class="subject-ov-prog">
@@ -298,7 +299,7 @@ export const renderBanksView = (container, ctx) => {
     }).join("");
     listWrap.innerHTML = visibleBanks.length
       ? (viewMode === "grid" ? `<div class="cards-grid">${itemsHtml}</div>` : `<div class="bank-list">${itemsHtml}</div>`)
-      : `<div class="panel empty-state" style="margin:20px auto;"><div class="empty-state-icon">${iconSvg("book", 20)}</div><strong style="font-size:14px;">当前筛选下暂无题库</strong><p class="muted-text" style="margin:0;">可切换学期/科目，或点击右上角新建题库。</p></div>`;
+      : `<div class="panel empty-state" style="margin:20px auto;"><div class="empty-state-icon">${iconSvg("book", 20)}</div><strong style="font-size:0.875rem;">当前筛选下暂无题库</strong><p class="muted-text" style="margin:0;">可切换学期/科目，或点击右上角新建题库。</p></div>`;
   };
 
   const render = () => {
@@ -348,12 +349,17 @@ export const renderBanksView = (container, ctx) => {
     }
     if (action === "print") {
       if (!isLoggedIn) { showToast("请先登录账号后再打印或导出试卷", "bad"); return onRequireUserLogin(); }
-      try { const res = await fetchBankQuestionsSafe(bankId); const withAns = confirm("是否包含答案与解析？（确定=含答案解析，取消=纯试卷）"); printQuestionsDocument(res.bank?.name || "试卷导出", res.questions || [], withAns); } catch (err) { showToast(err.message, "bad"); }
+      try {
+        const res = await fetchBankQuestionsSafe(bankId);
+        const withAns = await openConfirmDialog({ title: "打印 / 导出试卷", message: "请选择导出格式：包含参考答案与解析，还是导出纯净空白试卷？", confirmText: "含答案解析", cancelText: "纯试卷", threeState: true });
+        if (withAns !== null) printQuestionsDocument(res.bank?.name || "试卷导出", res.questions || [], withAns);
+      } catch (err) { showToast(err.message, "bad"); }
       return;
     }
     if (action === "config") return openBankConfigModal({ bank: currentBank, subjects, onSaved: onRefreshBanks });
     if (action === "delete") {
-      if (!confirm("确定删除该题库及其全部试题吗？此操作不可撤销！")) return;
+      const ok = await openConfirmDialog({ title: "删除题库", message: "确定删除该题库及其全部试题吗？此操作不可撤销！", confirmText: "确认删除", danger: true });
+      if (!ok) return;
       try { await apiRequest(`/api/banks/${encodeURIComponent(bankId)}`, { method: "DELETE" }); showToast("题库已删除", "ok"); await onRefreshBanks(); } catch (err) { showToast(err.message, "bad"); }
     }
   };
@@ -376,7 +382,8 @@ export const renderBanksView = (container, ctx) => {
     if (e.target.closest("#btn-new-subject")) return openSubjectModal({ defaultTerm: activeTerm === "ALL" ? "" : activeTerm, onSaved: async (sub) => { activeSubjectId = sub.id; localStorage.setItem(ACTIVE_SUBJECT_KEY, activeSubjectId); await onRefreshBanks(); } });
     if (e.target.closest("#btn-edit-subject")) return openSubjectModal({ subject: subjects.find((s) => s.id === activeSubjectId), onSaved: onRefreshBanks });
     if (e.target.closest("#btn-del-subject")) {
-      if (!confirm("确定删除该科目吗？仅解绑归类关系，旗下题库与试题不会丢失。")) return;
+      const ok = await openConfirmDialog({ title: "删除科目", message: "确定删除该科目吗？仅解绑归类关系，旗下题库与试题不会丢失。", confirmText: "确认删除", danger: true });
+      if (!ok) return;
       try { await apiRequest(`/api/subjects/${encodeURIComponent(activeSubjectId)}`, { method: "DELETE" }); activeSubjectId = ""; localStorage.setItem(ACTIVE_SUBJECT_KEY, ""); showToast("科目已删除", "ok"); await onRefreshBanks(); } catch (err) { showToast(err.message, "bad"); }
       return;
     }

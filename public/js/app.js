@@ -4,11 +4,11 @@ import {
   getCloudUser,
   getGlobalSettings,
   getLocalAiConfig,
-  saveGlobalSettings,
   saveLocalAiConfig,
   setCloudSession,
   showToast
 } from "./api.js";
+import { applyAppearance, cycleTheme, initAppearanceControl } from "./appearance.js";
 import { initGlobalModalDismiss, openFormDialog } from "./dialog.js";
 import { initSystemAndDisclaimerModals } from "./system-modal.js";
 import { renderBanksView } from "./views/banks-view.js";
@@ -33,8 +33,6 @@ const ROUTE_TITLES = {
   system: "系统与维护"
 };
 const ADMIN_ROUTES = new Set(["manage", "import", "users", "system"]);
-const THEME_CYCLE = ["light", "paper", "dark"];
-const ACCENT_LIST = ["indigo", "emerald", "amber", "violet", "slate"];
 
 const appMain = document.getElementById("app-main");
 const topAdminBtn = document.getElementById("top-admin-btn");
@@ -61,25 +59,6 @@ let userRegisterMode = false;
 let requireAdminPrompt = false;
 let userDropdownOpen = false;
 let focusBackTarget = "banks";
-
-let themeSwitchTimer = null;
-
-const applyAppearance = (animate = false) => {
-  const root = document.documentElement;
-  if (animate) {
-    root.classList.add("theme-switching");
-    if (themeSwitchTimer) clearTimeout(themeSwitchTimer);
-    themeSwitchTimer = setTimeout(() => root.classList.remove("theme-switching"), 240);
-  }
-  const settings = getGlobalSettings();
-  const theme = THEME_CYCLE.includes(settings.theme) ? settings.theme : "light";
-  const accent = ACCENT_LIST.includes(settings.accent) ? settings.accent : "indigo";
-  root.dataset.theme = theme;
-  root.dataset.accent = accent;
-  root.style.colorScheme = theme === "dark" ? "dark" : "light";
-  appearanceMenu?.querySelectorAll("[data-set-theme]").forEach((b) => b.classList.toggle("active", b.dataset.setTheme === theme));
-  appearanceMenu?.querySelectorAll("[data-set-accent]").forEach((b) => b.classList.toggle("active", b.dataset.setAccent === accent));
-};
 
 const syncBankSelection = () => {
   if (!appState.banks.length) {
@@ -121,7 +100,7 @@ const renderUserMenu = () => {
     <div id="user-dropdown" class="dropdown-menu" ${userDropdownOpen ? "" : "hidden"}>
       <button type="button" class="dropdown-item js-menu-exams">我的成绩单</button>
       <button type="button" class="dropdown-item js-menu-ai">AI 模型设置 ${hasAiKey ? "✓" : "(未填)"}</button>
-      ${user ? `<button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button>` : ""}
+      ${user ? `<button type="button" class="dropdown-item js-menu-nick">修改个人昵称</button><button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button>` : ""}
       ${appState.isAdmin ? `
         <div class="dropdown-sep"></div>
         <button type="button" class="dropdown-item js-menu-users">用户与门禁</button>
@@ -143,6 +122,7 @@ const renderUserMenu = () => {
     navigate("exams", { openMySubs: true });
   });
   userMenuWrap.querySelector(".js-menu-ai").addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openAiModal(); });
+  userMenuWrap.querySelector(".js-menu-nick")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangeNickDialog(); });
   userMenuWrap.querySelector(".js-menu-pwd")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangePwdDialog(); });
   userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("users"); });
   userMenuWrap.querySelector(".js-menu-system")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("system"); });
@@ -200,6 +180,7 @@ const syncShellMode = (nextRoute, params = {}) => {
 };
 
 let hasNavigatedOnce = false;
+let routeAnim = null;
 const preSyncRouteFromHash = () => {
   const h = location.hash.replace(/^#/, "");
   const r = location.hash.startsWith("#exam=") ? "exams" : (VALID_ROUTES.has(h) ? h : "banks");
@@ -223,7 +204,11 @@ const navigate = (route, params = {}) => {
   document.querySelectorAll("[data-route]").forEach((btn) => btn.classList.toggle("active", btn.dataset.route === nextRoute));
   renderCurrentView();
   if (shouldAnim && typeof appMain.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-    appMain.animate([{ opacity: 0.72 }, { opacity: 1 }], { duration: 130, easing: "ease-out" });
+    routeAnim?.cancel();
+    routeAnim = appMain.animate(
+      [{ opacity: 0, transform: "translate3d(0, 6px, 0)" }, { opacity: 1, transform: "translate3d(0, 0, 0)" }],
+      { duration: 240, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+    );
   }
 };
 
@@ -259,15 +244,6 @@ const renderCurrentView = () => {
   else if (appState.route === "system") renderSystemView(appMain, ctx);
 };
 
-const cycleTheme = () => {
-  const settings = getGlobalSettings();
-  const idx = THEME_CYCLE.indexOf(settings.theme);
-  settings.theme = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
-  settings.eyeCare = settings.theme === "paper";
-  saveGlobalSettings(settings);
-  applyAppearance(true);
-};
-
 const doLogout = async () => {
   userDropdownOpen = false;
   await Promise.all([
@@ -277,6 +253,24 @@ const doLogout = async () => {
   await refreshAuth();
   showToast("已退出账号");
   renderCurrentView();
+};
+
+const openChangeNickDialog = async () => {
+  const user = getCloudUser();
+  const form = await openFormDialog({
+    title: "修改个人昵称",
+    fields: [{ name: "nickname", label: "新昵称（1-24 个字符）", value: user?.nickname || "", required: true }],
+    submitText: "保存昵称"
+  });
+  if (!form || !form.nickname.trim()) return;
+  try {
+    await apiRequest("/api/user/profile", { method: "PUT", body: JSON.stringify({ nickname: form.nickname.trim() }) });
+    await refreshAuth();
+    showToast("昵称修改成功", "ok");
+    renderCurrentView();
+  } catch (err) {
+    showToast(err.message, "bad");
+  }
 };
 
 const openChangePwdDialog = async () => {
@@ -349,19 +343,6 @@ document.getElementById("appearance-btn")?.addEventListener("click", (e) => {
   e.stopPropagation();
   if (appearanceMenu) appearanceMenu.hidden = !appearanceMenu.hidden;
 });
-appearanceMenu?.addEventListener("click", (e) => {
-  const themePick = e.target.closest("[data-set-theme]");
-  const accentPick = e.target.closest("[data-set-accent]");
-  if (!themePick && !accentPick) return;
-  const settings = getGlobalSettings();
-  if (themePick) {
-    settings.theme = themePick.dataset.setTheme;
-    settings.eyeCare = settings.theme === "paper";
-  }
-  if (accentPick) settings.accent = accentPick.dataset.setAccent;
-  saveGlobalSettings(settings);
-  applyAppearance(true);
-});
 
 document.getElementById("user-close").addEventListener("click", () => { userModal.hidden = true; });
 document.getElementById("u-toggle-mode").addEventListener("click", () => {
@@ -421,6 +402,7 @@ document.getElementById("ai-form").addEventListener("submit", (e) => {
 const bootstrap = async () => {
   initSystemAndDisclaimerModals();
   initGlobalModalDismiss();
+  initAppearanceControl(appearanceMenu);
   applyAppearance();
   await Promise.all([refreshBanks(), refreshAuth()]);
   const examMatch = location.hash.match(/^#exam=([^&]+)/);

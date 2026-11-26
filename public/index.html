@@ -4,16 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>QuizSprint · 自托管题库与在线考试学习平台</title>
-  <style>html[data-theme="dark"]{background:#090a0d;color-scheme:dark}html[data-theme="paper"]{background:#f4f1ea;color-scheme:light}html[data-theme="light"]{background:#f8f9fa;color-scheme:light}</style>
+  <style>html[data-theme="dark"]{background:#090a0d;color-scheme:dark}html[data-theme="midnight"]{background:#0b1220;color-scheme:dark}html[data-theme="paper"]{background:#f4f1ea;color-scheme:light}html[data-theme="sage"]{background:#eaf1ec;color-scheme:light}html[data-theme="mist"]{background:#eef3f9;color-scheme:light}html[data-theme="light"]{background:#f8f9fa;color-scheme:light}</style>
   <script>
     try {
       var s = JSON.parse(localStorage.getItem("as_qb_v2_settings") || "null");
-      var t = (s && (s.theme === "light" || s.theme === "paper" || s.theme === "dark")) ? s.theme : (s && s.eyeCare ? "paper" : "light");
-      var a = (s && (s.accent === "indigo" || s.accent === "emerald" || s.accent === "amber" || s.accent === "violet" || s.accent === "slate")) ? s.accent : "indigo";
+      var validT = { light: 1, mist: 1, paper: 1, sage: 1, midnight: 1, dark: 1 };
+      var validA = { indigo: 1, cyan: 1, emerald: 1, amber: 1, rose: 1, violet: 1, crimson: 1, slate: 1 };
+      var prefT = s && s.theme;
+      var t = prefT === "auto"
+        ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "midnight" : "light")
+        : (validT[prefT] ? prefT : (s && s.eyeCare ? "paper" : "light"));
+      var a = s && validA[s.accent] ? s.accent : "indigo";
+      var amb = s && s.ambient === "flat" ? "flat" : "soft";
+      var fs = s && (s.fontScale === "compact" || s.fontScale === "large") ? s.fontScale : "normal";
+      var sch = (t === "dark" || t === "midnight") ? "dark" : "light";
       var root = document.documentElement;
-      root.dataset.theme = t;
-      root.dataset.accent = a;
-      root.style.colorScheme = t === "dark" ? "dark" : "light";
+      root.dataset.theme = t; root.dataset.colorScheme = sch;
+      root.dataset.accent = a; root.dataset.ambient = amb; root.dataset.fontScale = fs;
+      root.style.colorScheme = sch;
     } catch (e) {}
   </script>
   <link rel="stylesheet" href="/css/main.css">
@@ -22,6 +30,7 @@
   <link rel="stylesheet" href="/css/subjects.css">
   <link rel="stylesheet" href="/css/practice-extra.css">
   <link rel="stylesheet" href="/css/admin.css">
+  <link rel="stylesheet" href="/css/themes.css">
   <link rel="stylesheet" href="/css/motion.css">
 </head>
 <body>
@@ -59,26 +68,7 @@
               <span class="accent-swatch" aria-hidden="true"></span>
               <span>外观</span>
             </button>
-            <div id="appearance-menu" class="dropdown-menu appearance-menu" hidden>
-              <div>
-                <div class="appearance-label">阅读底色</div>
-                <div class="theme-seg">
-                  <button type="button" class="theme-seg-btn" data-set-theme="light">明亮</button>
-                  <button type="button" class="theme-seg-btn" data-set-theme="paper">护眼</button>
-                  <button type="button" class="theme-seg-btn" data-set-theme="dark">夜间</button>
-                </div>
-              </div>
-              <div>
-                <div class="appearance-label">主题色</div>
-                <div class="accent-dots">
-                  <button type="button" class="accent-dot" data-set-accent="indigo" title="靛蓝" style="background:#2b5ce6"></button>
-                  <button type="button" class="accent-dot" data-set-accent="emerald" title="翠绿" style="background:#0f766e"></button>
-                  <button type="button" class="accent-dot" data-set-accent="amber" title="暖橙" style="background:#d97706"></button>
-                  <button type="button" class="accent-dot" data-set-accent="violet" title="紫罗兰" style="background:#6d28d9"></button>
-                  <button type="button" class="accent-dot" data-set-accent="slate" title="石墨黑" style="background:#1e293b"></button>
-                </div>
-              </div>
-            </div>
+            <div id="appearance-menu" class="dropdown-menu appearance-menu" hidden></div>
           </div>
           <div id="user-menu-wrap" class="user-menu-wrap"></div>
         </div>
@@ -126,8 +116,8 @@
         <label><span>密码</span><input id="u-pass" type="password" required placeholder="至少 4 位"></label>
         <label id="u-nick-wrap" hidden><span>昵称（可选）</span><input id="u-nick" placeholder="排行榜展示昵称"></label>
         <label id="u-invite-wrap" hidden><span>注册邀请码</span><input id="u-invite" placeholder="请向管理员获取邀请码"></label>
-        <p id="u-reg-closed-tip" class="muted-text" style="font-size:12px;margin:0;" hidden>当前站点已关闭自主注册，如需账号请联系管理员开通。</p>
-        <p id="u-reg-disclaimer" class="muted-text" style="font-size:12px;margin:0;" hidden>注册即表示同意：本平台仅供个人学习与复习交流，严禁商用或作弊用途。<a href="#" class="js-open-disclaimer">查看完整免责声明</a></p>
+        <p id="u-reg-closed-tip" class="muted-text" style="font-size:0.75rem;margin:0;" hidden>当前站点已关闭自主注册，如需账号请联系管理员开通。</p>
+        <p id="u-reg-disclaimer" class="muted-text" style="font-size:0.75rem;margin:0;" hidden>注册即表示同意：本平台仅供个人学习与复习交流，严禁商用或作弊用途。<a href="#" class="js-open-disclaimer">查看完整免责声明</a></p>
         <div class="modal-actions" style="justify-content:space-between;">
           <button type="button" id="u-toggle-mode" class="btn ghost tiny">没有账号？去注册</button>
           <button type="submit" class="btn primary" id="u-submit-btn">登录</button>
@@ -148,7 +138,7 @@
         <label><span>API Key（仅存当前浏览器本地）</span><input id="ai-key" type="password" placeholder="sk-..."></label>
         <div>
           <div class="row-gap" style="justify-content:space-between;margin-bottom:4px;">
-            <span style="font-size:13px;font-weight:600;">模型名称</span>
+            <span style="font-size:0.8125rem;font-weight:600;">模型名称</span>
             <button type="button" id="ai-fetch-models" class="btn ghost tiny">拉取模型列表</button>
           </div>
           <select id="ai-model-select" style="width:100%;margin-bottom:6px;" hidden></select>
@@ -165,7 +155,7 @@
         <h3>免责声明与使用规范</h3>
         <button id="disclaimer-close" class="btn ghost tiny">关闭</button>
       </div>
-      <div class="stack-form" style="font-size:13px;line-height:1.7;">
+      <div class="stack-form" style="font-size:0.8125rem;line-height:1.7;">
         <div><strong>1. 使用定位：</strong>本项目（QuizSprint）及配套脚本<strong>仅供创作者本人学习、技术研究与同学间日常复习交流使用</strong>。</div>
         <div><strong>2. 严禁用途：</strong>严禁将本项目用于任何商业盈利、付费售卖、公开盗版传播，严禁用于任何正式考试作弊或违反法律法规与校纪校规的行为。</div>
         <div><strong>3. 内容免责：</strong>系统本身不内置也不提供任何第三方受版权保护的真题或商业题库；所有试题均由部署者/使用者自行导入与维护，因题库内容版权或不当使用产生的一切法律与合规责任由使用者自行承担。</div>

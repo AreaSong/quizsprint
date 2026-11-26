@@ -118,6 +118,8 @@ export const getGlobalSettings = () => {
     eyeCare: false,
     theme: "",
     accent: "indigo",
+    ambient: "soft",
+    fontScale: "normal",
     immersive: false,
     asideCollapsed: false,
     notesCollapsed: null,
@@ -126,6 +128,8 @@ export const getGlobalSettings = () => {
   });
   if (!s.theme) s.theme = s.eyeCare ? "paper" : "light";
   if (!s.accent) s.accent = "indigo";
+  if (!s.ambient) s.ambient = "soft";
+  if (!s.fontScale) s.fontScale = "normal";
   return s;
 };
 
