@@ -89,7 +89,18 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
     });
   };
 
-  return { flush, append, bind };
+  const setQid = (qid) => { currentQid = qid; };
+
+  return { flush, append, bind, setQid };
+};
+
+export const bindSwipeNav = (el, onPrev, onNext) => {
+  let tx = 0; let ty = 0;
+  el?.addEventListener("touchstart", (e) => { tx = e.changedTouches[0].clientX; ty = e.changedTouches[0].clientY; }, { passive: true });
+  el?.addEventListener("touchend", (e) => {
+    const dx = e.changedTouches[0].clientX - tx; const dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) onNext?.(); else onPrev?.(); }
+  }, { passive: true });
 };
 
 /** 绑定刷题页三栏之间的拖拽调整宽度与双击恢复默认宽度 */

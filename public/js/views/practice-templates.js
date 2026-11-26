@@ -364,11 +364,22 @@ export const buildPracticeShellHtml = () => `
         <div class="q-progress-track"><span id="p-progress-fill"></span></div>
         <div id="p-q-head" class="row-gap q-head" style="justify-content:space-between;"></div>
         <div id="p-q-body" class="q-body-scroll"></div>
-        <div id="p-q-footer" class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);"></div>
+        <div id="p-q-footer" class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);">
+          <button id="btn-prev" class="btn ghost tiny">${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
+          <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
+          <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
+          <button class="btn ghost tiny mobile-only-btn js-open-notes-modal">笔记</button>
+          <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
+          <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
+          <button id="btn-next" class="btn primary tiny"><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
+        </div>
       </section>
       <div class="pane-resizer" data-resize="aside" title="左右拖动调节辅助栏宽度（双击恢复默认）"></div>
       <aside class="practice-aside panel">
-        <div id="p-aside-tabs" class="aside-tabs"></div>
+        <div id="p-aside-tabs" class="aside-tabs">
+          <button type="button" class="aside-tab-btn js-aside-tab active" data-tab="sheet">答题卡</button>
+          <button type="button" class="aside-tab-btn js-aside-tab" data-tab="ai">AI 助教</button>
+        </div>
         <div id="p-aside-body" class="aside-body-scroll"></div>
       </aside>
     </div>
@@ -399,12 +410,14 @@ export const buildQuestionBodyHtml = ({ q, opts, record, multiDraft, showAnswerN
   ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
 `;
 
-export const buildQuestionFooterHtml = (currentIndex, total) => `
-  <button id="btn-prev" class="btn ghost tiny" ${currentIndex === 0 ? "disabled" : ""}>${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
-  <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
-  <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
-  <button class="btn ghost tiny mobile-only-btn js-open-notes-modal">笔记</button>
-  <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
-  <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
-  <button id="btn-next" class="btn primary tiny" ${currentIndex >= total - 1 ? "disabled" : ""}><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
+export const buildPracticeLoginHtml = () => `
+  <div class="panel" style="max-width:520px;margin:28px auto;text-align:center;">
+    <h2 style="margin-top:0;">请先登录账号</h2>
+    <p class="muted-text">访客模式下仅支持浏览题库与搜题看题；登录账号后即可开启顺序/随机刷题、章节练习、背题模式、笔记与模拟考试。</p>
+    <button id="p-go-login" class="btn primary">立即登录</button>
+  </div>
 `;
+
+export const buildExamBannerHtml = (examRes, examSession, total) => examRes
+  ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${total}，及格线 ${examSession.passScore} 分）</div>`
+  : "";

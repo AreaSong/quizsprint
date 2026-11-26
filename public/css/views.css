@@ -37,7 +37,7 @@
   flex-direction: column;
   overflow: hidden;
 }
-.practice-toolbar { flex: none; }
+#p-modebar-slot, #p-immbar-slot, #p-examres-slot, .practice-toolbar { flex: none; }
 .practice-layout { flex: 1; min-height: 0; align-items: stretch; }
 .practice-shell.notes-collapsed .practice-layout { grid-template-columns: minmax(0, 1fr) 12px var(--aside-w, 332px); }
 .practice-shell.notes-collapsed .practice-notes,

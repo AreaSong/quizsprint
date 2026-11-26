@@ -200,11 +200,17 @@ const syncShellMode = (nextRoute, params = {}) => {
 };
 
 let hasNavigatedOnce = false;
-let routeAnimTimer = null;
+const preSyncRouteFromHash = () => {
+  const h = location.hash.replace(/^#/, "");
+  const r = location.hash.startsWith("#exam=") ? "exams" : (VALID_ROUTES.has(h) ? h : "banks");
+  appMain.classList.toggle("practice-full", r === "practice");
+  document.querySelectorAll("[data-route]").forEach((btn) => btn.classList.toggle("active", btn.dataset.route === r));
+};
+preSyncRouteFromHash();
 
 const navigate = (route, params = {}) => {
   const nextRoute = VALID_ROUTES.has(route) ? route : "banks";
-  const routeChanged = !hasNavigatedOnce || nextRoute !== appState.route;
+  const shouldAnim = hasNavigatedOnce && nextRoute !== appState.route;
   hasNavigatedOnce = true;
   appState.route = nextRoute;
   appState.routeParams = params;
@@ -216,12 +222,8 @@ const navigate = (route, params = {}) => {
   }
   document.querySelectorAll("[data-route]").forEach((btn) => btn.classList.toggle("active", btn.dataset.route === nextRoute));
   renderCurrentView();
-  if (routeChanged) {
-    clearTimeout(routeAnimTimer);
-    appMain.classList.remove("route-enter");
-    void appMain.offsetWidth;
-    appMain.classList.add("route-enter");
-    routeAnimTimer = setTimeout(() => appMain.classList.remove("route-enter"), 220);
+  if (shouldAnim && typeof appMain.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    appMain.animate([{ opacity: 0.72 }, { opacity: 1 }], { duration: 130, easing: "ease-out" });
   }
 };
 

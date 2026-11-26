@@ -53,8 +53,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 路由切换 & 弹窗 / 菜单 / Toast */
-.app-main.route-enter > * { animation: viewFadeIn 180ms var(--ease-out-expo); }
+/* 弹窗 / 菜单 / Toast */
 .modal-backdrop:not([hidden]) { animation: maskFadeIn 150ms ease; }
 .modal-backdrop:not([hidden]) > .modal-card { animation: modalPopIn 220ms var(--ease-out-expo); }
 .dropdown-menu:not([hidden]) { transform-origin: top right; animation: menuDropIn 150ms var(--ease-out-expo); }
@@ -62,14 +61,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .toast { animation: toastIn 220ms var(--ease-spring); }
 .toast.toast-out { animation: toastOut 210ms ease forwards; pointer-events: none; }
 
-/* 刷题签名交互（切题微浮、对错瞬时反馈、拖拽微抬、AI气泡、沉浸滑入） */
-.answer-box, .ai-msg { animation: viewFadeIn 170ms var(--ease-out-expo); }
-.q-body-scroll.q-enter { animation: viewFadeIn 160ms var(--ease-out-expo); }
+/* 刷题签名交互（仅新回答瞬时反馈、拖拽微抬、AI气泡、沉浸滑入） */
+.ai-msg { animation: viewFadeIn 170ms var(--ease-out-expo); }
+.q-body-scroll.is-just-answered .answer-box { animation: viewFadeIn 150ms var(--ease-out-expo); }
 .option-item { transition: border-color 0.14s ease, background-color 0.14s ease, transform 0.12s var(--ease-out-expo), box-shadow 0.14s ease; }
 .option-item:hover:not(:disabled):not(.correct):not(.wrong) { transform: translateX(2px); }
 .option-item:active:not(:disabled) { transform: scale(0.99); }
-.option-item.correct { animation: optOkPop 260ms var(--ease-out-expo); }
-.option-item.wrong { animation: optWrongShake 260ms ease; }
+.q-body-scroll.is-just-answered .option-item.correct { animation: optOkPop 240ms var(--ease-out-expo); }
+.q-body-scroll.is-just-answered .option-item.wrong { animation: optWrongShake 240ms ease; }
 .order-item:hover, .match-chip:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 body.immersive-mode .immersive-bar { animation: immSlideDown 200ms var(--ease-out-expo); }
 
