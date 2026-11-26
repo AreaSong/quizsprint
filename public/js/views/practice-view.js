@@ -21,15 +21,14 @@ export const renderPracticeView = async (container, ctx) => {
   const { activeBankId, banks, isLoggedIn, onRequireUserLogin, onToggleTheme, routeParams = {} } = ctx;
   if (!isLoggedIn) {
     container.innerHTML = buildPracticeLoginHtml();
-    container.querySelector("#p-go-login")?.addEventListener("click", onRequireUserLogin);
-    return;
+    return container.querySelector("#p-go-login")?.addEventListener("click", onRequireUserLogin);
   }
   const bank = banks.find((b) => b.id === activeBankId);
-  if (!bank) { container.innerHTML = '<div class="panel"><p class="muted-text">请先在“题库中心”选择一个题库。</p></div>'; return; }
+  if (!bank) return void (container.innerHTML = '<div class="panel"><p class="muted-text">请先在“题库中心”选择一个题库。</p></div>');
   let allQuestions = [];
   try { allQuestions = (await fetchBankQuestionsSafe(bank.id)).questions || []; }
-  catch (err) { container.innerHTML = `<div class="panel"><p class="muted-text">${escapeHtml(err.message)}</p></div>`; return; }
-  if (!allQuestions.length) { container.innerHTML = '<div class="panel"><p class="muted-text">当前题库暂无题目，请先去“批量导题”添加试题。</p></div>'; return; }
+  catch (err) { return void (container.innerHTML = `<div class="panel"><p class="muted-text">${escapeHtml(err.message)}</p></div>`); }
+  if (!allQuestions.length) return void (container.innerHTML = '<div class="panel"><p class="muted-text">当前题库暂无题目，请先去“批量导题”添加试题。</p></div>');
 
   const settings = getGlobalSettings();
   const bankState = getBankPracticeState(bank.id);
@@ -41,8 +40,9 @@ export const renderPracticeView = async (container, ctx) => {
   let multiDraft = new Set(); let drillRecords = {}; let examSession = null; let examTimer = null; let autoNextTimer = null; let keydownHandler = null;
   let aiWide = Number(settings.asideWidth || 332) >= 460; let pendingAiPrompt = "";
   let shellMounted = false; let lastRenderedQid = null; let lastRenderedAsideTab = "";
-  let lastModeBarKey = ""; let lastSheetKey = ""; let lastNotesListVer = -1;
-  let listVersion = 0; let sheetVersion = 0; let justAnsweredQid = null; let qBodyAnim = null;
+  let lastModeBarKey = ""; let lastSheetKey = ""; let lastBodyKey = ""; let lastNotesListVer = -1;
+  let listVersion = 0; let sheetVersion = 0; let justAnsweredQid = null;
+  const resetRenderCache = () => { shellMounted = false; lastRenderedQid = null; lastRenderedAsideTab = ""; lastModeBarKey = ""; lastSheetKey = ""; lastBodyKey = ""; };
   const optionCache = new Map(); const orderDraftMap = new Map(); const matchDraftMap = new Map();
   const getOrderItems = (q) => { if (!orderDraftMap.has(q.id)) orderDraftMap.set(q.id, initOrderItems(q)); return orderDraftMap.get(q.id); };
   const getMatchState = (q) => { if (!matchDraftMap.has(q.id)) matchDraftMap.set(q.id, initMatchState(q)); return matchDraftMap.get(q.id); };
@@ -261,6 +261,11 @@ export const renderPracticeView = async (container, ctx) => {
       if (set.has(q.id)) set.delete(q.id); else set.add(q.id);
       bankState.favoriteIds = [...set]; saveBankPracticeState(bank.id, bankState); return renderMain();
     }
+    if (q && e.target.closest("#btn-master")) {
+      const set = new Set(bankState.masteredIds || []);
+      if (set.has(q.id)) set.delete(q.id); else { set.add(q.id); bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); }
+      bankState.masteredIds = [...set]; sheetVersion += 1; saveBankPracticeState(bank.id, bankState); return renderMain();
+    }
     if (e.target.closest("#btn-exit-immersive")) { settings.immersive = false; saveGlobalSettings(settings); document.body.classList.remove("immersive-mode"); return renderMain(); }
     if (e.target.closest("#btn-imm-recite")) { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); return renderMain(); }
     if (e.target.closest("#btn-imm-theme")) return onToggleTheme?.();
@@ -320,11 +325,6 @@ export const renderPracticeView = async (container, ctx) => {
       saveBankPracticeState(bank.id, bankState); showToast(msg, master ? "ok" : "");
       if (master && settings.autoNext && currentIndex < list.length - 1) goNext(); else renderMain();
     };
-    container.querySelector("#btn-master")?.addEventListener("click", () => {
-      const set = new Set(bankState.masteredIds || []);
-      if (set.has(q.id)) set.delete(q.id); else { set.add(q.id); bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); }
-      bankState.masteredIds = [...set]; sheetVersion += 1; saveBankPracticeState(bank.id, bankState); renderMain();
-    });
     container.querySelector("#btn-rm-wrong")?.addEventListener("click", () => {
       bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); delete bankState.wrongStreaks[q.id];
       sheetVersion += 1; saveBankPracticeState(bank.id, bankState); showToast("已移出错题本", "ok");
@@ -355,12 +355,16 @@ export const renderPracticeView = async (container, ctx) => {
     if (showAnswerNow) return;
     bindDragQuestionEvents({
       container, q, getOrderItems: () => getOrderItems(q), setOrderItems: (arr) => orderDraftMap.set(q.id, arr),
-      getMatchState: () => getMatchState(q), onRerender: renderMain,
+      getMatchState: () => getMatchState(q), onRerender: () => renderMain({ forceBody: true }),
       onSubmit: (sel) => { justAnsweredQid = q.id; recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain(); }
     });
     container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
       const val = optBtn.dataset.opt;
-      if (isMultiChoice(q)) { if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val); renderMain(); return; }
+      if (isMultiChoice(q)) {
+        if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val);
+        optBtn.classList.toggle("selected", multiDraft.has(val));
+        return;
+      }
       const correct = isAnswerCorrect(q, [val]); justAnsweredQid = q.id;
       recordAnswer(q, [val], correct); renderMain();
       if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) { stopAutoNext(); autoNextTimer = setTimeout(goNext, 420); }
@@ -423,7 +427,7 @@ export const renderPracticeView = async (container, ctx) => {
     lastRenderedAsideTab = activeAsideTab;
   };
 
-  const renderCenterQuestion = (q, wasMounted, qChanged, activeRecords, opts, showAnswerNow) => {
+  const renderCenterQuestion = (q, wasMounted, qChanged, activeRecords, opts, showAnswerNow, forceBody = false) => {
     const immEl = container.querySelector("#p-immbar-slot");
     if (settings.immersive) immEl.innerHTML = buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings);
     else if (immEl.innerHTML) immEl.innerHTML = "";
@@ -434,23 +438,23 @@ export const renderPracticeView = async (container, ctx) => {
     const streakBadge = needStreak > 1 && (bankState.wrongIds || []).includes(q.id) ? `<span class="badge warn">巩固 ${curStreak}/${needStreak}</span>` : "";
     container.querySelector("#p-progress-fill").style.width = `${Math.round(((currentIndex + 1) / list.length) * 100)}%`;
     container.querySelector("#p-q-head").innerHTML = buildQuestionHeadHtml({ q, currentIndex, total: list.length, examSession, scoreVal: examSession ? round1(examSession.scoreMap[q.id] || 0) : 0, streakBadge, isFav: (bankState.favoriteIds || []).includes(q.id), isMastered: (bankState.masteredIds || []).includes(q.id) });
+    const rec = activeRecords[q.id];
+    const isJustAns = justAnsweredQid === q.id; justAnsweredQid = null;
+    const inWrong = !examSession && (bankState.wrongIds || []).includes(q.id);
+    const bodyKey = [q.id, listVersion, showAnswerNow, inWrong, settings.shuffleOptions, Boolean(examSession), Boolean(examSession?.submitted), Boolean(rec), rec?.correct, (rec?.selected || []).join("\0"), isJustAns].join("|");
+    if (!forceBody && wasMounted && bodyKey === lastBodyKey) return false;
+    lastBodyKey = bodyKey;
     const qBodyEl = container.querySelector("#p-q-body");
     const prevQScroll = !qChanged && wasMounted ? qBodyEl.scrollTop : 0;
-    const isJustAns = justAnsweredQid === q.id; justAnsweredQid = null;
     qBodyEl.classList.toggle("is-just-answered", isJustAns);
-    qBodyEl.innerHTML = buildQuestionBodyHtml({ q, opts, record: activeRecords[q.id], multiDraft, showAnswerNow, bankState, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null });
-    if (qChanged) {
-      qBodyEl.scrollTop = 0;
-      if (typeof qBodyEl.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-        qBodyAnim?.cancel();
-        qBodyAnim = qBodyEl.animate([{ opacity: 0, transform: "translate3d(0, 5px, 0)" }, { opacity: 1, transform: "translate3d(0, 0, 0)" }], { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
-      }
-    } else qBodyEl.scrollTop = prevQScroll;
+    qBodyEl.innerHTML = buildQuestionBodyHtml({ q, opts, record: rec, multiDraft, showAnswerNow, bankState, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null });
+    qBodyEl.scrollTop = qChanged ? 0 : prevQScroll;
+    return true;
   };
 
   const renderMain = (renderOpts = {}) => {
     clearKeydown();
-    if (mode === "exam" && !examSession) { shellMounted = false; lastRenderedQid = null; lastRenderedAsideTab = ""; lastModeBarKey = ""; lastSheetKey = ""; return renderExamSetup(); }
+    if (mode === "exam" && !examSession) { resetRenderCache(); return renderExamSetup(); }
     const wasMounted = shellMounted;
     if (!shellMounted) { container.innerHTML = buildPracticeShellHtml(); bindPersistentShell(); shellMounted = true; }
     const notesCollapsed = isNotesCollapsed();
@@ -473,26 +477,22 @@ export const renderPracticeView = async (container, ctx) => {
       emptyEl.hidden = false; layoutEl.hidden = true;
       container.querySelector("#p-immbar-slot").innerHTML = settings.immersive ? buildImmersiveBarHtml(bank.name, -1, 0, settings) : "";
       container.querySelector("#p-examres-slot").innerHTML = "";
-      lastRenderedQid = null; return;
+      lastRenderedQid = null; lastBodyKey = ""; return;
     }
     emptyEl.hidden = true; layoutEl.hidden = false;
-
     const q = list[currentIndex];
     const qChanged = q.id !== lastRenderedQid;
     const activeRecords = activeRecordsMap();
     const showAnswerNow = (!examSession && settings.reciteMode) || (examSession ? examSession.submitted : Boolean(activeRecords[q.id]));
     const opts = cachedOptions(q);
-    renderCenterQuestion(q, wasMounted, qChanged, activeRecords, opts, showAnswerNow);
+    const bodyRebuilt = renderCenterQuestion(q, wasMounted, qChanged, activeRecords, opts, showAnswerNow, Boolean(renderOpts.forceBody));
     container.querySelector("#btn-prev").disabled = currentIndex === 0;
     container.querySelector("#btn-next").disabled = currentIndex >= list.length - 1;
     updateNotesSlot(q, wasMounted, qChanged);
     updateAsidePanel(q, activeRecords, activeAsideTab, wasMounted, qChanged, Boolean(renderOpts.forceAi));
     lastRenderedQid = q.id;
-    bindAnswerActions(q);
-    bindInputControls(q, showAnswerNow);
+    if (bodyRebuilt) { bindAnswerActions(q); bindInputControls(q, showAnswerNow); }
     bindKeyboardAndTouch(q, opts, showAnswerNow);
   };
-
-  buildList();
-  renderMain();
+  buildList(); renderMain();
 };

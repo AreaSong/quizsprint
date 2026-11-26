@@ -372,9 +372,22 @@ export const renderBanksView = (container, ctx) => {
     const subBtn = e.target.closest("button[data-subject-id]");
     if (subBtn) { activeSubjectId = subBtn.dataset.subjectId; localStorage.setItem(ACTIVE_SUBJECT_KEY, activeSubjectId); return render(); }
     const catBtn = e.target.closest("button[data-cat-filter]");
-    if (catBtn) { activeCategory = catBtn.dataset.catFilter; return render(); }
+    if (catBtn) {
+      activeCategory = catBtn.dataset.catFilter;
+      container.querySelectorAll("button[data-cat-filter]").forEach((b) => {
+        const active = b.dataset.catFilter === activeCategory;
+        b.classList.toggle("soft-active", active);
+        b.classList.toggle("ghost", !active);
+      });
+      return renderListArea();
+    }
     const modeBtn = e.target.closest("button[data-view-mode]");
-    if (modeBtn) { viewMode = modeBtn.dataset.viewMode === "grid" ? "grid" : "list"; localStorage.setItem(VIEW_MODE_KEY, viewMode); return render(); }
+    if (modeBtn) {
+      viewMode = modeBtn.dataset.viewMode === "grid" ? "grid" : "list";
+      localStorage.setItem(VIEW_MODE_KEY, viewMode);
+      container.querySelectorAll("button[data-view-mode]").forEach((b) => b.classList.toggle("active", b.dataset.viewMode === viewMode));
+      return renderListArea();
+    }
     if (e.target.closest("#wb-start-btn") && currentActiveId) { onSelectBank(currentActiveId); return onNavigate("practice", { mode: "order" }); }
     const wbTile = e.target.closest("[data-wb-mode]");
     if (wbTile && currentActiveId) { onSelectBank(currentActiveId); return onNavigate("practice", { mode: wbTile.dataset.wbMode }); }

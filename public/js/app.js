@@ -115,28 +115,32 @@ const renderUserMenu = () => {
     </div>
   `;
 
+  const setUserDropdown = (open) => {
+    userDropdownOpen = Boolean(open);
+    const dd = document.getElementById("user-dropdown");
+    if (dd) dd.hidden = !userDropdownOpen;
+  };
+
   userMenuWrap.querySelector("#user-avatar-btn").addEventListener("click", (e) => {
     e.stopPropagation();
-    userDropdownOpen = !userDropdownOpen;
-    renderUserMenu();
+    setUserDropdown(!userDropdownOpen);
   });
   userMenuWrap.querySelector(".js-menu-exams").addEventListener("click", () => {
-    userDropdownOpen = false;
-    renderUserMenu();
+    setUserDropdown(false);
     navigate("exams", { openMySubs: true });
   });
-  userMenuWrap.querySelector(".js-menu-ai").addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openAiModal(); });
-  userMenuWrap.querySelector(".js-menu-nick")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangeNickDialog(); });
-  userMenuWrap.querySelector(".js-menu-pwd")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangePwdDialog(); });
-  userMenuWrap.querySelector(".js-menu-exp-prog")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); exportMyProgressJson(); });
+  userMenuWrap.querySelector(".js-menu-ai").addEventListener("click", () => { setUserDropdown(false); openAiModal(); });
+  userMenuWrap.querySelector(".js-menu-nick")?.addEventListener("click", () => { setUserDropdown(false); openChangeNickDialog(); });
+  userMenuWrap.querySelector(".js-menu-pwd")?.addEventListener("click", () => { setUserDropdown(false); openChangePwdDialog(); });
+  userMenuWrap.querySelector(".js-menu-exp-prog")?.addEventListener("click", () => { setUserDropdown(false); exportMyProgressJson(); });
   userMenuWrap.querySelector(".js-menu-imp-prog")?.addEventListener("click", () => {
-    userDropdownOpen = false; renderUserMenu();
+    setUserDropdown(false);
     triggerImportMyProgress(async () => { await refreshAuth(); renderCurrentView(); });
   });
-  userMenuWrap.querySelector(".js-menu-manage")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("manage"); });
-  userMenuWrap.querySelector(".js-menu-import")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("import"); });
-  userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("users"); });
-  userMenuWrap.querySelector(".js-menu-system")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("system"); });
+  userMenuWrap.querySelector(".js-menu-manage")?.addEventListener("click", () => { setUserDropdown(false); navigate("manage"); });
+  userMenuWrap.querySelector(".js-menu-import")?.addEventListener("click", () => { setUserDropdown(false); navigate("import"); });
+  userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { setUserDropdown(false); navigate("users"); });
+  userMenuWrap.querySelector(".js-menu-system")?.addEventListener("click", () => { setUserDropdown(false); navigate("system"); });
   userMenuWrap.querySelector(".js-menu-logout").addEventListener("click", doLogout);
 };
 
@@ -199,7 +203,6 @@ const syncShellMode = (nextRoute, params = {}) => {
 };
 
 let hasNavigatedOnce = false;
-let routeAnim = null;
 const preSyncRouteFromHash = () => {
   const h = location.hash.replace(/^#/, "");
   const r = location.hash.startsWith("#exam=") ? "exams" : (VALID_ROUTES.has(h) ? h : "banks");
@@ -210,7 +213,9 @@ preSyncRouteFromHash();
 
 const navigate = (route, params = {}) => {
   const nextRoute = VALID_ROUTES.has(route) ? route : "banks";
-  const shouldAnim = hasNavigatedOnce && nextRoute !== appState.route;
+  if (hasNavigatedOnce && nextRoute === appState.route && !Object.keys(params).length && !Object.keys(appState.routeParams || {}).length) {
+    return;
+  }
   hasNavigatedOnce = true;
   appState.route = nextRoute;
   appState.routeParams = params;
@@ -222,13 +227,6 @@ const navigate = (route, params = {}) => {
   }
   document.querySelectorAll("[data-route]").forEach((btn) => btn.classList.toggle("active", btn.dataset.route === nextRoute));
   renderCurrentView();
-  if (shouldAnim && typeof appMain.animate === "function" && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-    routeAnim?.cancel();
-    routeAnim = appMain.animate(
-      [{ opacity: 0, transform: "translate3d(0, 6px, 0)" }, { opacity: 1, transform: "translate3d(0, 0, 0)" }],
-      { duration: 240, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
-    );
-  }
 };
 
 const renderCurrentView = () => {
@@ -357,7 +355,8 @@ const syncUserModalMode = () => {
 document.addEventListener("click", (e) => {
   if (userDropdownOpen && !e.target.closest("#user-menu-wrap")) {
     userDropdownOpen = false;
-    renderUserMenu();
+    const dd = document.getElementById("user-dropdown");
+    if (dd) dd.hidden = true;
   }
   if (appearanceMenu && !appearanceMenu.hidden && !e.target.closest("#appearance-wrap")) {
     appearanceMenu.hidden = true;
