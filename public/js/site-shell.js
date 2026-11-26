@@ -32,9 +32,22 @@ export const openChangelogModal = (info) => {
   modal.querySelector("#cl-close").addEventListener("click", () => { modal.hidden = true; });
 };
 
+let latestSiteInfo = null;
+let changelogClickBound = false;
+
 /** 将站点名称、公告栏与页脚版本应用到全局外壳 */
 export const applySiteInfo = (info) => {
   if (!info) return;
+  latestSiteInfo = info;
+  if (!changelogClickBound) {
+    changelogClickBound = true;
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".js-open-changelog")) return;
+      const appMenu = document.getElementById("appearance-menu");
+      if (appMenu) appMenu.hidden = true;
+      openChangelogModal(latestSiteInfo);
+    });
+  }
   const cfg = info.siteConfig || {};
   const name = cfg.siteName || "QuizSprint";
   const sub = cfg.subtitle || "Question Bank";

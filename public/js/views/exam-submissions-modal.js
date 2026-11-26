@@ -75,18 +75,18 @@ const renderSubmissionsListHtml = (exam, subs) => `
     </div>
     <div class="modal-body">
       <div class="table-wrap">
-        <table class="data-table" style="margin-top:0;">
+        <table class="data-table mobile-card-table" style="margin-top:0;">
           <thead><tr><th>姓名</th><th>学号</th><th>得分/满分</th><th>状态</th><th>切屏</th><th>交卷时间</th><th>操作</th></tr></thead>
           <tbody>
             ${subs.map((s) => `
               <tr>
-                <td>${escapeHtml(s.studentName)}</td>
-                <td>${escapeHtml(s.studentNo || "-")}</td>
-                <td><strong>${s.score}</strong> / ${exam.totalScore || 100}</td>
-                <td><span class="badge ${s.passed ? "ok" : "bad"}">${s.passed ? "及格" : "不及格"}</span>${s.manualGraded ? "" : ' <span class="badge warn">待阅卷</span>'}</td>
-                <td>${s.tabSwitches}</td>
-                <td class="muted-text">${escapeHtml(s.submittedAt.slice(0, 16).replace("T", " "))}</td>
-                <td>
+                <td data-label="姓名">${escapeHtml(s.studentName)}</td>
+                <td data-label="学号">${escapeHtml(s.studentNo || "-")}</td>
+                <td data-label="得分/满分"><strong>${s.score}</strong> / ${exam.totalScore || 100}</td>
+                <td data-label="状态"><span class="badge ${s.passed ? "ok" : "bad"}">${s.passed ? "及格" : "不及格"}</span>${s.manualGraded ? "" : ' <span class="badge warn">待阅卷</span>'}</td>
+                <td data-label="切屏">${s.tabSwitches}</td>
+                <td data-label="交卷时间" class="muted-text">${escapeHtml(s.submittedAt.slice(0, 16).replace("T", " "))}</td>
+                <td data-label="操作" class="mobile-card-actions">
                   <div class="row-gap" style="gap:6px;flex-wrap:nowrap;">
                     <button class="btn ghost tiny js-grade-sub" data-sid="${escapeHtml(s.id)}">${s.manualGraded ? "查看/改分" : "去阅卷"}</button>
                     <button class="btn ghost-danger tiny js-del-sub" data-sid="${escapeHtml(s.id)}">删除</button>
@@ -178,16 +178,16 @@ export const openMySubmissionsModal = async (modal) => {
         <div class="modal-head"><h3>我的考试成绩单 (${subs.length})</h3><button id="my-sub-close" type="button" class="btn ghost tiny" data-modal-close>关闭</button></div>
         <div class="modal-body">
           <div class="table-wrap">
-            <table class="data-table" style="margin-top:0;">
+            <table class="data-table mobile-card-table" style="margin-top:0;">
               <thead><tr><th>考试名称</th><th>得分/满分</th><th>状态</th><th>交卷时间</th><th>操作</th></tr></thead>
               <tbody>
                 ${subs.map((s) => `
                   <tr>
-                    <td>${escapeHtml(s.examTitle)}</td>
-                    <td><strong>${s.score}</strong> / ${s.totalScore}</td>
-                    <td><span class="badge ${s.passed ? "ok" : "bad"}">${s.passed ? "及格" : "不及格"}</span>${s.manualGraded ? "" : ' <span class="badge warn">待阅卷</span>'}</td>
-                    <td class="muted-text">${escapeHtml(s.submittedAt.slice(0, 16).replace("T", " "))}</td>
-                    <td><button class="btn ghost tiny js-my-detail" data-sid="${escapeHtml(s.id)}">详情</button></td>
+                    <td data-label="考试名称">${escapeHtml(s.examTitle)}</td>
+                    <td data-label="得分/满分"><strong>${s.score}</strong> / ${s.totalScore}</td>
+                    <td data-label="状态"><span class="badge ${s.passed ? "ok" : "bad"}">${s.passed ? "及格" : "不及格"}</span>${s.manualGraded ? "" : ' <span class="badge warn">待阅卷</span>'}</td>
+                    <td data-label="交卷时间" class="muted-text">${escapeHtml(s.submittedAt.slice(0, 16).replace("T", " "))}</td>
+                    <td data-label="操作" class="mobile-card-actions"><button class="btn ghost tiny js-my-detail" data-sid="${escapeHtml(s.id)}">详情</button></td>
                   </tr>
                 `).join("") || '<tr><td colspan="5" class="muted-text">你还没有参加过在线考试。</td></tr>'}
               </tbody>

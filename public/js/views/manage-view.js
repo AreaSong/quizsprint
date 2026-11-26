@@ -50,7 +50,7 @@ const buildManageShellHtml = (bank, banks, isAdmin) => `
       </div>
     </div>
     <div class="admin-table-wrap view-scroll" style="margin-top:12px;">
-      <table class="data-table">
+      <table class="data-table mobile-card-table">
         <thead>
           <tr>
             <th style="width:32px;"><input id="chk-all" type="checkbox" aria-label="全选本页"></th>
@@ -82,9 +82,9 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
   if (!pageItems.length) return '<tr><td colspan="6" class="muted-text">没有匹配的试题</td></tr>';
   return pageItems.map((q) => `
     <tr data-qid="${escapeHtml(q.id)}">
-      <td><input class="row-chk" type="checkbox" ${selectedIds.has(q.id) ? "checked" : ""}></td>
-      <td><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span></td>
-      <td>
+      <td data-label="选择"><input class="row-chk" type="checkbox" ${selectedIds.has(q.id) ? "checked" : ""}></td>
+      <td data-label="题型"><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span></td>
+      <td data-label="题目" class="mobile-card-full">
         <details class="q-table-details">
           <summary>
             <span class="search-chevron">${iconSvg("chevronRight", 13)}</span>
@@ -100,9 +100,9 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
           </div>
         </details>
       </td>
-      <td style="color:var(--ok);font-weight:600;">${escapeHtml((q.answers || []).join(" / ").split(/\r?\n/)[0].slice(0, 60))}</td>
-      <td class="muted-text">${escapeHtml(q.chapter || "-")} <span class="bank-pill">${escapeHtml(q.difficulty || "中等")}</span></td>
-      <td>
+      <td data-label="答案" style="color:var(--ok);font-weight:600;">${escapeHtml((q.answers || []).join(" / ").split(/\r?\n/)[0].slice(0, 60))}</td>
+      <td data-label="章节" class="muted-text">${escapeHtml(q.chapter || "-")} <span class="bank-pill">${escapeHtml(q.difficulty || "中等")}</span></td>
+      <td data-label="操作" class="mobile-card-actions">
         ${isAdmin ? `
           <div class="row-gap" style="gap:6px;">
             <button type="button" class="btn ghost tiny" data-act="edit">编辑</button>

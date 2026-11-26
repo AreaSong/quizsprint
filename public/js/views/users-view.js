@@ -54,7 +54,7 @@ const buildUsersShellHtml = (regPolicy) => `
       </div>
 
       <div class="admin-table-wrap view-scroll" style="margin-top:12px;">
-        <table class="data-table">
+        <table class="data-table mobile-card-table">
           <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>最近登录（IP / 地区）</th><th>注册时间</th><th>操作</th></tr></thead>
           <tbody id="usr-tbody"></tbody>
         </table>
@@ -77,12 +77,12 @@ const buildUsersRowsHtml = (filtered, me) => {
     const isMe = Boolean(me && (u.id === me.id || u.username === me.username));
     return `
       <tr data-uid="${escapeHtml(u.id)}">
-        <td><code>${escapeHtml(u.username)}</code> ${isMe ? '<span class="badge">当前账号</span>' : ""} ${u.disabled ? '<span class="badge bad">已冻结</span>' : ""}</td>
-        <td>${escapeHtml(u.nickname)}</td>
-        <td><span class="badge ${u.role === "admin" ? "warn" : ""}">${u.role === "admin" ? "管理员" : "学员"}</span></td>
-        <td>${buildLastLoginHtml(u.lastLogin)}</td>
-        <td class="muted-text">${escapeHtml((u.createdAt || "").slice(0, 16).replace("T", " "))}</td>
-        <td>
+        <td data-label="用户名"><code>${escapeHtml(u.username)}</code> ${isMe ? '<span class="badge">当前账号</span>' : ""} ${u.disabled ? '<span class="badge bad">已冻结</span>' : ""}</td>
+        <td data-label="昵称">${escapeHtml(u.nickname)}</td>
+        <td data-label="角色"><span class="badge ${u.role === "admin" ? "warn" : ""}">${u.role === "admin" ? "管理员" : "学员"}</span></td>
+        <td data-label="最近登录">${buildLastLoginHtml(u.lastLogin)}</td>
+        <td data-label="注册时间" class="muted-text">${escapeHtml((u.createdAt || "").slice(0, 16).replace("T", " "))}</td>
+        <td data-label="操作" class="mobile-card-actions">
           <div class="row-gap" style="gap:6px;">
             <button type="button" class="btn ghost tiny js-usr-nick">改昵称</button>
             <button type="button" class="btn ghost tiny js-usr-pwd">重置密码</button>

@@ -1,0 +1,292 @@
+/* 移动端专项响应式布局、触控热区、吸底导航与卡片表格适配（仅作用于 <= 960px，零影响桌面端） */
+.appearance-mobile-links { display: none; }
+
+@media (max-width: 960px) {
+  .practice-shell .practice-layout,
+  .practice-shell.notes-collapsed .practice-layout,
+  .practice-shell.aside-collapsed .practice-layout,
+  .practice-shell.notes-collapsed.aside-collapsed .practice-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .practice-shell .practice-notes,
+  .practice-shell .practice-aside,
+  .practice-shell .pane-resizer,
+  .desktop-only-btn {
+    display: none !important;
+  }
+  .mobile-sheet-trigger,
+  .mobile-only-btn {
+    display: inline-flex !important;
+  }
+  .practice-shell .question-box {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    overflow: visible;
+  }
+  .practice-shell,
+  .q-body-scroll,
+  .aside-body-scroll {
+    height: auto;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 900px) {
+  .sys-grid { grid-template-columns: minmax(0, 1fr); }
+  .sys-card { min-width: 0; max-width: 100%; overflow: hidden; }
+  .sys-card .row-gap { min-width: 0; }
+  .sys-card input,
+  .sys-card select { min-width: 0 !important; max-width: 100%; }
+  .sys-card pre {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .sys-card .table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
+}
+
+@media (max-width: 860px) {
+  button, a, select, input, textarea, .option-item, .mode-tile, .m-tab-btn {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: max(16px, 0.9375rem);
+  }
+
+  .topbar-inner {
+    height: calc(54px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+  }
+  .avatar-btn { max-width: 152px; }
+  .avatar-btn > span:nth-child(2) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-subbar-inner { padding: 8px 12px; scrollbar-width: none; }
+  .admin-subbar-inner::-webkit-scrollbar { display: none; }
+  .admin-subbar-inner .side-label { display: none; }
+
+  .appearance-menu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: calc(58px + env(safe-area-inset-top));
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 80px - env(safe-area-inset-top));
+    z-index: 65;
+  }
+  .appearance-mobile-links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  #user-dropdown {
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+    z-index: 65;
+  }
+
+  .app-main {
+    padding: 12px 12px calc(78px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-main.practice-full { padding: 10px 12px calc(130px + env(safe-area-inset-bottom)); }
+  body.focus-mode .app-main { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  body.immersive-mode .app-main { padding: 0 0 calc(78px + env(safe-area-inset-bottom)); }
+
+  .mobile-tabbar {
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    gap: 4px;
+  }
+  .m-tab-btn {
+    min-height: 46px;
+    padding: 4px 2px;
+    border-radius: 10px;
+    gap: 2px;
+    font-size: 0.6875rem;
+    transition: background-color .14s ease, color .14s ease;
+  }
+  .m-tab-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent-fg);
+  }
+
+  .toast-container {
+    top: calc(58px + env(safe-area-inset-top));
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    align-items: center;
+    pointer-events: none;
+  }
+  .toast { max-width: 100%; text-align: center; }
+
+  /* 刷题页工具条、模式滑轨与单行吸底切题栏 */
+  .practice-toolbar { gap: 8px; margin-bottom: 10px; }
+  .toolbar-left, .toolbar-right { width: 100%; min-width: 0; }
+  .toolbar-right { justify-content: flex-end; }
+  .toolbar-bank-name, .bank-select-inline { max-width: 100%; }
+  .mode-pills {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .mode-pills::-webkit-scrollbar { display: none; }
+  .mode-pill { flex: 0 0 auto; min-height: 34px; padding: 6px 12px; }
+  .q-head { gap: 8px; }
+  .q-head > .row-gap:last-child { flex-wrap: nowrap; flex-shrink: 0; }
+  .option-item { min-height: 48px; padding: 12px 14px; }
+
+  .practice-nav-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(59px + env(safe-area-inset-bottom));
+    z-index: 44;
+    display: flex;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    padding: 8px 10px !important;
+    margin-top: 0 !important;
+  }
+  .practice-nav-footer .js-fav-btn { display: none !important; }
+  .practice-nav-footer .btn {
+    min-height: 38px;
+    padding: 6px 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .practice-nav-footer #btn-prev,
+  .practice-nav-footer #btn-next { padding: 6px 12px; }
+  body.focus-mode .practice-nav-footer,
+  body.immersive-mode .practice-nav-footer {
+    bottom: 0;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+  }
+  body.immersive-mode .immersive-bar { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  body.immersive-mode .immersive-bar > .row-gap:first-child { min-width: 0; }
+  body.immersive-mode .immersive-bar strong {
+    max-width: 34vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.immersive-mode .immersive-bar > .row-gap:last-child {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+  }
+  .sheet-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; max-height: 44dvh; }
+  .sheet-cell { height: 40px; font-size: 0.8125rem; }
+
+  /* 题库中心、统计页适配 */
+  .section-head > .row-gap { width: 100%; }
+  .banks-filter-input { flex: 1; min-width: 0; width: auto; }
+  .rank-list { max-height: none; overflow: visible; }
+  .btn.tiny { min-height: 36px; padding: 6px 11px; }
+
+  /* 管理后台与弹窗表格响应式卡片化 */
+  .admin-table-wrap { border: 0; background: transparent; overflow: visible; }
+  table.mobile-card-table { border-collapse: separate; }
+  table.mobile-card-table thead { display: none; }
+  table.mobile-card-table tbody { display: flex; flex-direction: column; gap: 10px; padding: 2px 0; }
+  table.mobile-card-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+  }
+  table.mobile-card-table tbody td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 0;
+    border-bottom: 0;
+    text-align: right;
+    word-break: break-word;
+    white-space: normal !important;
+  }
+  table.mobile-card-table tbody td::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: left;
+  }
+  table.mobile-card-table tbody td[colspan] { justify-content: center; text-align: center; padding: 14px 8px; }
+  table.mobile-card-table tbody td[colspan]::before { display: none; }
+  table.mobile-card-table tbody td.mobile-card-full { flex-direction: column; align-items: stretch; text-align: left; }
+  table.mobile-card-table tbody td.mobile-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+  }
+  table.mobile-card-table tbody td.mobile-card-actions .row-gap {
+    flex-wrap: wrap !important;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .wb-head-right { width: 100%; justify-content: space-between; }
+  .cards-grid { grid-template-columns: minmax(0, 1fr); }
+  .hot-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .hot-row > div:first-child { min-width: 0 !important; }
+  .hot-row > .row-gap:last-child { justify-content: flex-end; flex-wrap: wrap !important; }
+  #sys-site-form > .row-gap { flex-direction: column; align-items: stretch; }
+
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal-card {
+    width: 100%;
+    max-width: 100% !important;
+    max-height: 90dvh;
+    border-radius: 18px 18px 0 0;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+  }
+  .modal-card.modal-shell { padding: 0; }
+  .modal-shell > .modal-head { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+  .modal-shell .modal-body { padding: 14px 16px; }
+  .modal-shell .modal-body > .row-gap { flex-direction: column; align-items: stretch; }
+  .modal-shell .modal-foot {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .modal-shell .modal-foot > .row-gap { width: 100%; justify-content: flex-end; }
+  #modal-ai-chat { height: 70dvh; max-height: none; }
+}

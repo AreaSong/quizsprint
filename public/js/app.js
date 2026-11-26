@@ -105,6 +105,8 @@ const renderUserMenu = () => {
       ${user ? `<button type="button" class="dropdown-item js-menu-nick">修改个人昵称</button><button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button><button type="button" class="dropdown-item js-menu-exp-prog">导出学习进度</button><button type="button" class="dropdown-item js-menu-imp-prog">导入学习进度</button>` : ""}
       ${appState.isAdmin ? `
         <div class="dropdown-sep"></div>
+        <button type="button" class="dropdown-item js-menu-manage">试题管理</button>
+        <button type="button" class="dropdown-item js-menu-import">批量导题</button>
         <button type="button" class="dropdown-item js-menu-users">用户与门禁</button>
         <button type="button" class="dropdown-item js-menu-system">系统与维护</button>
       ` : ""}
@@ -131,6 +133,8 @@ const renderUserMenu = () => {
     userDropdownOpen = false; renderUserMenu();
     triggerImportMyProgress(async () => { await refreshAuth(); renderCurrentView(); });
   });
+  userMenuWrap.querySelector(".js-menu-manage")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("manage"); });
+  userMenuWrap.querySelector(".js-menu-import")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("import"); });
   userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("users"); });
   userMenuWrap.querySelector(".js-menu-system")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("system"); });
   userMenuWrap.querySelector(".js-menu-logout").addEventListener("click", doLogout);

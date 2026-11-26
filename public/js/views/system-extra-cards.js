@@ -54,17 +54,17 @@ export const buildAuditLogsCardHtml = (logs = []) => `
       <span class="badge">${logs.length} 条记录</span>
     </div>
     <div class="table-wrap" style="max-height:240px;overflow-y:auto;">
-      <table class="data-table" style="margin-top:0;">
+      <table class="data-table mobile-card-table" style="margin-top:0;">
         <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th></tr></thead>
         <tbody>
           ${logs.map((l) => `
             <tr>
-              <td class="muted-text" style="white-space:nowrap;">${escapeHtml(String(l.createdAt || "").slice(0, 19).replace("T", " "))}</td>
-              <td>${escapeHtml(l.actor)}</td>
-              <td><code>${escapeHtml(l.action)}</code></td>
-              <td>${escapeHtml(l.target || "-")}</td>
-              <td class="muted-text">${escapeHtml(l.detail || "-")}</td>
-              <td class="muted-text">${escapeHtml(l.ip || "-")}</td>
+              <td data-label="时间" class="muted-text" style="white-space:nowrap;">${escapeHtml(String(l.createdAt || "").slice(0, 19).replace("T", " "))}</td>
+              <td data-label="操作人">${escapeHtml(l.actor)}</td>
+              <td data-label="动作"><code>${escapeHtml(l.action)}</code></td>
+              <td data-label="对象">${escapeHtml(l.target || "-")}</td>
+              <td data-label="详情" class="muted-text">${escapeHtml(l.detail || "-")}</td>
+              <td data-label="IP" class="muted-text">${escapeHtml(l.ip || "-")}</td>
             </tr>
           `).join("") || '<tr><td colspan="6" class="muted-text">暂无审计记录</td></tr>'}
         </tbody>

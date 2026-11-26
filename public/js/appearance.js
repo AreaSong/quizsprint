@@ -120,6 +120,10 @@ const buildMenuHtml = () => `
     <div class="appearance-label">阅读字号</div>
     <div class="seg-row cols-3">${FONT_SCALES.map(([k, lbl]) => `<button type="button" class="theme-seg-btn" data-set-scale="${k}">${lbl}</button>`).join("")}</div>
   </div>
+  <div class="appearance-mobile-links">
+    <button type="button" class="btn ghost tiny js-open-changelog">版本更新日志</button>
+    <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明</button>
+  </div>
 `;
 
 export const initAppearanceControl = (menuEl) => {
