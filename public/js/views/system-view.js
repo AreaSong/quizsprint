@@ -2,6 +2,7 @@ import { apiRequest, escapeHtml, showToast } from "../api.js";
 import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 import {
+  bindAutoBackupConfig,
   bindSiteConfigCard,
   buildAuditLogsCardHtml,
   buildAutoBackupListHtml,
@@ -64,7 +65,7 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
   `;
 };
 
-const buildBackupCardHtml = (dbStats, maintainReport, autoBackups = []) => {
+const buildBackupCardHtml = (dbStats, maintainReport, autoBackups = [], backupConfig = {}, backupResolvedDir = "") => {
   const c = dbStats?.counts || {};
   return `
     <section class="panel sys-card">
@@ -91,7 +92,7 @@ const buildBackupCardHtml = (dbStats, maintainReport, autoBackups = []) => {
         <a class="btn ghost tiny" href="/api/admin/backup.db" style="text-decoration:none;">导出纯库 (.db)</a>
         <a class="btn primary tiny" href="/api/admin/backup/full" style="text-decoration:none;">下载完整备份 (.qsbak)</a>
       </div>
-      ${buildAutoBackupListHtml(autoBackups)}
+      ${buildAutoBackupListHtml(autoBackups, backupConfig, backupResolvedDir)}
     </section>
   `;
 };
@@ -150,6 +151,8 @@ export const renderSystemView = async (container, ctx) => {
   let apiKey = "";
   let siteConfig = {};
   let autoBackups = [];
+  let backupConfig = {};
+  let backupResolvedDir = "";
   let auditLogs = [];
   let checkResult = null;
   let outputText = "";
@@ -169,6 +172,8 @@ export const renderSystemView = async (container, ctx) => {
     apiKey = keyRes.apiKey || "";
     siteConfig = siteRes.siteConfig || {};
     autoBackups = bakRes.backups || [];
+    backupConfig = bakRes.config || {};
+    backupResolvedDir = bakRes.resolvedDir || "";
     auditLogs = audRes.logs || [];
   };
 
@@ -190,7 +195,7 @@ export const renderSystemView = async (container, ctx) => {
         <div class="view-scroll" style="margin-top:14px;">
           <div class="sys-grid">
             ${buildUpdateCardHtml(statusData, checkResult, outputText)}
-            ${buildBackupCardHtml(dbStats, maintainReport, autoBackups)}
+            ${buildBackupCardHtml(dbStats, maintainReport, autoBackups, backupConfig, backupResolvedDir)}
             ${buildSiteConfigCardHtml(siteConfig)}
             ${buildApiKeyCardHtml(apiKey)}
             ${buildAuditLogsCardHtml(auditLogs)}
@@ -256,6 +261,10 @@ export const renderSystemView = async (container, ctx) => {
         await loadAll();
         renderPage();
       } catch (err) { showToast(err.message, "bad"); }
+    });
+    bindAutoBackupConfig(container, {
+      onSaved: async () => { await loadAll(); renderPage(); },
+      onDelete: async () => { await loadAll(); renderPage(); }
     });
     bindSiteConfigCard(container, async (nextCfg) => {
       siteConfig = nextCfg;

@@ -5,21 +5,81 @@ const formatSize = (bytes) => {
   return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(2)} MB` : `${(n / 1024).toFixed(1)} KB`;
 };
 
-export const buildAutoBackupListHtml = (backups = []) => `
+export const buildAutoBackupListHtml = (backups = [], cfg = {}, resolvedDir = "") => {
+  const enabled = cfg.enabled !== false;
+  const interval = cfg.intervalHours ?? 24;
+  const keep = cfg.keepCount ?? 7;
+  const fmt = cfg.format === "db" ? "db" : "full";
+  return `
   <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);">
-    <div class="row-gap" style="justify-content:space-between;margin-bottom:6px;">
-      <span style="font-size:0.7813rem;font-weight:600;">每日自动滚动备份（保留 7 份含图快照）</span>
+    <div class="row-gap" style="justify-content:space-between;margin-bottom:8px;">
+      <div class="row-gap" style="gap:6px;">
+        <span style="font-size:0.8125rem;font-weight:700;">服务器定时自动备份</span>
+        <span class="badge ${enabled ? "ok" : ""}">${enabled ? `已启用 · 每 ${escapeHtml(String(interval))} 小时` : "已停用"}</span>
+      </div>
       <button type="button" id="sys-auto-backup-btn" class="btn ghost tiny">立即生成快照</button>
     </div>
+    <form id="sys-bak-cfg-form" class="stack-form" style="gap:8px;padding:10px;border-radius:9px;background:var(--surface-soft);border:1px solid var(--line);margin-bottom:8px;">
+      <label class="row-gap" style="flex-direction:row;cursor:pointer;font-weight:500;">
+        <input id="bak-cfg-enabled" type="checkbox" ${enabled ? "checked" : ""}>
+        <span>开启服务端定时自动备份（按周期自动写入服务器指定目录）</span>
+      </label>
+      <div class="row-gap">
+        <label style="flex:1;min-width:96px;"><span>间隔（小时）</span><input id="bak-cfg-interval" type="number" min="1" max="720" step="1" value="${escapeHtml(String(interval))}" required></label>
+        <label style="flex:1;min-width:96px;"><span>最多保留份数</span><input id="bak-cfg-keep" type="number" min="1" max="90" step="1" value="${escapeHtml(String(keep))}" required></label>
+        <label style="flex:1.2;min-width:140px;"><span>快照格式</span>
+          <select id="bak-cfg-format">
+            <option value="full" ${fmt === "full" ? "selected" : ""}>含配图全量包 (.qsbak)</option>
+            <option value="db" ${fmt === "db" ? "selected" : ""}>纯数据库 (.db)</option>
+          </select>
+        </label>
+      </div>
+      <label><span>服务器存储路径（留空则默认存入数据目录 backups 子目录）</span>
+        <input id="bak-cfg-dir" value="${escapeHtml(cfg.backupDir || "")}" placeholder="如：/opt/quizsprint/backups">
+      </label>
+      <div class="row-gap" style="justify-content:space-between;">
+        <span class="muted-text" style="font-size:0.75rem;word-break:break-all;">当前路径：<code>${escapeHtml(resolvedDir || "data/backups")}</code></span>
+        <button type="submit" id="sys-bak-cfg-save" class="btn primary tiny">保存备份策略</button>
+      </div>
+    </form>
     <div class="row-gap" style="gap:6px;">
-      ${backups.slice(0, 5).map((b) => `
-        <a class="badge" href="/api/admin/backups/${encodeURIComponent(b.name)}" style="text-decoration:none;" title="${escapeHtml(b.createdAt)}">
-          ${escapeHtml(b.name)} (${formatSize(b.sizeBytes)})
-        </a>
-      `).join("") || '<span class="muted-text" style="font-size:0.75rem;">暂无自动备份，点击右侧可立即生成</span>'}
+      ${backups.slice(0, 8).map((b) => `
+        <span class="badge" style="gap:6px;padding-right:6px;">
+          <a href="/api/admin/backups/${encodeURIComponent(b.name)}" style="color:inherit;text-decoration:none;" title="${escapeHtml(b.createdAt)}">${escapeHtml(b.name)} (${formatSize(b.sizeBytes)})</a>
+          <button type="button" class="js-del-auto-bak" data-name="${escapeHtml(b.name)}" title="删除此快照" style="border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-weight:700;">×</button>
+        </span>
+      `).join("") || '<span class="muted-text" style="font-size:0.75rem;">该目录下暂无自动备份快照，点击右侧「立即生成快照」即可写入</span>'}
     </div>
   </div>
 `;
+};
+
+export const bindAutoBackupConfig = (container, { onSaved, onDelete } = {}) => {
+  container.querySelector("#sys-bak-cfg-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await apiRequest("/api/admin/backups/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: container.querySelector("#bak-cfg-enabled").checked,
+          intervalHours: Number(container.querySelector("#bak-cfg-interval").value || 24),
+          keepCount: Number(container.querySelector("#bak-cfg-keep").value || 7),
+          format: container.querySelector("#bak-cfg-format").value,
+          backupDir: container.querySelector("#bak-cfg-dir").value.trim()
+        })
+      });
+      showToast("自动备份策略已保存并生效", "ok");
+      await onSaved?.(res);
+    } catch (err) { showToast(err.message, "bad"); }
+  });
+  container.querySelectorAll(".js-del-auto-bak").forEach((btn) => btn.addEventListener("click", async () => {
+    try {
+      await apiRequest(`/api/admin/backups/${encodeURIComponent(btn.dataset.name)}`, { method: "DELETE" });
+      showToast("已删除备份快照", "ok");
+      await onDelete?.();
+    } catch (err) { showToast(err.message, "bad"); }
+  }));
+};
 
 export const buildSiteConfigCardHtml = (cfg = {}) => `
   <section class="panel sys-card">

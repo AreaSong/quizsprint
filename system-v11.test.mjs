@@ -255,3 +255,61 @@ test("v1.1 访客门禁拦截、账号冻结/解封与改密/重置密码即时�
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("v1.1 可配置定时备份策略、自定义服务器路径、格式切换与快照删除正常", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qb-v11-bakcfg-"));
+  const customDir = path.join(tmpDir, "custom-backups");
+  const uploadsDir = path.join(tmpDir, "uploads");
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+    const call = makeCaller({ store, userStore, examStore, dataDir: tmpDir, uploadsDir });
+
+    const defRes = await call("GET", "/api/admin/backups");
+    assert.equal(defRes.status, 200);
+    assert.equal(defRes.payload.config.enabled, true);
+    assert.equal(defRes.payload.config.intervalHours, 24);
+    assert.equal(defRes.payload.config.keepCount, 7);
+
+    const badPath = await call("PUT", "/api/admin/backups/config", { backupDir: "/etc/qs-test" });
+    assert.equal(badPath.status, 400);
+
+    const saveOk = await call("PUT", "/api/admin/backups/config", {
+      enabled: true,
+      intervalHours: 6,
+      keepCount: 2,
+      format: "db",
+      backupDir: customDir
+    });
+    assert.equal(saveOk.status, 200);
+    assert.equal(saveOk.payload.config.intervalHours, 6);
+    assert.equal(saveOk.payload.config.keepCount, 2);
+    assert.equal(saveOk.payload.config.format, "db");
+    assert.equal(saveOk.payload.resolvedDir, path.resolve(customDir));
+
+    const r1 = await call("POST", "/api/admin/backups/run");
+    assert.equal(r1.status, 200);
+    assert.ok(r1.payload.name.endsWith(".db"));
+    assert.equal(fs.existsSync(path.join(customDir, r1.payload.name)), true);
+
+    await new Promise((r) => setTimeout(r, 5));
+    await call("POST", "/api/admin/backups/run");
+    await new Promise((r) => setTimeout(r, 5));
+    const r3 = await call("POST", "/api/admin/backups/run");
+    assert.equal(r3.payload.backups.length, 2);
+
+    const delRes = await call("DELETE", `/api/admin/backups/${encodeURIComponent(r3.payload.name)}`);
+    assert.equal(delRes.status, 200);
+    assert.equal(delRes.payload.backups.length, 1);
+
+    await call("PUT", "/api/admin/backups/config", { enabled: false, backupDir: customDir });
+    const skipRes = runAutoBackup(tmpDir, uploadsDir, { force: false });
+    assert.equal(skipRes.skipped, true);
+    assert.equal(skipRes.reason, "disabled");
+  } finally {
+    closeAllDbs();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
