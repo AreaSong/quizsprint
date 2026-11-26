@@ -35,7 +35,9 @@ export const normalizeAnswers = (answers) => {
 };
 
 const lettersToOptions = (raw, options) => {
-  const compact = String(raw).replace(/[^A-Za-z]/g, "").toUpperCase();
+  const trimmed = String(raw || "").trim();
+  if (!/^[A-Za-z]+(?:[\s,，、|/]+[A-Za-z]+)*$/.test(trimmed)) return null;
+  const compact = trimmed.replace(/[^A-Za-z]/g, "").toUpperCase();
   if (!compact || !options.length) return null;
   if (![...compact].every((letter) => letter.charCodeAt(0) - 65 < options.length)) return null;
   return [...compact].map((letter) => String(options[LETTERS.indexOf(letter)] || "").trim()).filter(Boolean);
@@ -45,7 +47,9 @@ export const expandStoredAnswers = (answers, options) => {
   const texts = normalizeAnswers(answers);
   const optionTexts = Array.isArray(options) ? options.map((item) => String(item ?? "")) : [];
   if (!texts.length) return texts;
-  if (optionTexts.some((item) => item.trim())) {
+  const optSet = new Set(optionTexts.map((o) => o.trim()).filter(Boolean));
+  if (optSet.size && texts.every((t) => optSet.has(t))) return texts;
+  if (optSet.size) {
     if (texts.length === 1) {
       const mapped = lettersToOptions(texts[0], optionTexts);
       if (mapped?.length) return mapped;

@@ -45,7 +45,7 @@ const renderKpiGridHtml = (s, { hotList, examCount, user }) => `
     </div>
     <div id="${user ? "stats-go-subs" : ""}" class="kpi-card ${user ? "is-clickable" : ""}" title="${user ? "点击查看我的考试成绩单" : ""}">
       <div class="kpi-head"><span class="muted-text">历史正式考试</span><span class="kpi-icon">${iconSvg("clock", 15)}</span></div>
-      <div class="kpi-val" style="color:var(--accent);">${examCount} <span class="muted-text" style="font-size:0.8125rem;font-weight:500;">场</span></div>
+      <div class="kpi-val" style="color:var(--accent-fg);">${examCount} <span class="muted-text" style="font-size:0.8125rem;font-weight:500;">场</span></div>
       <div class="kpi-sub">${user ? "点击查看个人成绩单 →" : "登录后记录正式考试成绩"}</div>
     </div>
   </div>

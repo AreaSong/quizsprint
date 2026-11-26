@@ -58,24 +58,24 @@
 }
 
 /* 8 套双色渐变强调色（浅色系） */
-:root[data-accent="indigo"] { --accent: #2b5ce6; --accent-2: #6366f1; --accent-hover: #1e4ad1; --accent-soft: #ebf1ff; --accent-fg: #2b5ce6; --accent-ink: #ffffff; }
-:root[data-accent="cyan"] { --accent: #0284c7; --accent-2: #06b6d4; --accent-hover: #0369a1; --accent-soft: #e0f2fe; --accent-fg: #0369a1; --accent-ink: #ffffff; }
-:root[data-accent="emerald"] { --accent: #0f766e; --accent-2: #10b981; --accent-hover: #115e59; --accent-soft: #e6f6f3; --accent-fg: #0f766e; --accent-ink: #ffffff; }
-:root[data-accent="amber"] { --accent: #d97706; --accent-2: #f59e0b; --accent-hover: #b45309; --accent-soft: #fef3c7; --accent-fg: #b45309; --accent-ink: #ffffff; }
-:root[data-accent="rose"] { --accent: #e11d48; --accent-2: #f472b6; --accent-hover: #be123c; --accent-soft: #ffe4e6; --accent-fg: #be123c; --accent-ink: #ffffff; }
-:root[data-accent="violet"] { --accent: #6d28d9; --accent-2: #a855f7; --accent-hover: #5b21b6; --accent-soft: #f3e8ff; --accent-fg: #6d28d9; --accent-ink: #ffffff; }
-:root[data-accent="crimson"] { --accent: #c2410c; --accent-2: #ef4444; --accent-hover: #9a3412; --accent-soft: #ffedd5; --accent-fg: #c2410c; --accent-ink: #ffffff; }
-:root[data-accent="slate"] { --accent: #1e293b; --accent-2: #475569; --accent-hover: #0f172a; --accent-soft: #e2e8f0; --accent-fg: #1e293b; --accent-ink: #ffffff; }
+:root[data-accent="indigo"] { --accent: #2b5ce6; --accent-2: #4f46e5; --accent-hover: #1e4ad1; --accent-soft: #ebf1ff; --accent-fg: #2b5ce6; --accent-ink: #ffffff; }
+:root[data-accent="cyan"] { --accent: #0369a1; --accent-2: #0284c7; --accent-hover: #075985; --accent-soft: #e0f2fe; --accent-fg: #0369a1; --accent-ink: #ffffff; }
+:root[data-accent="emerald"] { --accent: #0f766e; --accent-2: #059669; --accent-hover: #115e59; --accent-soft: #e6f6f3; --accent-fg: #0f766e; --accent-ink: #ffffff; }
+:root[data-accent="amber"] { --accent: #b45309; --accent-2: #c2410c; --accent-hover: #92400e; --accent-soft: #fef3c7; --accent-fg: #b45309; --accent-ink: #ffffff; }
+:root[data-accent="rose"] { --accent: #be123c; --accent-2: #db2777; --accent-hover: #9f1239; --accent-soft: #ffe4e6; --accent-fg: #be123c; --accent-ink: #ffffff; }
+:root[data-accent="violet"] { --accent: #6d28d9; --accent-2: #7e22ce; --accent-hover: #5b21b6; --accent-soft: #f3e8ff; --accent-fg: #6d28d9; --accent-ink: #ffffff; }
+:root[data-accent="crimson"] { --accent: #c2410c; --accent-2: #dc2626; --accent-hover: #9a3412; --accent-soft: #ffedd5; --accent-fg: #c2410c; --accent-ink: #ffffff; }
+:root[data-accent="slate"] { --accent: #1e293b; --accent-2: #334155; --accent-hover: #0f172a; --accent-soft: #e2e8f0; --accent-fg: #1e293b; --accent-ink: #ffffff; }
 
 /* 8 套双色渐变强调色（深色系 Midnight / Dark 统一适配） */
-:root[data-color-scheme="dark"][data-accent="indigo"] { --accent: #3b82f6; --accent-2: #818cf8; --accent-hover: #2563eb; --accent-soft: rgba(59, 130, 246, 0.16); --accent-fg: #93c5fd; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="cyan"] { --accent: #0ea5e9; --accent-2: #22d3ee; --accent-hover: #0284c7; --accent-soft: rgba(14, 165, 233, 0.16); --accent-fg: #67e8f9; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="emerald"] { --accent: #0d9488; --accent-2: #34d399; --accent-hover: #0f766e; --accent-soft: rgba(16, 185, 129, 0.16); --accent-fg: #34d399; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="amber"] { --accent: #d97706; --accent-2: #fbbf24; --accent-hover: #b45309; --accent-soft: rgba(245, 158, 11, 0.16); --accent-fg: #fcd34d; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="rose"] { --accent: #e11d48; --accent-2: #fb7185; --accent-hover: #be123c; --accent-soft: rgba(244, 63, 94, 0.16); --accent-fg: #fda4af; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="violet"] { --accent: #7c3aed; --accent-2: #c084fc; --accent-hover: #6d28d9; --accent-soft: rgba(168, 85, 247, 0.17); --accent-fg: #d8b4fe; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="crimson"] { --accent: #ea580c; --accent-2: #f87171; --accent-hover: #c2410c; --accent-soft: rgba(239, 68, 68, 0.16); --accent-fg: #fca5a5; --accent-ink: #ffffff; }
-:root[data-color-scheme="dark"][data-accent="slate"] { --accent: #334155; --accent-2: #64748b; --accent-hover: #475569; --accent-soft: rgba(148, 163, 184, 0.14); --accent-fg: #e2e8f0; --accent-ink: #f8fafc; }
+:root[data-color-scheme="dark"][data-accent="indigo"] { --accent: #2563eb; --accent-2: #4f46e5; --accent-hover: #1d4ed8; --accent-soft: rgba(59, 130, 246, 0.16); --accent-fg: #93c5fd; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="cyan"] { --accent: #0369a1; --accent-2: #0284c7; --accent-hover: #075985; --accent-soft: rgba(14, 165, 233, 0.16); --accent-fg: #67e8f9; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="emerald"] { --accent: #0f766e; --accent-2: #047857; --accent-hover: #115e59; --accent-soft: rgba(16, 185, 129, 0.16); --accent-fg: #34d399; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="amber"] { --accent: #b45309; --accent-2: #c2410c; --accent-hover: #92400e; --accent-soft: rgba(245, 158, 11, 0.16); --accent-fg: #fcd34d; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="rose"] { --accent: #be123c; --accent-2: #db2777; --accent-hover: #9f1239; --accent-soft: rgba(244, 63, 94, 0.16); --accent-fg: #fda4af; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="violet"] { --accent: #6d28d9; --accent-2: #7e22ce; --accent-hover: #5b21b6; --accent-soft: rgba(168, 85, 247, 0.17); --accent-fg: #d8b4fe; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="crimson"] { --accent: #c2410c; --accent-2: #dc2626; --accent-hover: #9a3412; --accent-soft: rgba(239, 68, 68, 0.16); --accent-fg: #fca5a5; --accent-ink: #ffffff; }
+:root[data-color-scheme="dark"][data-accent="slate"] { --accent: #334155; --accent-2: #475569; --accent-hover: #475569; --accent-soft: rgba(148, 163, 184, 0.14); --accent-fg: #e2e8f0; --accent-ink: #f8fafc; }
 
 /* 深色模式题型胶囊统一高对比适配 */
 :root[data-color-scheme="dark"] .type-pill[data-qtype="0"] { background: rgba(59, 130, 246, .16); color: #93c5fd; }
@@ -118,6 +118,8 @@
 }
 .appearance-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .appearance-head .appearance-label { margin-bottom: 0; }
+.appearance-head .theme-seg-btn { border: 1px solid var(--line); background: var(--surface-soft); }
+.appearance-head .theme-seg-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-fg); box-shadow: none; }
 .preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
 .preset-chip {
   display: flex; align-items: center; gap: 7px; padding: 6px 8px;

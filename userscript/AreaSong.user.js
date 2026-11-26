@@ -27,6 +27,7 @@
 // @connect      api.tikuhai.com
 // @connect      cx.icodef.com
 // @connect      62.234.36.191
+// @connect      *
 // @grant        GM_addStyle
 // @grant        GM_getResourceText
 // @grant        GM_getValue
@@ -438,7 +439,11 @@
     if (!raw) return "";
     return raw.endsWith("/search") ? raw : `${raw}/search`;
   };
-  const isLocalQuestionBank = (url2) => /127\.0\.0\.1|localhost/i.test(url2 || "");
+  const isLocalQuestionBank = (apiOrUrl) => {
+    const u = typeof apiOrUrl === "string" ? apiOrUrl : (apiOrUrl && apiOrUrl.url || "");
+    const n = typeof apiOrUrl === "string" ? "" : (apiOrUrl && apiOrUrl.name || "");
+    return n === "本地题库" || /127\.0\.0\.1|localhost/i.test(u);
+  };
   const normalizeQuestionBankMode = (mode) => {
     return mode === "local" || mode === "remote" || mode === "both" ? mode : "both";
   };
@@ -450,8 +455,8 @@
       url: toSearchUrl(api.url),
       token: api.token || ""
     })).filter((api) => api.url);
-    const localApis = apis.filter((api) => isLocalQuestionBank(api.url));
-    const remoteApis = apis.filter((api) => !isLocalQuestionBank(api.url));
+    const localApis = apis.filter((api) => isLocalQuestionBank(api));
+    const remoteApis = apis.filter((api) => !isLocalQuestionBank(api));
     if (mode === "local") {
       return localApis.length ? localApis : [{ name: "本地题库", url: "http://127.0.0.1:8787/search", token: "" }];
     }
@@ -475,12 +480,14 @@
     "2": "2",
     "3": "3",
     "4": "4",
+    "5": "5",
     "6": "4",
     单选题: "0",
     多选题: "1",
     填空题: "2",
     判断题: "3",
-    简答题: "4"
+    简答题: "4",
+    不定项选择题: "5"
   };
   const toLocalBankOrigin = (url2) => {
     const raw = String(url2 || "").trim().replace(/\/$/, "");
@@ -489,7 +496,7 @@
   };
   const getLocalBankConfig = () => {
     const apis = useConfigStore().queryApis || [];
-    const local = apis.find((api) => isLocalQuestionBank(api.url));
+    const local = apis.find((api) => isLocalQuestionBank(api));
     return {
       origin: toLocalBankOrigin(local && local.url),
       key: (local && local.token) || ""
@@ -513,7 +520,10 @@
     FALSE: "错误"
   };
   const lettersToOptionTexts = (raw, options) => {
-    const compact = String(raw).replace(/[^A-Za-z]/g, "").toUpperCase();
+    const trimmed = String(raw || "").trim();
+    if (!/^[A-Za-z]+(?:[\s,，、|/]+[A-Za-z]+)*$/.test(trimmed))
+      return null;
+    const compact = trimmed.replace(/[^A-Za-z]/g, "").toUpperCase();
     if (!compact || !options.length)
       return null;
     if (![...compact].every((letter) => letter.charCodeAt(0) - 65 < options.length))
@@ -525,7 +535,10 @@
     const optionTexts = Array.isArray(options) ? options.map((item) => String(item ?? "")) : [];
     if (!texts.length)
       return texts;
-    if (optionTexts.some((item) => item.trim())) {
+    const optSet = new Set(optionTexts.map((o) => o.trim()).filter(Boolean));
+    if (optSet.size && texts.every((t) => optSet.has(t)))
+      return texts;
+    if (optSet.size) {
       if (texts.length === 1) {
         const mapped = lettersToOptionTexts(texts[0], optionTexts);
         if (mapped && mapped.length)
@@ -541,7 +554,7 @@
   };
   const collectLocalQuestion = (question, answers) => {
     const title = String((question && question.title) || "").trim();
-    const type = BANK_TYPE_MAP[String((question && question.type) || "")] || "";
+    const type = BANK_TYPE_MAP[String((question && question.type) || "")] || "0";
     let options = Array.isArray(question.optionsText)
       ? question.optionsText.map((item) => String(item || "").trim()).filter(Boolean)
       : [];
@@ -557,7 +570,7 @@
     _GM_xmlhttpRequest({
       url: `${origin}${path}`,
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: key ? { "Content-Type": "application/json", "X-API-Key": key } : { "Content-Type": "application/json" },
       data: JSON.stringify(key ? { ...body, key } : body),
       timeout: 5e3,
       onload: (response) => {
@@ -584,8 +597,8 @@
   const getAnswerFrom = async (question, api, options = {}) => {
     var _a;
     const configStore = useConfigStore();
-    const localRequest = isLocalQuestionBank(api.url);
-    const headers = localRequest ? { "Content-Type": "application/json" } : createApiHeaders(question.refer);
+    const localRequest = isLocalQuestionBank(api);
+    const headers = localRequest ? (api.token ? { "Content-Type": "application/json", "X-API-Key": api.token } : { "Content-Type": "application/json" }) : createApiHeaders(question.refer);
     let data = "";
     try {
       data = JSON.stringify({
@@ -885,6 +898,45 @@
               _: 1
             }, 8, ["modelValue", "type"]), [
               [vue.vShow, vue.unref(configStore).questionBankMode !== "local"]
+            ]),
+            vue.withDirectives(vue.createVNode(_component_el_input, {
+              class: "token-input",
+              style: "margin-top:6px;",
+              modelValue: vue.unref(configStore).queryApis[1] && vue.unref(configStore).queryApis[1].url,
+              "onUpdate:modelValue": ($event) => vue.unref(configStore).queryApis[1] && (vue.unref(configStore).queryApis[1].url = $event),
+              placeholder: "http://127.0.0.1:8787 或公网自托管域名"
+            }, {
+              prepend: vue.withCtx(() => [
+                vue.createVNode(_component_el_button, { class: "token-label" }, {
+                  default: vue.withCtx(() => [
+                    vue.createTextVNode("自建地址")
+                  ]),
+                  _: 1
+                })
+              ]),
+              _: 1
+            }, 8, ["modelValue"]), [
+              [vue.vShow, vue.unref(configStore).questionBankMode !== "remote"]
+            ]),
+            vue.withDirectives(vue.createVNode(_component_el_input, {
+              class: "token-input",
+              style: "margin-top:6px;",
+              modelValue: vue.unref(configStore).queryApis[1] && vue.unref(configStore).queryApis[1].token,
+              "onUpdate:modelValue": ($event) => vue.unref(configStore).queryApis[1] && (vue.unref(configStore).queryApis[1].token = $event),
+              type: isTokenEditing.value ? "text" : "password",
+              placeholder: "自建题库 X-API-Key（本地免填，公网必填）"
+            }, {
+              prepend: vue.withCtx(() => [
+                vue.createVNode(_component_el_button, { class: "token-label" }, {
+                  default: vue.withCtx(() => [
+                    vue.createTextVNode("自建密钥")
+                  ]),
+                  _: 1
+                })
+              ]),
+              _: 1
+            }, 8, ["modelValue", "type"]), [
+              [vue.vShow, vue.unref(configStore).questionBankMode !== "remote"]
             ])
           ]),
           (vue.openBlock(true), vue.createElementBlock(vue.Fragment, null, vue.renderList(_ctx.globalConfig.platformParams[_ctx.globalConfig.platformName].parts, (part) => {
@@ -5763,7 +5815,7 @@
         if (["zy", "ks"].includes(this.type)) {
           const titleElement = ((_a = questionElement == null ? void 0 : questionElement.querySelector("h3")) == null ? void 0 : _a.innerHTML) || "";
           const colorShallowElement = ((_b = questionElement.querySelector(".colorShallow")) == null ? void 0 : _b.outerHTML) || "";
-          questionTitle = this.removeHtml(titleElement.split(colorShallowElement || "")[1] || "");
+          questionTitle = this.removeHtml(colorShallowElement ? (titleElement.split(colorShallowElement)[1] || titleElement) : titleElement);
           const matchedOptionElements = questionElement.querySelectorAll(".answerBg");
           optionElements = Array.from(matchedOptionElements);
           [optionsObject, optionTexts] = this.extractOptions(matchedOptionElements, ".answer_p");

@@ -10,9 +10,12 @@ test("把单个字母答案转成选项正文", () => {
   assert.deepEqual(expandStoredAnswers(["A", "C"], OPTIONS), ["大西洋", "太平洋"]);
 });
 
-test("已经是正文或填空内容时不改写", () => {
+test("已经是正文或填空内容时不改写（含含字母的中文选项与单字母选项）", () => {
   assert.deepEqual(expandStoredAnswers(["太平洋"], OPTIONS), ["太平洋"]);
   assert.deepEqual(expandStoredAnswers(["北京"], []), ["北京"]);
+  assert.deepEqual(expandStoredAnswers(["C语言"], ["Java", "Python", "Go", "C语言"]), ["C语言"]);
+  assert.deepEqual(expandStoredAnswers(["B淋巴细胞"], ["红细胞", "血小板", "B淋巴细胞", "吞噬细胞"]), ["B淋巴细胞"]);
+  assert.deepEqual(expandStoredAnswers(["a"], ["b", "a", "c", "d"]), ["a"]);
 });
 
 test("判断题口语答案转成正确/错误", () => {

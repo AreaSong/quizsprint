@@ -2,6 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordAuditLog } from "./lib/audit.mjs";
 import {
   buildClearSessionCookie,
   buildSessionCookie,
@@ -12,11 +13,25 @@ import {
   isUsingGeneratedPassword,
   verifyPassword
 } from "./lib/auth.mjs";
+import { startAutoBackupScheduler } from "./lib/auto-backup.mjs";
+import { closeAllDbs } from "./lib/db.mjs";
 import { createExamStore } from "./lib/exam-store.mjs";
 import { handleExtraRoutes } from "./lib/extra-routes.mjs";
+import {
+  applySecurityHeaders,
+  attachRequestLogger,
+  createRateLimiter,
+  getClientIp,
+  isRateLimitedEndpoint,
+  registerGracefulShutdown,
+  resolveCorsHeaders
+} from "./lib/http-guard.mjs";
 import { handleLegacyRoutes } from "./lib/legacy-routes.mjs";
+import { recordLoginEvent } from "./lib/login-log.mjs";
+import { getSiteConfig } from "./lib/site-store.mjs";
 import { createStore } from "./lib/store.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
+import { APP_VERSION, DB_SCHEMA_VERSION } from "./lib/version.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.HOST || "0.0.0.0";
@@ -24,7 +39,8 @@ const PORT = Number(process.env.PORT) || 8787;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 const PUBLIC_DIR = path.join(__dirname, "public");
-const MAX_BODY_BYTES = 16 * 1024 * 1024;
+const MAX_BODY_BYTES = 24 * 1024 * 1024;
+const rateLimiter = createRateLimiter();
 
 const store = createStore(DATA_DIR);
 const userStore = createUserStore(DATA_DIR);
@@ -45,7 +61,7 @@ const MIME_TYPES = {
 };
 
 const TEMPLATE = {
-  说明: "type：0单选 1多选 2填空 3判断 4简答 5不定项。options 填全部选项正文。answers 填正确项正文（或选项字母），analysis 填解析，chapter 填章节，difficulty 填难度。",
+  说明: "type：0单选 1多选 2填空 3判断 4简答 5不定项 6实操 7排序拖动 8拖拽配对。options 仅客观选择/判断题填写；answers 填正确答案正文。",
   questions: [
     {
       title: "绿色植物在光照下释放氧气，主要是因为",
@@ -61,40 +77,48 @@ const TEMPLATE = {
 
 const sendJson = (res, status, payload, extraHeaders = {}) => {
   const body = JSON.stringify(payload);
-  res.writeHead(status, {
+  res.writeHead(status, applySecurityHeaders({
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key, X-Bank-Password, referer, u, t",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    ...(res._qsCors || {}),
     ...extraHeaders
-  });
+  }));
   res.end(body);
 };
 
 const sendDownload = (res, filename, payload) => {
   const safeName = encodeURIComponent(filename);
-  res.writeHead(200, {
+  res.writeHead(200, applySecurityHeaders({
     "Content-Type": "application/json; charset=utf-8",
     "Content-Disposition": `attachment; filename*=UTF-8''${safeName}`
-  });
+  }));
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 };
 
 const serveSafeFile = (baseDir, relPath, res) => {
-  const resolved = path.resolve(baseDir, relPath);
-  if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
+  const absBase = path.resolve(baseDir);
+  const resolved = path.resolve(absBase, relPath);
+  if (!resolved.startsWith(absBase + path.sep) && resolved !== absBase) {
     sendJson(res, 403, { code: 403, msg: "禁止访问" });
     return true;
   }
   if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) return false;
   const ext = path.extname(resolved).toLowerCase();
   const noCacheExts = new Set([".html", ".css", ".js", ".mjs"]);
-  res.writeHead(200, {
+  res.writeHead(200, applySecurityHeaders({
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
     "Cache-Control": noCacheExts.has(ext) ? "no-cache" : "public, max-age=300"
-  });
-  fs.createReadStream(resolved).pipe(res);
+  }));
+  if (ext === ".html" && absBase === path.resolve(PUBLIC_DIR)) {
+    const html = fs.readFileSync(resolved, "utf8")
+      .replace(/(href="\/css\/[^"]+\.css)(")/g, `$1?v=${APP_VERSION}$2`)
+      .replace(/(src="\/js\/app\.js)(")/g, `$1?v=${APP_VERSION}$2`);
+    res.end(html);
+    return true;
+  }
+  const stream = fs.createReadStream(resolved);
+  stream.on("error", () => { if (!res.writableEnded) res.destroy(); });
+  stream.pipe(res);
   return true;
 };
 
@@ -123,8 +147,15 @@ const readBody = (req) => new Promise((resolve, reject) => {
 });
 
 const requireAdmin = (req, res) => {
-  if (isAdminRequest(req, userStore.getApiKey())) return true;
+  if (isAdminRequest(req, userStore.getApiKey(), userStore)) return true;
   sendJson(res, 401, { code: 401, msg: "需要管理员登录或有效 X-API-Key" });
+  return false;
+};
+
+const requireGuestAllowed = (req, res) => {
+  if (getSiteConfig(DATA_DIR).allowGuestBrowse !== false) return true;
+  if (getUserFromRequest(req, userStore) || isAdminRequest(req, userStore.getApiKey(), userStore)) return true;
+  sendJson(res, 401, { code: 401, msg: "站点已关闭访客浏览，请先登录账号" });
   return false;
 };
 
@@ -139,20 +170,30 @@ const handleApi = async (req, res, url) => {
   if (method === "GET" && pathname === "/health") {
     const banks = store.listBanks();
     const questionCount = banks.reduce((sum, b) => sum + (b.questionCount || 0), 0);
-    return sendJson(res, 200, { ok: true, count: questionCount, bankCount: banks.length, questionCount });
+    return sendJson(res, 200, {
+      ok: true,
+      version: APP_VERSION,
+      schemaVersion: DB_SCHEMA_VERSION,
+      uptimeSeconds: Math.floor(process.uptime()),
+      count: questionCount,
+      bankCount: banks.length,
+      questionCount
+    });
   }
   if (method === "GET" && pathname === "/api/auth/me") {
     return sendJson(res, 200, {
       code: 200,
-      admin: isAdminRequest(req, userStore.getApiKey()),
+      admin: isAdminRequest(req, userStore.getApiKey(), userStore),
       usingGeneratedPassword: isUsingGeneratedPassword()
     });
   }
   if (method === "POST" && pathname === "/api/auth/login") {
     const body = await readBody(req);
     if (!verifyPassword(body.password)) {
+      recordLoginEvent(DATA_DIR, req, { username: "admin", nickname: "管理口令", role: "admin", status: "failed", reason: "管理密码错误" });
       return sendJson(res, 401, { code: 401, msg: "管理密码错误" });
     }
+    recordLoginEvent(DATA_DIR, req, { username: "admin", nickname: "管理口令", role: "admin", status: "success" });
     const isHttps = req.headers["x-forwarded-proto"] === "https";
     return sendJson(
       res,
@@ -168,6 +209,7 @@ const handleApi = async (req, res, url) => {
     return sendDownload(res, "quizsprint-question-template.json", TEMPLATE);
   }
   if (method === "GET" && pathname === "/api/search") {
+    if (!requireGuestAllowed(req, res)) return;
     const items = store.searchQuestions({
       query: url.searchParams.get("q") || "",
       bankId: url.searchParams.get("bankId") || "",
@@ -175,6 +217,18 @@ const handleApi = async (req, res, url) => {
     });
     return sendJson(res, 200, { code: 200, items, total: items.length });
   }
+
+  const audit = (action, target = "", detail = "") => {
+    const u = getUserFromRequest(req, userStore);
+    recordAuditLog(DATA_DIR, {
+      actor: u ? `${u.nickname || u.username} (${u.username})` : "管理员",
+      actorRole: u?.userRole || "admin",
+      action,
+      target,
+      detail,
+      ip: getClientIp(req)
+    });
+  };
 
   const handledExtra = await handleExtraRoutes(req, res, url, {
     store,
@@ -186,6 +240,8 @@ const handleApi = async (req, res, url) => {
     readBody,
     sendJson,
     requireAdmin,
+    requireGuestAllowed,
+    audit,
     onRequestRestart: () => {
       setTimeout(() => {
         server.close(() => process.exit(0));
@@ -196,6 +252,7 @@ const handleApi = async (req, res, url) => {
   if (handledExtra) return;
 
   if (method === "GET" && pathname === "/api/banks") {
+    if (!requireGuestAllowed(req, res)) return;
     const banks = store.listBanks().map(({ password, ...rest }) => ({
       ...rest,
       locked: Boolean(password)
@@ -213,6 +270,7 @@ const handleApi = async (req, res, url) => {
   if (bankMatch) {
     const bankId = decodeURIComponent(bankMatch[1]);
     if (method === "GET") {
+      if (!requireGuestAllowed(req, res)) return;
       const bank = store.getBank(bankId);
       if (!bank) return sendJson(res, 404, { code: 404, msg: "题库不存在" });
       const { password, ...safeBank } = bank;
@@ -228,21 +286,23 @@ const handleApi = async (req, res, url) => {
       if (!requireAdmin(req, res)) return;
       const out = store.deleteBank(bankId);
       if (out.error) return sendJson(res, 404, { code: 404, msg: out.error });
+      audit("bank.delete", bankId);
       return sendJson(res, 200, { code: 200, ok: true });
     }
   }
 
   const bankSubMatch = pathname.match(/^\/api\/banks\/([^/]+)\/(questions|import|export)$/);
   if (bankSubMatch) {
+    if (bankSubMatch[2] === "questions" && method === "GET" && !requireGuestAllowed(req, res)) return;
     const bank = store.getBank(decodeURIComponent(bankSubMatch[1]));
     if (!bank) return sendJson(res, 404, { code: 404, msg: "题库不存在" });
     const action = bankSubMatch[2];
     const bankPwd = url.searchParams.get("pwd") || req.headers["x-bank-password"] || "";
-    if (method === "GET" && bank.password && bankPwd !== bank.password && !isAdminRequest(req, userStore.getApiKey())) {
+    if (method === "GET" && bank.password && bankPwd !== bank.password && !isAdminRequest(req, userStore.getApiKey(), userStore)) {
       return sendJson(res, 403, { code: 403, locked: true, msg: "该题库已加密，请输入访问密码" });
     }
     if (action === "export" && method === "GET") {
-      if (!getUserFromRequest(req) && !isAdminRequest(req, userStore.getApiKey())) {
+      if (!getUserFromRequest(req, userStore) && !isAdminRequest(req, userStore.getApiKey(), userStore)) {
         return sendJson(res, 401, { code: 401, msg: "请先登录账号后再导出题库" });
       }
       return sendDownload(res, `${bank.name}.json`, { bank: bank.name, questions: store.loadBankQuestions(bank.id) });
@@ -289,7 +349,11 @@ const handleApi = async (req, res, url) => {
   const batchMatch = pathname.match(/^\/api\/banks\/([^/]+)\/questions\/batch$/);
   if (batchMatch && method === "POST") {
     if (!requireAdmin(req, res)) return;
-    const result = store.batchUpdateOrDelete(decodeURIComponent(batchMatch[1]), await readBody(req));
+    const body = await readBody(req);
+    const result = store.batchUpdateOrDelete(decodeURIComponent(batchMatch[1]), body);
+    if (result.status === 200 && body?.action === "delete") {
+      audit("question.batch_delete", decodeURIComponent(batchMatch[1]), `删除 ${result.affected} 题`);
+    }
     return sendJson(res, result.status, { code: result.status, ...result });
   }
 
@@ -298,10 +362,11 @@ const handleApi = async (req, res, url) => {
     const bankId = decodeURIComponent(qItemMatch[1]);
     const qId = decodeURIComponent(qItemMatch[2]);
     if (method === "GET") {
+      if (!requireGuestAllowed(req, res)) return;
       const bank = store.getBank(bankId);
       if (!bank) return sendJson(res, 404, { code: 404, msg: "题库不存在" });
       const bankPwd = url.searchParams.get("pwd") || req.headers["x-bank-password"] || "";
-      if (bank.password && bankPwd !== bank.password && !isAdminRequest(req, userStore.getApiKey())) {
+      if (bank.password && bankPwd !== bank.password && !isAdminRequest(req, userStore.getApiKey(), userStore)) {
         return sendJson(res, 403, { code: 403, locked: true, msg: "该题库已加密" });
       }
       const question = store.loadBankQuestions(bank.id).find((q) => q.id === qId);
@@ -331,11 +396,20 @@ const handleApi = async (req, res, url) => {
 
 const server = http.createServer(async (req, res) => {
   try {
+    const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+    res._qsCors = resolveCorsHeaders(req, url.pathname);
+    attachRequestLogger(req, res, url.pathname);
     if (req.method === "OPTIONS") {
       sendJson(res, 204, {});
       return;
     }
-    const url = new URL(req.url || "/", `http://${req.headers.host || `${HOST}:${PORT}`}`);
+    if (isRateLimitedEndpoint(req.method || "GET", url.pathname)) {
+      const rl = rateLimiter.check(`${getClientIp(req)}:${url.pathname}`);
+      if (!rl.allowed) {
+        sendJson(res, 429, { code: 429, msg: `请求过于频繁，请 ${rl.retryAfterSec} 秒后重试` }, { "Retry-After": String(rl.retryAfterSec) });
+        return;
+      }
+    }
     const handledLegacy = await handleLegacyRoutes(req, res, url, {
       store,
       userStore,
@@ -360,12 +434,20 @@ const server = http.createServer(async (req, res) => {
     }
     sendJson(res, 404, { code: 404, msg: "资源不存在" });
   } catch (error) {
-    sendJson(res, 500, { code: 500, msg: error instanceof Error ? error.message : "服务内部错误" });
+    if (!res.headersSent) {
+      sendJson(res, 500, { code: 500, msg: error instanceof Error ? error.message : "服务内部错误" });
+    }
   }
 });
 
+const stopAutoBackup = startAutoBackupScheduler(DATA_DIR, UPLOADS_DIR);
+registerGracefulShutdown(server, () => {
+  stopAutoBackup();
+  closeAllDbs();
+});
+
 server.listen(PORT, HOST, () => {
-  console.log(`QuizSprint 已启动：http://${HOST}:${PORT}`);
+  console.log(`QuizSprint v${APP_VERSION} 已启动：http://${HOST}:${PORT}`);
   console.log(`数据目录：${DATA_DIR}`);
   if (isUsingGeneratedPassword()) {
     console.log(`未设置 ADMIN_PASSWORD，本次随机管理密码为：${getAdminPassword()}`);

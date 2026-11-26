@@ -171,7 +171,7 @@
 }
 .wb-ring { width: 38px; height: 38px; transform: rotate(-90deg); }
 .wb-ring-bg { fill: none; stroke: var(--line-strong); stroke-width: 3.5; }
-.wb-ring-val { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
+.wb-ring-val { fill: none; stroke: var(--accent-fg); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
 .wb-ring-text strong { display: block; font-size: 0.875rem; line-height: 1.1; color: var(--ink); }
 .wb-ring-text span { display: block; font-size: 0.7188rem; color: var(--muted); }
 
@@ -385,6 +385,7 @@
 .bank-card-meta { margin-top: 4px; font-size: 0.7813rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .card-more-wrap { position: relative; flex: none; }
 .card-more-wrap .dropdown-menu { z-index: 55; }
+.bank-card:has(.dropdown-menu:not([hidden])) { z-index: 30; transform: none !important; }
 
 @media (max-width: 960px) {
   .mode-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }

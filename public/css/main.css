@@ -148,8 +148,8 @@ select:focus, input:focus, textarea:focus {
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); }
 .btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
-.btn.ok { background: var(--ok); color: #fff; }
-.btn.danger { background: var(--bad); color: #fff; }
+.btn.ok { background: #15803d; color: #fff; }
+.btn.danger { background: #dc2626; color: #fff; }
 .btn.ghost { background: transparent; border-color: var(--line); color: var(--ink); }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--line-strong); }
 .btn.soft-active { background: var(--accent-soft); color: var(--accent-fg); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }

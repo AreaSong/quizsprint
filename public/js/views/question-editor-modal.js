@@ -130,11 +130,12 @@ export const openQuestionEditorModal = (modal, { bankId, item, onSaved }) => {
   modal.querySelector("#ed-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const typeVal = modal.querySelector("#ed-type").value;
+    const isChoiceType = !["2", "3", "4", "6", "7", "8"].includes(typeVal);
     const payload = {
       type: typeVal, chapter: modal.querySelector("#ed-chapter").value.trim(),
       difficulty: modal.querySelector("#ed-diff").value, title: modal.querySelector("#ed-title").value.trim(),
       images, answerImages,
-      options: modal.querySelector("#ed-options").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+      options: isChoiceType ? modal.querySelector("#ed-options").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [],
       answers: parseAnswersForType(typeVal, modal.querySelector("#ed-answers").value),
       analysis: modal.querySelector("#ed-analysis").value.trim()
     };

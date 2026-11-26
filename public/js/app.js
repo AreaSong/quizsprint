@@ -10,6 +10,7 @@ import {
 } from "./api.js";
 import { applyAppearance, cycleTheme, initAppearanceControl } from "./appearance.js";
 import { initGlobalModalDismiss, openFormDialog } from "./dialog.js";
+import { applySiteInfo, exportMyProgressJson, maybeOpenSetupWizard, triggerImportMyProgress } from "./site-shell.js";
 import { initSystemAndDisclaimerModals } from "./system-modal.js";
 import { renderBanksView } from "./views/banks-view.js";
 import { renderExamsView } from "./views/exams-view.js";
@@ -52,7 +53,8 @@ const appState = {
   subjects: [],
   activeBankId: localStorage.getItem("as_qb_active_bank") || "",
   isAdmin: false,
-  registrationMode: "open"
+  registrationMode: "open",
+  siteInfo: null
 };
 
 let userRegisterMode = false;
@@ -100,7 +102,7 @@ const renderUserMenu = () => {
     <div id="user-dropdown" class="dropdown-menu" ${userDropdownOpen ? "" : "hidden"}>
       <button type="button" class="dropdown-item js-menu-exams">我的成绩单</button>
       <button type="button" class="dropdown-item js-menu-ai">AI 模型设置 ${hasAiKey ? "✓" : "(未填)"}</button>
-      ${user ? `<button type="button" class="dropdown-item js-menu-nick">修改个人昵称</button><button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button>` : ""}
+      ${user ? `<button type="button" class="dropdown-item js-menu-nick">修改个人昵称</button><button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button><button type="button" class="dropdown-item js-menu-exp-prog">导出学习进度</button><button type="button" class="dropdown-item js-menu-imp-prog">导入学习进度</button>` : ""}
       ${appState.isAdmin ? `
         <div class="dropdown-sep"></div>
         <button type="button" class="dropdown-item js-menu-users">用户与门禁</button>
@@ -124,6 +126,11 @@ const renderUserMenu = () => {
   userMenuWrap.querySelector(".js-menu-ai").addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openAiModal(); });
   userMenuWrap.querySelector(".js-menu-nick")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangeNickDialog(); });
   userMenuWrap.querySelector(".js-menu-pwd")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangePwdDialog(); });
+  userMenuWrap.querySelector(".js-menu-exp-prog")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); exportMyProgressJson(); });
+  userMenuWrap.querySelector(".js-menu-imp-prog")?.addEventListener("click", () => {
+    userDropdownOpen = false; renderUserMenu();
+    triggerImportMyProgress(async () => { await refreshAuth(); renderCurrentView(); });
+  });
   userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("users"); });
   userMenuWrap.querySelector(".js-menu-system")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("system"); });
   userMenuWrap.querySelector(".js-menu-logout").addEventListener("click", doLogout);
@@ -131,12 +138,20 @@ const renderUserMenu = () => {
 
 const refreshBanks = async () => {
   const [bankData, subData] = await Promise.all([
-    apiRequest("/api/banks"),
+    apiRequest("/api/banks").catch(() => ({ banks: [] })),
     apiRequest("/api/subjects").catch(() => ({ subjects: [] }))
   ]);
   appState.banks = bankData.banks || [];
   appState.subjects = subData.subjects || [];
   syncBankSelection();
+};
+
+const refreshSiteInfo = async () => {
+  const info = await apiRequest("/api/site/info").catch(() => null);
+  if (info) {
+    appState.siteInfo = info;
+    applySiteInfo(info);
+  }
 };
 
 const refreshAuth = async () => {
@@ -228,10 +243,18 @@ const renderCurrentView = () => {
     onNavigate: navigate,
     setFocusMode,
     onRefreshBanks: async () => { await refreshBanks(); renderCurrentView(); },
+    onAuthChanged: async () => { await refreshAuth(); renderCurrentView(); },
+    onSiteUpdated: (cfg) => { if (appState.siteInfo) { appState.siteInfo.siteConfig = cfg; applySiteInfo(appState.siteInfo); } },
     onRequireLogin: () => openAccountModal(true),
     onRequireUserLogin: () => openAccountModal(false),
     onToggleTheme: cycleTheme
   };
+
+  if (appState.siteInfo?.siteConfig?.allowGuestBrowse === false && !ctx.isLoggedIn) {
+    appMain.innerHTML = `<div class="panel empty-state"><strong style="font-size:1rem;">站点已开启仅登录访问</strong><p class="muted-text" style="margin:0;">管理员关闭了访客浏览，请先登录账号后查看题库与练习。</p><button type="button" id="guest-go-login" class="btn primary tiny">立即登录</button></div>`;
+    appMain.querySelector("#guest-go-login")?.addEventListener("click", () => openAccountModal(false));
+    return;
+  }
 
   if (appState.route === "banks") renderBanksView(appMain, ctx);
   else if (appState.route === "practice") renderPracticeView(appMain, ctx);
@@ -251,6 +274,7 @@ const doLogout = async () => {
     apiRequest("/api/auth/logout", { method: "POST" }).catch(() => {})
   ]);
   await refreshAuth();
+  await refreshBanks();
   showToast("已退出账号");
   renderCurrentView();
 };
@@ -337,7 +361,11 @@ document.addEventListener("click", (e) => {
   const routeBtn = e.target.closest("[data-route]");
   if (routeBtn) navigate(routeBtn.dataset.route);
 });
-document.getElementById("go-home").addEventListener("click", () => navigate("banks"));
+const goHomeEl = document.getElementById("go-home");
+goHomeEl.addEventListener("click", () => navigate("banks"));
+goHomeEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("banks"); }
+});
 focusBackBtn?.addEventListener("click", () => navigate(focusBackTarget));
 document.getElementById("appearance-btn")?.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -352,27 +380,38 @@ document.getElementById("u-toggle-mode").addEventListener("click", () => {
 });
 document.getElementById("user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const username = document.getElementById("u-name").value.trim();
+  const password = document.getElementById("u-pass").value;
   try {
-    const endpoint = userRegisterMode ? "/api/user/register" : "/api/user/login";
-    await apiRequest(endpoint, {
-      method: "POST",
-      body: JSON.stringify({
-        username: document.getElementById("u-name").value.trim(),
-        password: document.getElementById("u-pass").value,
-        nickname: document.getElementById("u-nick").value.trim(),
-        inviteCode: document.getElementById("u-invite").value.trim()
-      })
-    });
+    if (userRegisterMode) {
+      await apiRequest("/api/user/register", {
+        method: "POST",
+        body: JSON.stringify({ username, password, nickname: document.getElementById("u-nick").value.trim(), inviteCode: document.getElementById("u-invite").value.trim() })
+      });
+    } else {
+      try {
+        await apiRequest("/api/user/login", { method: "POST", body: JSON.stringify({ username, password }) });
+      } catch (loginErr) {
+        if (loginErr.status === 401 && username.toLowerCase() === "admin") {
+          await apiRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+        } else throw loginErr;
+      }
+    }
     await refreshAuth();
+    await refreshBanks();
     userModal.hidden = true;
     showToast(appState.isAdmin ? "管理员登录成功" : "登录成功，已启用云端同步", "ok");
     renderCurrentView();
-  } catch (err) {
-    showToast(err.message, "bad");
-  }
+  } catch (err) { showToast(err.message, "bad"); }
 });
 
 document.getElementById("ai-close").addEventListener("click", () => { aiModal.hidden = true; });
+document.getElementById("ai-clear-btn")?.addEventListener("click", () => {
+  localStorage.removeItem("as_qb_ai_config");
+  openAiModal();
+  renderUserMenu();
+  showToast("已清除本地 AI 密钥与配置");
+});
 document.getElementById("ai-fetch-models").addEventListener("click", async () => {
   try {
     showToast("正在拉取模型列表...");
@@ -399,16 +438,26 @@ document.getElementById("ai-form").addEventListener("submit", (e) => {
   showToast("本地 AI 配置已保存（仅当前浏览器可用）", "ok");
 });
 
+const syncRouteFromHash = () => {
+  const examMatch = location.hash.match(/^#exam=([^&]+)/);
+  if (examMatch) return navigate("exams", { examId: decodeURIComponent(examMatch[1]) });
+  const hashRoute = location.hash.replace(/^#/, "");
+  navigate(VALID_ROUTES.has(hashRoute) ? hashRoute : "banks");
+};
+
 const bootstrap = async () => {
   initSystemAndDisclaimerModals();
   initGlobalModalDismiss();
   initAppearanceControl(appearanceMenu);
   applyAppearance();
-  await Promise.all([refreshBanks(), refreshAuth()]);
-  const examMatch = location.hash.match(/^#exam=([^&]+)/);
-  if (examMatch) return navigate("exams", { examId: decodeURIComponent(examMatch[1]) });
-  const hashRoute = location.hash.replace(/^#/, "");
-  navigate(VALID_ROUTES.has(hashRoute) ? hashRoute : "banks");
+  await Promise.all([refreshBanks(), refreshAuth(), refreshSiteInfo()]);
+  window.addEventListener("hashchange", syncRouteFromHash);
+  syncRouteFromHash();
+  maybeOpenSetupWizard(appState.siteInfo, async () => {
+    await Promise.all([refreshAuth(), refreshSiteInfo()]);
+    await refreshBanks();
+    renderCurrentView();
+  });
 };
 
 bootstrap().catch((err) => {

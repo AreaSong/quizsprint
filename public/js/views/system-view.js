@@ -1,6 +1,12 @@
 import { apiRequest, escapeHtml, showToast } from "../api.js";
 import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import {
+  bindSiteConfigCard,
+  buildAuditLogsCardHtml,
+  buildAutoBackupListHtml,
+  buildSiteConfigCardHtml
+} from "./system-extra-cards.js";
 
 const formatUptime = (sec) => {
   const s = Number(sec || 0);
@@ -36,7 +42,11 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
         <span class="badge ${st.dirty ? "bad" : "ok"}">${st.isGitRepo ? (st.dirty ? `未提交修改 (${st.dirtyFiles.length})` : "工作区干净") : "静态模式"}</span>
       </div>
       <div class="sys-meta-box">
-        <div><strong>${st.isGitRepo ? `分支：${escapeHtml(st.branch)}` : "非 Git 仓库运行"}</strong></div>
+        <div class="row-gap" style="margin-bottom:4px;">
+          <span class="badge ok">版本 v${escapeHtml(st.appVersion || "1.1.0")}</span>
+          <span class="badge">Schema v${escapeHtml(String(st.schemaVersion || 3))}</span>
+          <strong>${st.isGitRepo ? `分支：${escapeHtml(st.branch)}` : "非 Git 仓库运行"}</strong>
+        </div>
         ${st.isGitRepo ? `
           <div class="muted-text" style="margin-top:4px;">当前版本：<code>${escapeHtml(st.shortCommit)}</code> · ${escapeHtml(st.commitMessage)}</div>
           <div class="muted-text">提交时间：${escapeHtml(st.commitDate.slice(0, 19).replace("T", " "))}</div>
@@ -54,13 +64,13 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
   `;
 };
 
-const buildBackupCardHtml = (dbStats, maintainReport) => {
+const buildBackupCardHtml = (dbStats, maintainReport, autoBackups = []) => {
   const c = dbStats?.counts || {};
   return `
     <section class="panel sys-card">
       <div class="row-gap" style="justify-content:space-between;">
-        <h3 style="margin:0;font-size:1rem;">SQLite 数据库备份与维护</h3>
-        <span class="badge ok">${escapeHtml(dbStats?.journalMode || "WAL")} · ${formatBytes(dbStats?.dbSizeBytes)}</span>
+        <h3 style="margin:0;font-size:1rem;">数据库全量灾备与维护</h3>
+        <span class="badge ok">${escapeHtml(dbStats?.journalMode || "WAL")} · Schema v${escapeHtml(String(dbStats?.schemaVersion || 3))} · ${formatBytes(dbStats?.dbSizeBytes)}</span>
       </div>
       <div class="sys-meta-box">
         <div class="row-gap" style="font-size:0.75rem;">
@@ -72,14 +82,16 @@ const buildBackupCardHtml = (dbStats, maintainReport) => {
           <span class="badge">错题聚合 ${c.wrongStats ?? "-"}</span>
           <span class="badge">上传图片 ${dbStats?.uploadCount ?? "-"}</span>
         </div>
-        <p class="muted-text" style="margin:10px 0 0;font-size:0.7813rem;">下载备份将通过 <code>VACUUM INTO</code> 生成完整原子快照；一键维护可清理孤立进度、孤立图片并压缩空闲页。</p>
+        <p class="muted-text" style="margin:10px 0 0;font-size:0.7813rem;">推荐下载 <code>.qsbak</code> 全量包（同时含 SQLite 快照与上传配图）；恢复前会自动保存 <code>pre-restore.db</code> 快照。</p>
       </div>
       ${maintainReport ? `<div class="muted-text" style="font-size:0.7813rem;color:var(--ok);">${escapeHtml(maintainReport)}</div>` : ""}
       <div class="row-gap" style="justify-content:flex-end;">
-        <label class="btn ghost-danger tiny">上传恢复 (.db)<input id="db-restore-file" type="file" accept=".db,.sqlite,.sqlite3" hidden></label>
-        <button type="button" id="db-maintain-btn" class="btn ghost tiny">一键清理并压缩 (VACUUM)</button>
-        <a class="btn primary tiny" href="/api/admin/backup.db" style="text-decoration:none;">下载数据库备份 (.db)</a>
+        <label class="btn ghost-danger tiny">上传恢复 (.qsbak/.db)<input id="db-restore-file" type="file" accept=".qsbak,.db,.sqlite,.sqlite3" hidden></label>
+        <button type="button" id="db-maintain-btn" class="btn ghost tiny">一键清理压缩</button>
+        <a class="btn ghost tiny" href="/api/admin/backup.db" style="text-decoration:none;">导出纯库 (.db)</a>
+        <a class="btn primary tiny" href="/api/admin/backup/full" style="text-decoration:none;">下载完整备份 (.qsbak)</a>
       </div>
+      ${buildAutoBackupListHtml(autoBackups)}
     </section>
   `;
 };
@@ -136,19 +148,28 @@ export const renderSystemView = async (container, ctx) => {
   let statusData = {};
   let dbStats = {};
   let apiKey = "";
+  let siteConfig = {};
+  let autoBackups = [];
+  let auditLogs = [];
   let checkResult = null;
   let outputText = "";
   let maintainReport = "";
 
   const loadAll = async () => {
-    const [st, db, keyRes] = await Promise.all([
+    const [st, db, keyRes, siteRes, bakRes, audRes] = await Promise.all([
       apiRequest("/api/admin/system/status"),
       apiRequest("/api/admin/db/stats"),
-      apiRequest("/api/admin/apikey")
+      apiRequest("/api/admin/apikey"),
+      apiRequest("/api/site/info"),
+      apiRequest("/api/admin/backups"),
+      apiRequest("/api/admin/audit-logs?limit=50")
     ]);
     statusData = st;
     dbStats = db;
     apiKey = keyRes.apiKey || "";
+    siteConfig = siteRes.siteConfig || {};
+    autoBackups = bakRes.backups || [];
+    auditLogs = audRes.logs || [];
   };
 
   try { await loadAll(); }
@@ -169,8 +190,10 @@ export const renderSystemView = async (container, ctx) => {
         <div class="view-scroll" style="margin-top:14px;">
           <div class="sys-grid">
             ${buildUpdateCardHtml(statusData, checkResult, outputText)}
-            ${buildBackupCardHtml(dbStats, maintainReport)}
+            ${buildBackupCardHtml(dbStats, maintainReport, autoBackups)}
+            ${buildSiteConfigCardHtml(siteConfig)}
             ${buildApiKeyCardHtml(apiKey)}
+            ${buildAuditLogsCardHtml(auditLogs)}
           </div>
         </div>
       </div>
@@ -219,11 +242,26 @@ export const renderSystemView = async (container, ctx) => {
         });
         const res = await apiRequest("/api/admin/db/restore", { method: "POST", body: JSON.stringify({ base64: dataUrl }) });
         dbStats = res.stats;
-        maintainReport = `备份恢复成功（已保留 pre-restore 快照）：题库 ${res.stats?.counts?.banks ?? 0} 个 · 试题 ${res.stats?.counts?.questions ?? 0} 道`;
+        maintainReport = `备份恢复成功（已保留 pre-restore 快照）：题库 ${res.stats?.counts?.banks ?? 0} 个 · 试题 ${res.stats?.counts?.questions ?? 0} 道${res.restoredUploads ? ` · 还原图片 ${res.restoredUploads} 张` : ""}`;
         showToast("数据库恢复完成", "ok");
         await ctx.onRefreshBanks?.();
         renderPage();
       } catch (err) { showToast(err.message, "bad"); }
+    });
+    container.querySelector("#sys-auto-backup-btn")?.addEventListener("click", async () => {
+      try {
+        const res = await apiRequest("/api/admin/backups/run", { method: "POST" });
+        autoBackups = res.backups || autoBackups;
+        showToast(`已生成全量快照：${res.name}`, "ok");
+        await loadAll();
+        renderPage();
+      } catch (err) { showToast(err.message, "bad"); }
+    });
+    bindSiteConfigCard(container, async (nextCfg) => {
+      siteConfig = nextCfg;
+      ctx.onSiteUpdated?.(nextCfg);
+      await loadAll();
+      renderPage();
     });
     container.querySelector("#db-maintain-btn").addEventListener("click", async () => {
       try {

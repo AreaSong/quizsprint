@@ -1,12 +1,16 @@
 {
   "name": "quizsprint",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "QuizSprint · 自托管在线刷题、背题与防作弊考试学习平台（兼容油猴脚本本地题库）",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test *.test.mjs",
+    "check": "for f in server.mjs question-record.mjs lib/*.mjs public/exam-parse.js public/js/*.js public/js/views/*.js; do node --check \"$f\" || exit 1; done && echo SYNTAX_OK",
     "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {

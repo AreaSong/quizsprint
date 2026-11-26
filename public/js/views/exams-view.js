@@ -1,8 +1,9 @@
-import { apiRequest, escapeHtml, getCloudUser, LETTERS, showToast, TYPE_LABELS } from "../api.js";
+import { apiRequest, escapeHtml, getCloudUser, showToast, TYPE_LABELS } from "../api.js";
 import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 import { renderRichMarkdown } from "../markdown.js";
 import { openCreateExamModal, openEditExamModal, openMySubmissionsModal, openSubmissionsModal } from "./exam-modals.js";
+import { bindAndRestoreExamInputs, renderExamQuestionInputHtml } from "./exam-room-inputs.js";
 
 let activeExamCleanup = null;
 
@@ -23,24 +24,6 @@ const saveExamDraft = (examId, draft) => {
 
 const clearExamDraft = (examId) => {
   try { localStorage.removeItem(getExamDraftKey(examId)); } catch { /* ignore */ }
-};
-
-const restoreExamInputs = (container, questions, answers) => {
-  for (const q of questions) {
-    const saved = answers[q.id];
-    if (!Array.isArray(saved) || !saved.length) continue;
-    const card = container.querySelector(`[data-qid="${CSS.escape(q.id)}"]`);
-    if (!card) continue;
-    if (q.options?.length) {
-      const picked = new Set(saved);
-      card.querySelectorAll("input[type=radio], input[type=checkbox]").forEach((inp) => {
-        inp.checked = picked.has(inp.value);
-      });
-    } else {
-      const fill = card.querySelector(".er-fill");
-      if (fill) fill.value = saved.join(" | ");
-    }
-  }
 };
 
 const getExamStatus = (ex) => {
@@ -236,6 +219,7 @@ export const renderExamsView = async (container, ctx) => {
 };
 
 const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
+  const goBackExams = () => (ctx.onNavigate ? ctx.onNavigate("exams") : renderExamsView(container, { ...ctx, routeParams: {} }));
   let exam;
   try {
     const res = await apiRequest(`/api/exams/${encodeURIComponent(examId)}?code=${encodeURIComponent(code)}`);
@@ -248,7 +232,7 @@ const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
         fields: [{ name: "code", label: "考试密码", type: "password", required: true }],
         submitText: "进入考场"
       });
-      if (!form) return;
+      if (!form) return goBackExams();
       return renderExamRoom(container, examId, form.code, ctx);
     }
     container.innerHTML = `<div class="panel"><p class="muted-text">${escapeHtml(err.message)}</p></div>`;
@@ -262,7 +246,7 @@ const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
     return startExamSession(container, exam, {
       studentName: draft.studentName,
       studentNo: draft.studentNo || ""
-    }, draft, () => renderExamsView(container, { ...ctx, routeParams: {} }));
+    }, draft, goBackExams, code || draft.code || "");
   }
   if (draft) clearExamDraft(examId);
 
@@ -285,11 +269,11 @@ const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
     startExamSession(container, exam, {
       studentName: container.querySelector("#stu-name").value.trim(),
       studentNo: container.querySelector("#stu-no").value.trim()
-    }, null, () => renderExamsView(container, { ...ctx, routeParams: {} }));
+    }, null, goBackExams, code);
   });
 };
 
-const startExamSession = (container, exam, student, restoredDraft = null, onBackExams = null) => {
+const startExamSession = (container, exam, student, restoredDraft = null, onBackExams = null, examCode = "") => {
   const questions = exam.questionsSnapshot || [];
   const answers = restoredDraft?.answers && typeof restoredDraft.answers === "object" ? { ...restoredDraft.answers } : {};
   const fallbackScore = questions.length ? Math.round(((exam.totalScore || 100) / questions.length) * 10) / 10 : 0;
@@ -301,7 +285,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
   let remainSec = calcRemainSec();
 
   const persistDraft = () => {
-    if (!finished) saveExamDraft(exam.id, { ...student, answers, tabSwitches, startTime, endAt });
+    if (!finished) saveExamDraft(exam.id, { ...student, answers, tabSwitches, startTime, endAt, code: examCode });
   };
   persistDraft();
 
@@ -315,6 +299,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
         method: "POST",
         body: JSON.stringify({
           ...student,
+          code: examCode,
           answers,
           tabSwitches,
           usedSeconds: Math.round((Date.now() - startTime) / 1000)
@@ -398,50 +383,19 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
         </div>
       </div>
       <div class="view-scroll" style="margin-top:14px;display:flex;flex-direction:column;gap:16px;padding-right:4px;">
-        ${questions.map((q, idx) => {
-          const examOpts = q.options?.length ? q.options : (String(q.type) === "3" ? ["正确", "错误"] : []);
-          return `
+        ${questions.map((q, idx) => `
           <div class="panel" data-qid="${escapeHtml(q.id)}">
             <div class="row-gap" style="margin-bottom:6px;"><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>第 ${idx + 1} 题</strong></div>
             <div class="q-title md-content" style="margin:4px 0 8px;font-size:0.9375rem;">${renderRichMarkdown(q.title)}</div>
             ${(q.images || []).length ? `<div class="row-gap" style="margin-top:8px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-            ${examOpts.length ? `
-              <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-                ${examOpts.map((opt, oi) => `
-                  <label class="row-gap" style="cursor:pointer;">
-                    <input type="${q.type === "1" || q.type === "5" ? "checkbox" : "radio"}" name="q_${escapeHtml(q.id)}" value="${escapeHtml(opt)}">
-                    <span>${LETTERS[oi] || oi + 1}. ${escapeHtml(opt)}</span>
-                  </label>
-                `).join("")}
-              </div>
-            ` : ((q.type === "4" || q.type === "6" || q.type === "7" || q.type === "8")
-              ? `<textarea class="er-fill ${q.type === "7" || q.type === "8" ? "er-lines" : ""}" rows="4" placeholder="${q.type === "7" ? "每行输入一个正确顺序步骤..." : (q.type === "8" ? "每行输入一条配对（格式：左侧 => 右侧）..." : "请输入作答步骤 / 代码 / 简答内容...")}" style="width:100%;margin-top:8px;"></textarea>`
-              : `<input class="er-fill" type="text" placeholder="请输入答案（多空用 | 分隔）" style="width:100%;margin-top:8px;">`)}
+            ${renderExamQuestionInputHtml(q, answers[q.id] || [])}
           </div>
-        `;
-        }).join("")}
+        `).join("")}
       </div>
     </div>
   `;
 
-  container.querySelectorAll("input[type=radio], input[type=checkbox]").forEach((inp) => {
-    inp.addEventListener("change", () => {
-      const qid = inp.closest("[data-qid]").dataset.qid;
-      answers[qid] = [...container.querySelectorAll(`[data-qid="${CSS.escape(qid)}"] input:checked`)].map((i) => i.value);
-      persistDraft();
-    });
-  });
-  container.querySelectorAll(".er-fill").forEach((inp) => {
-    inp.addEventListener("input", () => {
-      const qid = inp.closest("[data-qid]").dataset.qid;
-      const sep = inp.classList.contains("er-lines") ? /\r?\n/ : "|";
-      answers[qid] = inp.tagName === "TEXTAREA" && !inp.classList.contains("er-lines")
-        ? (inp.value.trim() ? [inp.value.trim()] : [])
-        : inp.value.split(sep).map((s) => s.trim()).filter(Boolean);
-      persistDraft();
-    });
-  });
-  restoreExamInputs(container, questions, answers);
+  bindAndRestoreExamInputs(container, questions, answers, persistDraft);
   updateClock();
   container.querySelector("#er-submit").addEventListener("click", async () => {
     const ok = await openConfirmDialog({ title: "确认交卷", message: "提交后本次考试将立即结束并评分，确定现在交卷吗？", confirmText: "立即交卷" });

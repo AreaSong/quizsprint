@@ -36,16 +36,18 @@ export const isMultiChoice = (q) => q.type === "1" || q.type === "5";
 export const isAnswerCorrect = (q, userSelected) => {
   const expected = (q.answers || []).map(normText).filter(Boolean);
   const actual = (Array.isArray(userSelected) ? userSelected : [userSelected]).map(normText).filter(Boolean);
-  if (!expected.length || actual.length !== expected.length) return false;
-  if (q.type === "2" || q.type === "7") return expected.every((ans, idx) => ans === actual[idx]);
+  if (!expected.length || !actual.length) return false;
+  if (q.type === "2" || q.type === "7") return expected.length === actual.length && expected.every((ans, idx) => ans === actual[idx]);
   const expSet = new Set(expected);
-  return actual.every((item) => expSet.has(item));
+  const uniq = [...new Set(actual)];
+  return uniq.length === expSet.size && uniq.every((item) => expSet.has(item));
 };
 
 export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems, matchState }) => {
   if (isOrderType(q)) return buildOrderQuestionHtml({ q, items: orderItems || [], record, showAnswerNow });
   if (isMatchType(q)) return buildMatchQuestionHtml({ q, state: matchState, record, showAnswerNow });
-  if (opts.length) {
+  const isChoice = ["0", "1", "3", "5"].includes(String(q.type));
+  if (isChoice && opts.length) {
     const expectedSet = new Set((q.answers || []).map(normText));
     const activeSelected = multiDraft.size ? [...multiDraft] : (record?.selected || []);
     const userSet = new Set(activeSelected.map(normText));
@@ -167,6 +169,7 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
   const doneCount = correctCount + wrongCount;
   const rate = doneCount ? Math.round((correctCount / doneCount) * 100) : 0;
   const wrongLen = !examSession ? (bankState?.wrongIds || []).length : 0;
+  const favLen = !examSession ? (bankState?.favoriteIds || []).length : 0;
   const masterLen = !examSession ? (bankState?.masteredIds || []).length : 0;
 
   return `
@@ -176,7 +179,7 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         <span style="color:var(--bad);font-weight:600;">错 ${wrongCount}</span>
         <span>正确率 ${rate}%</span>
       </div>
-      <button type="button" class="btn ghost tiny js-reset-progress">清空进度</button>
+      ${examSession ? "" : '<button type="button" class="btn ghost tiny js-reset-progress">清空进度</button>'}
     </div>
     <div class="sheet-grid">
       ${list.map((item, idx) => {
@@ -188,9 +191,10 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         return `<button class="${cls.join(" ")}" data-jump="${idx}">${idx + 1}</button>`;
       }).join("")}
     </div>
-    ${wrongLen || masterLen ? `
+    ${wrongLen || favLen || masterLen ? `
       <div class="row-gap" style="gap:6px;margin-bottom:6px;">
         ${wrongLen ? `<button type="button" class="btn ghost tiny js-clear-wrong">清错题 (${wrongLen})</button>` : ""}
+        ${favLen ? `<button type="button" class="btn ghost tiny js-clear-fav">清收藏 (${favLen})</button>` : ""}
         ${masterLen ? `<button type="button" class="btn ghost tiny js-clear-mastered">清斩题 (${masterLen})</button>` : ""}
       </div>
     ` : ""}
@@ -201,14 +205,16 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         <label class="switch-row"><span>背题模式（直出答案）</span><input class="js-sw-recite" type="checkbox" ${settings.reciteMode ? "checked" : ""}></label>
         <label class="switch-row"><span>答对自动下一题</span><input class="js-sw-auto" type="checkbox" ${settings.autoNext ? "checked" : ""}></label>
         <label class="switch-row"><span>选项乱序</span><input class="js-sw-shuffle" type="checkbox" ${settings.shuffleOptions ? "checked" : ""}></label>
-        <div class="switch-row">
-          <span>选题策略</span>
-          <select class="js-sw-strategy" style="padding:3px 6px;font-size:0.75rem;">
-            <option value="default" ${settings.strategy === "default" ? "selected" : ""}>默认顺序</option>
-            <option value="wrongFirst" ${settings.strategy === "wrongFirst" ? "selected" : ""}>错题优先</option>
-            <option value="unansweredFirst" ${settings.strategy === "unansweredFirst" ? "selected" : ""}>未做题优先</option>
-          </select>
-        </div>
+        ${examSession ? "" : `
+          <div class="switch-row">
+            <span>选题策略</span>
+            <select class="js-sw-strategy" style="padding:3px 6px;font-size:0.75rem;">
+              <option value="default" ${settings.strategy === "default" ? "selected" : ""}>默认顺序</option>
+              <option value="wrongFirst" ${settings.strategy === "wrongFirst" ? "selected" : ""}>错题优先</option>
+              <option value="unansweredFirst" ${settings.strategy === "unansweredFirst" ? "selected" : ""}>未做题优先</option>
+            </select>
+          </div>
+        `}
         <div class="switch-row">
           <span>错题移出条件</span>
           <select class="js-sw-streak" style="padding:3px 6px;font-size:0.75rem;">

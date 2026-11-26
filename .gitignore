@@ -16,6 +16,13 @@ data/user-progress/
 data/exams.json
 data/exam-submissions/
 data/ai-config.json
+data/backups/
+
+# 环境变量配置
+.env
+.env.local
+.env.*.local
+!.env.example
 
 # 临时目录
 output/

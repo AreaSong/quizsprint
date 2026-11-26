@@ -38,7 +38,7 @@ export const renderPracticeView = async (container, ctx) => {
   let mode = routeParams.mode || "order";
   if (mode === "recite") { settings.reciteMode = true; saveGlobalSettings(settings); mode = "order"; }
   let typeFilter = ""; let chapterFilter = ""; let asideTab = "sheet"; let list = []; let currentIndex = 0;
-  let multiDraft = new Set(); let drillRecords = {}; let examSession = null; let examTimer = null; let keydownHandler = null;
+  let multiDraft = new Set(); let drillRecords = {}; let examSession = null; let examTimer = null; let autoNextTimer = null; let keydownHandler = null;
   let aiWide = Number(settings.asideWidth || 332) >= 460; let pendingAiPrompt = "";
   let shellMounted = false; let lastRenderedQid = null; let lastRenderedAsideTab = "";
   let lastModeBarKey = ""; let lastSheetKey = ""; let lastNotesListVer = -1;
@@ -48,11 +48,12 @@ export const renderPracticeView = async (container, ctx) => {
   const getMatchState = (q) => { if (!matchDraftMap.has(q.id)) matchDraftMap.set(q.id, initMatchState(q)); return matchDraftMap.get(q.id); };
 
   const isNotesCollapsed = () => (settings.notesCollapsed == null ? window.innerWidth < 1320 : Boolean(settings.notesCollapsed));
+  const stopAutoNext = () => { if (autoNextTimer) clearTimeout(autoNextTimer); autoNextTimer = null; };
   const stopTimer = () => { if (examTimer) clearInterval(examTimer); examTimer = null; };
   const clearKeydown = () => { if (keydownHandler) window.removeEventListener("keydown", keydownHandler); keydownHandler = null; };
   const notesCtrl = createNotesController({ container, bankId: bank.id, bankState, getList: () => list, onJump: (idx) => { currentIndex = idx; multiDraft.clear(); renderMain(); } });
   const flushPendingNote = () => notesCtrl.flush();
-  activePracticeCleanup = () => { flushPendingNote(); stopTimer(); clearKeydown(); };
+  activePracticeCleanup = () => { flushPendingNote(); stopAutoNext(); stopTimer(); clearKeydown(); };
 
   const cachedOptions = (q) => {
     const key = `${q.id}_${settings.shuffleOptions}`;
@@ -65,7 +66,7 @@ export const renderPracticeView = async (container, ctx) => {
   };
 
   const buildList = () => {
-    stopTimer(); examSession = null; multiDraft.clear(); drillRecords = {};
+    stopAutoNext(); stopTimer(); examSession = null; multiDraft.clear(); drillRecords = {};
     listVersion += 1; sheetVersion += 1;
     const mastered = new Set(bankState.masteredIds || []);
     const wrong = new Set(bankState.wrongIds || []);
@@ -116,8 +117,9 @@ export const renderPracticeView = async (container, ctx) => {
     saveBankPracticeState(bank.id, bankState, countDaily ? { answered: 1, correct: correct ? 1 : 0, questionId: q.id } : null);
   };
 
-  const goPrev = () => { if (currentIndex > 0) { flushPendingNote(); currentIndex -= 1; multiDraft.clear(); renderMain(); } };
+  const goPrev = () => { stopAutoNext(); if (currentIndex > 0) { flushPendingNote(); currentIndex -= 1; multiDraft.clear(); renderMain(); } };
   const goNext = () => {
+    stopAutoNext();
     if (currentIndex < list.length - 1) {
       flushPendingNote();
       currentIndex += 1; multiDraft.clear();
@@ -144,24 +146,28 @@ export const renderPracticeView = async (container, ctx) => {
     renderMain();
   };
 
-  const renderExamSetup = () => mountExamSetup({
-    container,
-    bankName: bank.name,
-    allQuestions,
-    onCancel: () => { mode = "order"; buildList(); renderMain(); },
-    onStart: ({ list: picked, scoreMap, totalScore, passScore, mins }) => {
-      list = picked; currentIndex = 0; listVersion += 1; sheetVersion += 1;
-      examSession = { answers: {}, scoreMap, totalScore, submitted: false, passScore, remainSec: mins * 60 };
-      examTimer = setInterval(() => {
-        if (!examSession || examSession.submitted || (location.hash && location.hash !== "#practice")) return stopTimer();
-        examSession.remainSec -= 1;
-        const clock = container.querySelector("#exam-clock");
-        if (clock) clock.textContent = `${String(Math.floor(examSession.remainSec / 60)).padStart(2, "0")}:${String(examSession.remainSec % 60).padStart(2, "0")}`;
-        if (examSession.remainSec <= 0) submitExam();
-      }, 1000);
-      renderMain();
-    }
-  });
+  const renderExamSetup = () => {
+    document.body.classList.remove("immersive-mode");
+    return mountExamSetup({
+      container,
+      bankName: bank.name,
+      allQuestions,
+      onCancel: () => { mode = "order"; document.body.classList.toggle("immersive-mode", Boolean(settings.immersive)); buildList(); renderMain(); },
+      onStart: ({ list: picked, scoreMap, totalScore, passScore, mins }) => {
+        document.body.classList.toggle("immersive-mode", Boolean(settings.immersive));
+        list = picked; currentIndex = 0; listVersion += 1; sheetVersion += 1;
+        examSession = { answers: {}, scoreMap, totalScore, submitted: false, passScore, remainSec: mins * 60 };
+        examTimer = setInterval(() => {
+          if (!examSession || examSession.submitted || (location.hash && location.hash !== "#practice")) return stopTimer();
+          examSession.remainSec -= 1;
+          const clock = container.querySelector("#exam-clock");
+          if (clock) clock.textContent = `${String(Math.floor(examSession.remainSec / 60)).padStart(2, "0")}:${String(examSession.remainSec % 60).padStart(2, "0")}`;
+          if (examSession.remainSec <= 0) submitExam();
+        }, 1000);
+        renderMain();
+      }
+    });
+  };
 
   const bindKeyboardAndTouch = (q, opts, showAnswerNow) => {
     clearKeydown();
@@ -234,6 +240,7 @@ export const renderPracticeView = async (container, ctx) => {
       saveBankPracticeState(bank.id, bankState); currentIndex = 0; renderMain();
     });
     scope.querySelector(".js-clear-wrong")?.addEventListener("click", () => clearBankList("wrongIds", "清空错题本", "确定清空本题库错题本标记吗？（不影响已完成记录）", "已清空错题本"));
+    scope.querySelector(".js-clear-fav")?.addEventListener("click", () => clearBankList("favoriteIds", "清空收藏夹", "确定清空本题库全部收藏标记吗？", "已清空收藏夹"));
     scope.querySelector(".js-clear-mastered")?.addEventListener("click", () => clearBankList("masteredIds", "清空已斩题", "确定恢复全部已斩题以便重新练习吗？", "已重置斩题标记"));
     scope.querySelector(".js-sw-recite")?.addEventListener("change", (e) => { settings.reciteMode = e.target.checked; saveGlobalSettings(settings); renderMain(); });
     scope.querySelector(".js-sw-auto")?.addEventListener("change", (e) => { settings.autoNext = e.target.checked; saveGlobalSettings(settings); });
@@ -321,7 +328,9 @@ export const renderPracticeView = async (container, ctx) => {
     container.querySelector("#btn-rm-wrong")?.addEventListener("click", () => {
       bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); delete bankState.wrongStreaks[q.id];
       sheetVersion += 1; saveBankPracticeState(bank.id, bankState); showToast("已移出错题本", "ok");
-      if (mode === "wrong") buildList(); renderMain();
+      const prevIdx = currentIndex;
+      if (mode === "wrong") { buildList(); currentIndex = Math.min(prevIdx, Math.max(0, list.length - 1)); }
+      renderMain();
     });
     container.querySelector("#btn-eval-master")?.addEventListener("click", () => markSubj(true, "已标记秒会并斩题", true));
     container.querySelector("#btn-eval-fuzzy")?.addEventListener("click", () => markSubj(true, "已记录为模糊，保留后续复习"));
@@ -354,7 +363,7 @@ export const renderPracticeView = async (container, ctx) => {
       if (isMultiChoice(q)) { if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val); renderMain(); return; }
       const correct = isAnswerCorrect(q, [val]); justAnsweredQid = q.id;
       recordAnswer(q, [val], correct); renderMain();
-      if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) setTimeout(goNext, 420);
+      if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) { stopAutoNext(); autoNextTimer = setTimeout(goNext, 420); }
     }));
     container.querySelector("#btn-confirm-multi")?.addEventListener("click", () => {
       if (!multiDraft.size) return showToast("请至少选择一个选项", "bad");
@@ -447,6 +456,7 @@ export const renderPracticeView = async (container, ctx) => {
     const notesCollapsed = isNotesCollapsed();
     const activeAsideTab = asideTab === "ai" ? "ai" : "sheet";
     const shell = container.querySelector(".practice-shell");
+    if (!shell) return;
     shell.classList.toggle("notes-collapsed", notesCollapsed);
     shell.classList.toggle("aside-collapsed", Boolean(settings.asideCollapsed));
     shell.classList.toggle("ai-wide", activeAsideTab === "ai" && aiWide);
@@ -461,7 +471,8 @@ export const renderPracticeView = async (container, ctx) => {
     const emptyEl = container.querySelector("#p-empty-slot"); const layoutEl = container.querySelector(".practice-layout");
     if (!list.length) {
       emptyEl.hidden = false; layoutEl.hidden = true;
-      container.querySelector("#p-immbar-slot").innerHTML = ""; container.querySelector("#p-examres-slot").innerHTML = "";
+      container.querySelector("#p-immbar-slot").innerHTML = settings.immersive ? buildImmersiveBarHtml(bank.name, -1, 0, settings) : "";
+      container.querySelector("#p-examres-slot").innerHTML = "";
       lastRenderedQid = null; return;
     }
     emptyEl.hidden = true; layoutEl.hidden = false;

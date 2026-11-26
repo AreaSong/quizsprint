@@ -124,9 +124,27 @@ export const renderImportView = (container, ctx) => {
   const submitBtn = container.querySelector("#imp-submit");
   const cleanMenu = container.querySelector("#imp-clean-menu");
   let parsed = { questions: [], errors: [] };
+  let sourceMode = "text";
+
+  const applyDefaultChapter = (res) => {
+    const chap = chapterEl.value.trim();
+    if (!chap) return res;
+    return {
+      ...res,
+      questions: (res.questions || []).map((q) => (q.chapter ? q : { ...q, chapter: chap }))
+    };
+  };
 
   const renderPreview = (overrideResult = null) => {
-    parsed = overrideResult || parseExamTextDetailed(textarea.value, { chapter: chapterEl.value.trim() });
+    if (overrideResult) {
+      sourceMode = "external";
+      parsed = applyDefaultChapter(overrideResult);
+    } else if (sourceMode === "external" && parsed.questions.length && !textarea.value.trim()) {
+      parsed = applyDefaultChapter(parsed);
+    } else {
+      sourceMode = "text";
+      parsed = parseExamTextDetailed(textarea.value, { chapter: chapterEl.value.trim() });
+    }
     const { questions, errors } = parsed;
     const typeCounts = questions.reduce((acc, q) => { acc[q.type] = (acc[q.type] || 0) + 1; return acc; }, {});
     const countTags = Object.entries(typeCounts).map(([k, v]) => `<span class="type-pill" data-qtype="${escapeHtml(k)}">${TYPE_LABELS[k] || "其他"} ${v}</span>`).join("");
@@ -153,8 +171,8 @@ export const renderImportView = (container, ctx) => {
       showToast("已应用文本整理");
     });
   });
-  container.querySelector("#imp-sample").addEventListener("click", () => { textarea.value = SAMPLE_TEXT; renderPreview(); });
-  container.querySelector("#imp-clear").addEventListener("click", () => { textarea.value = ""; renderPreview(); });
+  container.querySelector("#imp-sample").addEventListener("click", () => { sourceMode = "text"; textarea.value = SAMPLE_TEXT; renderPreview(); });
+  container.querySelector("#imp-clear").addEventListener("click", () => { sourceMode = "text"; textarea.value = ""; renderPreview(); });
 
   container.querySelector("#imp-doc-file").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];

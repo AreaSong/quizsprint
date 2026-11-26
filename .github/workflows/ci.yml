@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Enforce 500-line limit
+        run: |
+          for f in server.mjs question-record.mjs lib/*.mjs public/exam-parse.js public/js/*.js public/js/views/*.js public/css/*.css; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 500 ]; then
+              echo "::error file=$f::File exceeds 500 lines ($lines lines)"
+              exit 1
+            fi
+          done
+
+      - name: Run automated tests
+        run: npm test

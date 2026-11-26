@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="QuizSprint 自托管在线题库、背题与防作弊组卷考试学习平台">
+  <meta name="theme-color" content="#2b5ce6">
   <title>QuizSprint · 自托管题库与在线考试学习平台</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
   <style>html[data-theme="dark"]{background:#090a0d;color-scheme:dark}html[data-theme="midnight"]{background:#0b1220;color-scheme:dark}html[data-theme="paper"]{background:#f4f1ea;color-scheme:light}html[data-theme="sage"]{background:#eaf1ec;color-scheme:light}html[data-theme="mist"]{background:#eef3f9;color-scheme:light}html[data-theme="light"]{background:#f8f9fa;color-scheme:light}</style>
   <script>
     try {
@@ -43,8 +47,8 @@
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
             </span>
             <span class="brand-text">
-              <strong>QuizSprint</strong>
-              <span>Question Bank</span>
+              <strong id="site-brand-name">QuizSprint</strong>
+              <span id="site-brand-sub">Question Bank</span>
             </span>
           </div>
           <div id="focus-bar-left" class="focus-bar-left" hidden>
@@ -88,11 +92,19 @@
       </div>
     </nav>
 
+    <div id="site-announcement-bar" class="announcement-bar" hidden>
+      <span id="site-announcement-text"></span>
+      <button type="button" id="site-announcement-close" class="btn ghost tiny" aria-label="关闭公告">×</button>
+    </div>
+
     <main id="app-main" class="app-main"></main>
 
     <footer class="app-footer">
-      <span>QuizSprint 仅供创作者个人学习、技术研究与同学间复习交流使用，严禁商业盈利、公开传播盗版题库或正式考试作弊。</span>
-      <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明与规范</button>
+      <span id="site-footer-note">QuizSprint 仅供创作者个人学习、技术研究与同学间复习交流使用，严禁商业盈利、公开传播盗版题库或正式考试作弊。</span>
+      <div class="row-gap">
+        <button type="button" id="app-version-btn" class="btn ghost tiny">v1.1.0</button>
+        <button type="button" class="btn ghost tiny js-open-disclaimer">免责声明与规范</button>
+      </div>
     </footer>
 
     <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="移动端导航">
@@ -108,7 +120,7 @@
     <div class="modal-card">
       <div class="modal-head">
         <h3 id="user-modal-title">账号登录</h3>
-        <button id="user-close" class="btn ghost tiny">关闭</button>
+        <button id="user-close" type="button" class="btn ghost tiny" data-modal-close>关闭</button>
       </div>
       <p id="user-modal-desc" class="muted-text">访客仅支持查看题库与搜题；登录后可刷题、考试与云端同步，管理员账号自动解锁建库、导题与发考权限。</p>
       <form id="user-form" class="stack-form">
@@ -130,7 +142,7 @@
     <div class="modal-card">
       <div class="modal-head">
         <h3>本地 AI 大模型配置</h3>
-        <button id="ai-close" class="btn ghost tiny">关闭</button>
+        <button id="ai-close" type="button" class="btn ghost tiny" data-modal-close>关闭</button>
       </div>
       <p class="muted-text" style="margin:0 0 10px;">你的 API Key 仅保存在当前浏览器本地（localStorage），不会上传到服务器保存，其他人无法使用你的额度。</p>
       <form id="ai-form" class="stack-form">
@@ -144,7 +156,10 @@
           <select id="ai-model-select" style="width:100%;margin-bottom:6px;" hidden></select>
           <input id="ai-model" placeholder="gpt-4o-mini / deepseek-chat" style="width:100%;" required>
         </div>
-        <div class="modal-actions"><button type="submit" class="btn primary">保存配置</button></div>
+        <div class="modal-actions" style="justify-content:space-between;">
+          <button type="button" id="ai-clear-btn" class="btn ghost-danger tiny">清除本地配置</button>
+          <button type="submit" class="btn primary">保存配置</button>
+        </div>
       </form>
     </div>
   </div>
@@ -153,7 +168,7 @@
     <div class="modal-card" style="max-width:560px;max-height:86vh;overflow-y:auto;">
       <div class="modal-head">
         <h3>免责声明与使用规范</h3>
-        <button id="disclaimer-close" class="btn ghost tiny">关闭</button>
+        <button id="disclaimer-close" type="button" class="btn ghost tiny" data-modal-close>关闭</button>
       </div>
       <div class="stack-form" style="font-size:0.8125rem;line-height:1.7;">
         <div><strong>1. 使用定位：</strong>本项目（QuizSprint）及配套脚本<strong>仅供创作者本人学习、技术研究与同学间日常复习交流使用</strong>。</div>
@@ -164,6 +179,8 @@
       <div class="modal-actions"><button type="button" id="disclaimer-ok" class="btn primary">我已知晓</button></div>
     </div>
   </div>
+
+  <div id="site-modal" class="modal-backdrop" hidden></div>
 
   <div id="toast-container" class="toast-container"></div>
   <script type="module" src="/js/app.js"></script>

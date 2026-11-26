@@ -37,7 +37,7 @@
 
 .app-topbar {
   flex: none;
-  z-index: 35;
+  z-index: 48;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
@@ -102,6 +102,13 @@
 }
 .admin-sub-btn:hover { background: var(--surface); color: var(--ink); }
 .admin-sub-btn.active { background: var(--surface); border-color: var(--line); color: var(--accent-fg); box-shadow: var(--shadow-sm); }
+
+.announcement-bar {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 28px; background: var(--accent-soft); color: var(--accent-fg);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); font-size: 0.8125rem; font-weight: 500;
+}
+body.focus-mode .announcement-bar, body.immersive-mode .announcement-bar { display: none !important; }
 
 .bank-select-inline {
   padding: 4px 10px;
@@ -473,7 +480,7 @@ body.immersive-mode .immersive-bar { display: flex; }
   .question-box { padding: 16px 14px; }
   .option-item { min-height: 44px; padding: 11px 12px; }
   .practice-nav-footer {
-    position: fixed; left: 0; right: 0; bottom: 48px; z-index: 40;
+    position: fixed; left: 0; right: 0; bottom: calc(45px + env(safe-area-inset-bottom)); z-index: 40;
     background: var(--surface); border-top: 1px solid var(--line);
     padding: 8px 12px !important; margin-top: 0 !important;
   }
@@ -483,8 +490,4 @@ body.immersive-mode .immersive-bar { display: flex; }
     padding-bottom: calc(8px + env(safe-area-inset-bottom)) !important;
   }
   .kbd-hint { display: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
 }

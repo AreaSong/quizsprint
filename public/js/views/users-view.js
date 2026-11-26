@@ -1,6 +1,7 @@
 import { apiRequest, escapeHtml, getCloudUser, showToast } from "../api.js";
 import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { mountLoginLogsPanel } from "./login-logs-panel.js";
 
 const buildUsersShellHtml = (regPolicy) => `
   <div class="panel view-frame">
@@ -10,10 +11,18 @@ const buildUsersShellHtml = (regPolicy) => `
           <h2 style="margin:0;">用户与门禁</h2>
           <div id="usr-stats" class="row-gap" style="margin-top:6px;"></div>
         </div>
-        <button id="usr-add-btn" type="button" class="btn primary tiny">+ 新建账号</button>
+        <div class="row-gap">
+          <div class="exam-seg" role="tablist">
+            <button type="button" class="btn tiny primary js-usr-tab" data-tab="accounts">账号与门禁</button>
+            <button type="button" class="btn tiny ghost js-usr-tab" data-tab="logs">登录轨迹 / IP</button>
+          </div>
+          <button id="usr-add-btn" type="button" class="btn primary tiny">+ 新建账号</button>
+        </div>
       </div>
+    </div>
 
-      <div class="panel" style="margin-top:12px;padding:12px 14px;background:var(--surface-soft);">
+    <div id="usr-tab-accounts" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <div class="panel" style="margin-top:12px;padding:12px 14px;background:var(--surface-soft);flex:none;">
         <div class="row-gap" style="justify-content:space-between;flex-wrap:wrap;">
           <div>
             <strong>公网注册门禁</strong>
@@ -35,7 +44,7 @@ const buildUsersShellHtml = (regPolicy) => `
         </div>
       </div>
 
-      <div class="row-gap" style="margin-top:10px;">
+      <div class="row-gap" style="margin-top:10px;flex:none;">
         <select id="usr-role-filter">
           <option value="">全部角色</option>
           <option value="student">学员</option>
@@ -43,26 +52,35 @@ const buildUsersShellHtml = (regPolicy) => `
         </select>
         <input id="usr-kw" type="search" placeholder="搜索用户名或昵称..." style="flex:1;min-width:180px;">
       </div>
+
+      <div class="admin-table-wrap view-scroll" style="margin-top:12px;">
+        <table class="data-table">
+          <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>最近登录（IP / 地区）</th><th>注册时间</th><th>操作</th></tr></thead>
+          <tbody id="usr-tbody"></tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="admin-table-wrap view-scroll" style="margin-top:12px;">
-      <table class="data-table">
-        <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>注册时间</th><th>操作</th></tr></thead>
-        <tbody id="usr-tbody"></tbody>
-      </table>
-    </div>
+    <div id="usr-tab-logs" style="display:flex;flex-direction:column;flex:1;min-height:0;margin-top:12px;" hidden></div>
   </div>
 `;
 
+const buildLastLoginHtml = (ll) => {
+  if (!ll) return '<span class="muted-text" style="font-size:0.75rem;">暂无登录记录</span>';
+  const timeText = String(ll.createdAt || "").slice(0, 16).replace("T", " ");
+  return `<div style="font-size:0.75rem;line-height:1.45;"><code>${escapeHtml(ll.ip)}</code> · <span>${escapeHtml(ll.location || "未知")}</span><div class="muted-text">${escapeHtml(ll.device || "")} · ${escapeHtml(timeText)}</div></div>`;
+};
+
 const buildUsersRowsHtml = (filtered, me) => {
-  if (!filtered.length) return '<tr><td colspan="5" class="muted-text">没有匹配的账号</td></tr>';
+  if (!filtered.length) return '<tr><td colspan="6" class="muted-text">没有匹配的账号</td></tr>';
   return filtered.map((u) => {
     const isMe = Boolean(me && (u.id === me.id || u.username === me.username));
     return `
       <tr data-uid="${escapeHtml(u.id)}">
-        <td><code>${escapeHtml(u.username)}</code> ${isMe ? '<span class="badge">当前账号</span>' : ""}</td>
+        <td><code>${escapeHtml(u.username)}</code> ${isMe ? '<span class="badge">当前账号</span>' : ""} ${u.disabled ? '<span class="badge bad">已冻结</span>' : ""}</td>
         <td>${escapeHtml(u.nickname)}</td>
         <td><span class="badge ${u.role === "admin" ? "warn" : ""}">${u.role === "admin" ? "管理员" : "学员"}</span></td>
+        <td>${buildLastLoginHtml(u.lastLogin)}</td>
         <td class="muted-text">${escapeHtml((u.createdAt || "").slice(0, 16).replace("T", " "))}</td>
         <td>
           <div class="row-gap" style="gap:6px;">
@@ -70,6 +88,7 @@ const buildUsersRowsHtml = (filtered, me) => {
             <button type="button" class="btn ghost tiny js-usr-pwd">重置密码</button>
             <button type="button" class="btn ghost tiny js-usr-role" data-next="${u.role === "admin" ? "student" : "admin"}" ${isMe ? 'disabled title="不能降级当前登录账号"' : ""}>${u.role === "admin" ? "设为学员" : "设为管理"}</button>
             <button type="button" class="btn ghost tiny js-usr-clr">清进度</button>
+            <button type="button" class="btn ghost tiny js-usr-status" ${isMe ? 'disabled title="不能冻结当前登录账号"' : ""}>${u.disabled ? "解封" : "冻结"}</button>
             <button type="button" class="btn ghost-danger tiny js-usr-del" ${isMe ? 'disabled title="不能删除当前登录账号"' : ""}>删除</button>
           </div>
         </td>
@@ -116,6 +135,7 @@ export const renderUsersView = async (container, ctx) => {
   const renderListPart = () => {
     const adminCnt = users.filter((u) => u.role === "admin").length;
     const studentCnt = users.length - adminCnt;
+    const disabledCnt = users.filter((u) => u.disabled).length;
     const kw = state.keyword.trim().toLowerCase();
     const filtered = users.filter((u) => {
       if (state.role && u.role !== state.role) return false;
@@ -126,11 +146,25 @@ export const renderUsersView = async (container, ctx) => {
       <span class="badge">总账号 ${users.length}</span>
       <span class="badge warn">管理员 ${adminCnt}</span>
       <span class="badge ok">学员 ${studentCnt}</span>
+      ${disabledCnt ? `<span class="badge bad">已冻结 ${disabledCnt}</span>` : ""}
     `;
     tbodyEl.innerHTML = buildUsersRowsHtml(filtered, getCloudUser());
   };
 
   container.querySelector("#usr-role-filter").addEventListener("change", (e) => { state.role = e.target.value; renderListPart(); });
+  const accPane = container.querySelector("#usr-tab-accounts");
+  const logsPane = container.querySelector("#usr-tab-logs");
+  container.querySelectorAll(".js-usr-tab").forEach((btn) => btn.addEventListener("click", () => {
+    const isLogs = btn.dataset.tab === "logs";
+    container.querySelectorAll(".js-usr-tab").forEach((b) => {
+      const act = b === btn;
+      b.classList.toggle("primary", act);
+      b.classList.toggle("ghost", !act);
+    });
+    accPane.hidden = isLogs;
+    logsPane.hidden = !isLogs;
+    if (isLogs) mountLoginLogsPanel(logsPane);
+  }));
   container.querySelector("#usr-kw").addEventListener("input", (e) => { state.keyword = e.target.value; renderListPart(); });
   container.querySelectorAll('input[name="reg-mode-radio"]').forEach((r) => {
     r.addEventListener("change", () => { regInviteWrap.hidden = getSelectedRegMode() !== "invite"; });
@@ -172,10 +206,25 @@ export const renderUsersView = async (container, ctx) => {
     if (!uid) return;
     if (e.target.closest(".js-usr-nick")) {
       const targetUser = users.find((x) => x.id === uid);
-      const form = await openFormDialog({ title: "修改账号信息", fields: [{ name: "nickname", label: "显示昵称", value: targetUser?.nickname || "", required: true }], submitText: "保存修改" });
-      if (!form || !form.nickname.trim()) return;
-      try { await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/profile`, { method: "PUT", body: JSON.stringify({ nickname: form.nickname.trim() }) }); showToast("账号昵称已更新", "ok"); await loadUsers(); renderListPart(); }
-      catch (err) { showToast(err.message, "bad"); }
+      const form = await openFormDialog({
+        title: "修改账号信息",
+        fields: [
+          { name: "username", label: "登录用户名（2-24 位）", value: targetUser?.username || "", required: true },
+          { name: "nickname", label: "显示昵称", value: targetUser?.nickname || "", required: true }
+        ],
+        submitText: "保存修改"
+      });
+      if (!form || !form.nickname.trim() || !form.username.trim()) return;
+      try {
+        await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/profile`, {
+          method: "PUT",
+          body: JSON.stringify({ username: form.username.trim(), nickname: form.nickname.trim() })
+        });
+        showToast("账号信息已更新", "ok");
+        await loadUsers();
+        renderListPart();
+        await ctx.onAuthChanged?.();
+      } catch (err) { showToast(err.message, "bad"); }
       return;
     }
     if (e.target.closest(".js-usr-clr")) {
@@ -195,6 +244,17 @@ export const renderUsersView = async (container, ctx) => {
     const roleBtn = e.target.closest(".js-usr-role");
     if (roleBtn) {
       try { await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/role`, { method: "PUT", body: JSON.stringify({ role: roleBtn.dataset.next }) }); showToast("角色已更新", "ok"); await loadUsers(); renderListPart(); }
+      catch (err) { showToast(err.message, "bad"); }
+      return;
+    }
+    if (e.target.closest(".js-usr-status")) {
+      const targetUser = users.find((x) => x.id === uid);
+      const nextDisabled = !targetUser?.disabled;
+      if (nextDisabled) {
+        const ok = await openConfirmDialog({ title: "冻结账号", message: `确定冻结账号「${targetUser?.username || uid}」吗？冻结后该账号所有已登录会话将立即失效并禁止登录。`, confirmText: "确认冻结", danger: true });
+        if (!ok) return;
+      }
+      try { await apiRequest(`/api/admin/users/${encodeURIComponent(uid)}/status`, { method: "PUT", body: JSON.stringify({ disabled: nextDisabled }) }); showToast(nextDisabled ? "账号已冻结并踢下线" : "账号已解封", "ok"); await loadUsers(); renderListPart(); }
       catch (err) { showToast(err.message, "bad"); }
       return;
     }

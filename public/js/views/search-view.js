@@ -5,11 +5,11 @@ import { renderRichMarkdown } from "../markdown.js";
 import { openQuestionEditorModal } from "./question-editor-modal.js";
 
 const highlightText = (text, keyword) => {
-  const safe = escapeHtml(text);
+  const raw = String(text ?? "");
   const kw = String(keyword || "").trim();
-  if (!kw) return safe;
-  const escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return safe.replace(new RegExp(`(${escapedKw})`, "gi"), "<mark>$1</mark>");
+  if (!kw) return escapeHtml(raw);
+  const re = new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  return raw.split(re).map((part, idx) => (idx % 2 === 1 ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part))).join("");
 };
 
 const renderSearchItemHtml = (item, q, idx, isAdmin = false) => {

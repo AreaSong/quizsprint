@@ -25,6 +25,7 @@ const buildManageShellHtml = (bank, banks, isAdmin) => `
         </div>
         <div class="row-gap">
           <button id="btn-dup-check" type="button" class="btn ghost tiny">试题查重</button>
+          ${isAdmin ? '<button id="btn-clear-bank" type="button" class="btn ghost-danger tiny">清空全库</button>' : ""}
           <button id="btn-add-one" type="button" class="btn primary tiny">${isAdmin ? "+ 单题录入" : "登录管理"}</button>
         </div>
       </div>
@@ -207,6 +208,16 @@ export const renderManageView = async (container, ctx) => {
   container.querySelector("#pg-size").addEventListener("change", (e) => { state.pageSize = Number(e.target.value); state.page = 1; renderListPart(); });
   container.querySelector("#pg-prev").addEventListener("click", () => { if (state.page > 1) { state.page -= 1; renderListPart(); } });
   container.querySelector("#pg-next").addEventListener("click", () => { state.page += 1; renderListPart(); });
+  container.querySelector("#btn-clear-bank")?.addEventListener("click", async () => {
+    if (!questions.length) return showToast("当前题库已为空");
+    if (!(await openConfirmDialog({ title: "清空题库试题", message: `确定永久删除「${bank.name}」内的全部 ${questions.length} 道试题吗？此操作不可恢复。`, confirmText: "确认清空", danger: true }))) return;
+    try {
+      await apiRequest(`/api/banks/${encodeURIComponent(bank.id)}/questions/batch`, { method: "POST", body: JSON.stringify({ action: "delete", ids: questions.map((q) => q.id) }) });
+      state.selectedIds.clear();
+      showToast("已清空当前题库全部试题", "ok");
+      await reloadQuestions();
+    } catch (err) { showToast(err.message, "bad"); }
+  });
   container.querySelector("#btn-add-one").addEventListener("click", () => {
     if (!isAdmin) return onRequireLogin();
     openQuestionEditorModal(modal, { bankId: bank.id, item: null, onSaved: reloadQuestions });

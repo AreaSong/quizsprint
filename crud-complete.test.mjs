@@ -4,8 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildUserCookie, createUserToken } from "./lib/auth.mjs";
-import { createBackupBuffer } from "./lib/db.mjs";
-import { createExamStore } from "./lib/exam-store.mjs";
+import { createBackupBuffer, maintainDatabase } from "./lib/db.mjs";
+import { exportBankToExcelBuffer, parseExcelBase64 } from "./lib/doc-import.mjs";
+import { createExamStore, scoreQuestionAnswer } from "./lib/exam-store.mjs";
 import { handleExtraRoutes } from "./lib/extra-routes.mjs";
 import { createStore } from "./lib/store.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
@@ -152,6 +153,77 @@ test("SQLite 备份导出与热恢复校验、回滚及快照保留正常", asyn
     assert.equal(store.listBanks().some((b) => b.name === "备份原始题库"), true);
     assert.equal(store.listBanks().some((b) => b.name === "误操作新增题库"), false);
     assert.equal(fs.existsSync(path.join(tmpDir, "question-bank.pre-restore.db")), true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("安全边界回归：跨库导入不撞主键、多选去重判分、加密交卷拦截、题型7/8脱敏与删号会话失效", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qb-sec-audit-"));
+  const uploadsDir = path.join(tmpDir, "uploads");
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+    const callRoute = makeRouteCaller({ store, userStore, examStore, dataDir: tmpDir });
+
+    const { bank: b1 } = store.createBank({ name: "源题库" });
+    const { bank: b2 } = store.createBank({ name: "目标题库" });
+    fs.writeFileSync(path.join(uploadsDir, "keep-snap.png"), "snap");
+    fs.writeFileSync(path.join(uploadsDir, "orphan.png"), "orphan");
+    store.importQuestions(b1.id, [
+      { id: "same-id", title: "多选题", type: "1", options: ["A1", "B1"], answers: ["A1", "B1"], images: ["/uploads/keep-snap.png"] },
+      { id: "ord-1", title: "排序题", type: "7", answers: ["第一步", "第二步", "第三步"] },
+      { id: "mat-1", title: "配对题", type: "8", answers: ["TCP => 可靠", "UDP => 无连接"] },
+      { id: "pra-1", title: "实操题", type: "6", options: ["旧残留"], answers: ["steps"] }
+    ]);
+    const imp2 = store.importQuestions(b2.id, store.loadBankQuestions(b1.id));
+    assert.equal(imp2.created, 4);
+    assert.deepEqual(store.loadBankQuestions(b2.id).find((q) => q.title === "实操题").options, []);
+
+    assert.equal(scoreQuestionAnswer({ type: "1", answers: ["A1", "B1"] }, ["A1", "A1"], { multiPartialScore: true }).correct, false);
+    assert.equal(scoreQuestionAnswer({ type: "1", answers: ["A1", "B1"] }, ["A1", "A1"], { multiPartialScore: false }).correct, false);
+
+    const { user } = userStore.register({ username: "eve", password: "123456", nickname: "Eve" });
+    const eveCookie = buildUserCookie(createUserToken(user), false).split(";")[0];
+
+    const lockedPool = store.loadBankQuestions(b1.id);
+    const { exam } = examStore.createExam({
+      title: "加密考场", bankId: b1.id, accessCode: "sec888", selectedQuestionIds: lockedPool.map((q) => q.id)
+    }, lockedPool);
+
+    const noCodeGet = await callRoute("GET", `/api/exams/${exam.id}`, {}, { cookie: eveCookie, admin: false });
+    assert.equal(noCodeGet.status, 403);
+    const okGet = await callRoute("GET", `/api/exams/${exam.id}?code=sec888`, {}, { cookie: eveCookie, admin: false });
+    assert.equal(okGet.status, 200);
+    const ordQ = okGet.payload.exam.questionsSnapshot.find((q) => q.type === "7");
+    const matQ = okGet.payload.exam.questionsSnapshot.find((q) => q.type === "8");
+    assert.equal(ordQ.answers, undefined);
+    assert.equal(ordQ.orderItems.length, 3);
+    assert.deepEqual(matQ.matchLefts, ["TCP", "UDP"]);
+    assert.equal(matQ.matchRights.length, 2);
+
+    const noCodeSub = await callRoute("POST", `/api/exams/${exam.id}/submit`, { studentName: "Eve", answers: {} }, { cookie: eveCookie, admin: false });
+    assert.equal(noCodeSub.status, 403);
+    const unauthAdmin = await callRoute("DELETE", "/api/admin/wrong-stats", {}, { cookie: eveCookie, admin: false });
+    assert.equal(unauthAdmin.status, 401);
+
+    store.deleteBank(b1.id);
+    const maint = maintainDatabase(tmpDir, uploadsDir);
+    assert.equal(fs.existsSync(path.join(uploadsDir, "keep-snap.png")), true);
+    assert.equal(fs.existsSync(path.join(uploadsDir, "orphan.png")), false);
+    assert.equal(maint.removedImages, 1);
+
+    const xlBuf = exportBankToExcelBuffer(store.loadBankQuestions(b2.id));
+    const reParsed = parseExcelBase64(xlBuf.toString("base64"));
+    assert.deepEqual(reParsed.questions.map((q) => q.type).sort(), ["1", "6", "7", "8"]);
+
+    userStore.adminDeleteUser(user.id, "other");
+    const deletedMe = await callRoute("GET", "/api/user/me", {}, { cookie: eveCookie, admin: false });
+    assert.equal(deletedMe.payload.user, null);
+    const fkSafe = await callRoute("POST", "/api/user/progress", { bankId: b2.id, bankData: {} }, { cookie: eveCookie, admin: false });
+    assert.equal(fkSafe.status, 401);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

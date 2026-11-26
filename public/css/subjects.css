@@ -49,10 +49,10 @@
 .cat-pill[data-cat="practice"] { background: #f0fdfa; color: #0f766e; }
 .cat-pill[data-cat="comprehensive"] { background: #f5f3ff; color: #6d28d9; }
 .cat-pill[data-cat="exam"] { background: #fff7ed; color: #c2410c; }
-:root[data-theme="dark"] .cat-pill[data-cat="theory"] { background: rgba(59, 130, 246, .16); color: #93c5fd; }
-:root[data-theme="dark"] .cat-pill[data-cat="practice"] { background: rgba(20, 184, 166, .16); color: #5eead4; }
-:root[data-theme="dark"] .cat-pill[data-cat="comprehensive"] { background: rgba(139, 92, 246, .18); color: #c4b5fd; }
-:root[data-theme="dark"] .cat-pill[data-cat="exam"] { background: rgba(249, 115, 22, .16); color: #fdba74; }
+:root[data-color-scheme="dark"] .cat-pill[data-cat="theory"] { background: rgba(59, 130, 246, .16); color: #93c5fd; }
+:root[data-color-scheme="dark"] .cat-pill[data-cat="practice"] { background: rgba(20, 184, 166, .16); color: #5eead4; }
+:root[data-color-scheme="dark"] .cat-pill[data-cat="comprehensive"] { background: rgba(139, 92, 246, .18); color: #c4b5fd; }
+:root[data-color-scheme="dark"] .cat-pill[data-cat="exam"] { background: rgba(249, 115, 22, .16); color: #fdba74; }
 
 .cat-filter-row { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 

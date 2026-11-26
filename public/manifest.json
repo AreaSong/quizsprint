@@ -1,0 +1,16 @@
+{
+  "name": "QuizSprint · 自托管题库与在线考试平台",
+  "short_name": "QuizSprint",
+  "start_url": "/#banks",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#2b5ce6",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
