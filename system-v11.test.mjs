@@ -308,6 +308,29 @@ test("v1.1 可配置定时备份策略、自定义服务器路径、格式切换
     const skipRes = runAutoBackup(tmpDir, uploadsDir, { force: false });
     assert.equal(skipRes.skipped, true);
     assert.equal(skipRes.reason, "disabled");
+
+    let restartFired = false;
+    await handleExtraRoutes(
+      { method: "POST", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
+      {},
+      new URL("http://127.0.0.1:8787/api/admin/system/update"),
+      {
+        store,
+        userStore,
+        examStore,
+        dataDir: tmpDir,
+        uploadsDir,
+        repoDir: tmpDir,
+        readBody: async () => ({ autoRestart: true }),
+        sendJson: (_r, status, payload) => {
+          assert.equal(status, 409);
+          assert.ok(payload.msg);
+        },
+        requireAdmin: () => true,
+        onRequestRestart: () => { restartFired = true; }
+      }
+    );
+    assert.equal(restartFired, false);
   } finally {
     closeAllDbs();
     fs.rmSync(tmpDir, { recursive: true, force: true });

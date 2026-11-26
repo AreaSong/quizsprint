@@ -104,10 +104,11 @@ const serveSafeFile = (baseDir, relPath, res) => {
   }
   if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) return false;
   const ext = path.extname(resolved).toLowerCase();
-  const noCacheExts = new Set([".html", ".css", ".js", ".mjs"]);
+  const isCodeAsset = [".html", ".css", ".js", ".mjs"].includes(ext);
   res.writeHead(200, applySecurityHeaders({
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-    "Cache-Control": noCacheExts.has(ext) ? "no-cache" : "public, max-age=300"
+    "Cache-Control": isCodeAsset ? "no-store, no-cache, must-revalidate" : "public, max-age=300",
+    ...(isCodeAsset ? { "CDN-Cache-Control": "no-store" } : {})
   }));
   if (ext === ".html" && absBase === path.resolve(PUBLIC_DIR)) {
     const html = fs.readFileSync(resolved, "utf8")

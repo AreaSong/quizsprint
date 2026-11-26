@@ -58,7 +58,7 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
       <div id="sys-output" class="muted-text" style="font-size:0.75rem;white-space:pre-wrap;" ${outputText ? "" : "hidden"}>${escapeHtml(outputText)}</div>
       <div class="row-gap" style="justify-content:flex-end;">
         <button type="button" id="sys-check-btn" class="btn ghost tiny">检查更新</button>
-        <button type="button" id="sys-pull-btn" class="btn primary tiny" ${!st.isGitRepo || st.dirty ? "disabled" : ""}>拉取更新</button>
+        <button type="button" id="sys-pull-btn" class="btn primary tiny" ${!st.isGitRepo || st.dirty ? "disabled" : ""}>更新并重启</button>
         <button type="button" id="sys-restart-btn" class="btn ghost-danger tiny">重启服务</button>
       </div>
     </section>
@@ -117,11 +117,13 @@ const buildApiKeyCardHtml = (apiKey) => `
 const pollUntilReady = async (outputEl) => {
   outputEl.hidden = false;
   outputEl.textContent = "服务正在重启，等待重新上线...";
+  await new Promise((r) => setTimeout(r, 1200));
   for (let i = 0; i < 20; i += 1) {
     await new Promise((r) => setTimeout(r, 800));
     try {
       const res = await fetch("/health", { cache: "no-store" });
-      if (res.ok) {
+      const data = res.ok ? await res.json().catch(() => null) : null;
+      if (res.ok && data && Number(data.uptimeSeconds ?? 0) <= 20) {
         showToast("服务已重启上线，即将刷新页面", "ok");
         setTimeout(() => location.reload(), 500);
         return;
@@ -216,16 +218,21 @@ export const renderSystemView = async (container, ctx) => {
       catch (err) { showToast(err.message, "bad"); }
     });
     container.querySelector("#sys-pull-btn").addEventListener("click", async () => {
-      const ok = await openConfirmDialog({ title: "拉取远端更新", message: "确认拉取远端最新代码（git pull --ff-only）吗？", confirmText: "立即拉取" });
+      const ok = await openConfirmDialog({ title: "更新并重启服务", message: "确认拉取远端最新代码（git pull --ff-only）吗？若有新提交，系统将自动重启服务并刷新页面。", confirmText: "立即更新" });
       if (!ok) return;
       try {
         showToast("正在拉取最新补丁...");
-        const res = await apiRequest("/api/admin/system/update", { method: "POST" });
+        const res = await apiRequest("/api/admin/system/update", { method: "POST", body: JSON.stringify({ autoRestart: true }) });
         statusData = res.status;
         checkResult = null;
         outputText = `${res.updated ? `已更新：${res.beforeCommit} -> ${res.afterCommit}` : "已是最新提交"}${res.depsInstalled ? "\n已自动更新 npm 依赖" : ""}\n${res.output}`;
-        showToast(res.updated ? "拉取更新成功，建议重启服务生效" : "当前已是最新版本", "ok");
         renderPage();
+        if (res.restarting) {
+          showToast("更新成功，正在自动重启服务...", "ok");
+          await pollUntilReady(container.querySelector("#sys-output"));
+        } else {
+          showToast(res.updated ? "更新成功" : "当前已是最新版本", "ok");
+        }
       } catch (err) { showToast(err.message, "bad"); }
     });
     container.querySelector("#sys-restart-btn").addEventListener("click", async () => {
