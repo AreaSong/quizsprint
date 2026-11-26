@@ -237,7 +237,9 @@ export const buildExamSetupHtml = (bankName, allQuestions) => {
   `;
 };
 
-export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) => `
+export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) => {
+  const pct = total ? Math.round(((currentIndex + 1) / total) * 100) : 0;
+  return `
   <div class="immersive-bar">
     <div class="row-gap">
       <button id="btn-exit-immersive" class="btn ghost tiny">${iconSvg("chevronLeft", 14)}<span>退出沉浸</span></button>
@@ -245,13 +247,16 @@ export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) =
       <span class="muted-text" style="font-variant-numeric:tabular-nums;">${currentIndex + 1} / ${total}</span>
     </div>
     <div class="row-gap">
-      <button id="btn-imm-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}">${iconSvg("eye", 14)}<span>背题</span></button>
-      <button id="btn-imm-theme" class="btn ghost tiny">切换主题</button>
-      <button class="btn ghost tiny js-open-ai-modal">${iconSvg("sparkles", 14)}<span>问 AI</span></button>
-      <button class="btn ghost tiny js-open-sheet">答题卡</button>
+      <button id="btn-imm-recite" class="btn ghost tiny ${settings.reciteMode ? "soft-active" : ""}">${iconSvg("eye", 14)}<span>背题</span></button>
+      <button class="btn ghost tiny js-open-notes-modal">${iconSvg("note", 14)}<span>笔记</span></button>
+      <button class="btn ghost tiny js-open-ai-modal">${iconSvg("sparkles", 14)}<span>AI</span></button>
+      <button class="btn ghost tiny js-open-sheet">${iconSvg("grid", 14)}<span>答题卡</span></button>
+      <button id="btn-imm-theme" class="btn ghost tiny">${iconSvg("sliders", 14)}<span>主题</span></button>
     </div>
+    <div class="imm-progress-track"><div class="imm-progress-fill" style="width:${pct}%"></div></div>
   </div>
 `;
+};
 
 export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings, notesCollapsed = false }) => `
   <div class="practice-toolbar">

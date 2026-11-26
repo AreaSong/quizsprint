@@ -60,7 +60,7 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
     container.querySelectorAll(".js-open-notes-modal").forEach((b) => b.addEventListener("click", () => { if (modal) modal.hidden = false; }));
     container.querySelector("#notes-modal-close")?.addEventListener("click", () => { flush(); if (modal) modal.hidden = true; });
     container.querySelector("#btn-jump-note")?.addEventListener("click", () => {
-      if (window.innerWidth <= 960) {
+      if (window.innerWidth <= 960 || document.body.classList.contains("immersive-mode")) {
         if (modal) { modal.hidden = false; container.querySelector("#modal-note-input")?.focus(); }
         return;
       }

@@ -233,6 +233,7 @@ export const renderPracticeView = async (container, ctx) => {
     clearKeydown();
     const onKeyDown = (e) => {
       if (!document.body.contains(container) || (location.hash.startsWith("#") && location.hash !== "#practice")) return clearKeydown();
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
       const tag = e.target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
         if (e.key === "Enter" && e.target.id === "fill-input") { e.preventDefault(); container.querySelector("#btn-confirm-fill")?.click(); }
@@ -337,7 +338,7 @@ export const renderPracticeView = async (container, ctx) => {
     container.querySelectorAll(".js-export-wrong").forEach((el) => el.addEventListener("click", () => printQuestionsDocument(`${bank.name} - 错题本`, list, true)));
     container.querySelector("#btn-ai-explain")?.addEventListener("click", () => {
       const prompt = "请详细解析这道题：说明正确答案的核心依据，逐项分析错误选项，并提炼 1-2 条记忆要点。";
-      if (window.innerWidth <= 960) {
+      if (window.innerWidth <= 960 || settings.immersive) {
         if (aiModal) { mountAiChatWidget(modalAiRoot, q, aiOpts(false, prompt)); aiModal.hidden = false; }
         return;
       }
@@ -470,7 +471,7 @@ export const renderPracticeView = async (container, ctx) => {
         </div>
         <div id="notes-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>题目笔记</h3><button id="notes-modal-close" class="btn ghost tiny">关闭</button></div>${buildNotesPanelHtml(list, q, bankState, "modal-note-input")}</div></div>
         <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div></div>
-        <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-ai-chat"></div></div></div>
+        <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny" data-modal-close>关闭</button></div><div id="modal-ai-chat"></div></div></div>
       </div>
     `;
     bindBar(); bindMainEvents(q, opts, showAnswerNow);

@@ -9,7 +9,7 @@ import {
   setCloudSession,
   showToast
 } from "./api.js";
-import { openFormDialog } from "./dialog.js";
+import { initGlobalModalDismiss, openFormDialog } from "./dialog.js";
 import { initSystemAndDisclaimerModals } from "./system-modal.js";
 import { renderBanksView } from "./views/banks-view.js";
 import { renderExamsView } from "./views/exams-view.js";
@@ -421,6 +421,7 @@ document.getElementById("ai-form").addEventListener("submit", (e) => {
 
 const bootstrap = async () => {
   initSystemAndDisclaimerModals();
+  initGlobalModalDismiss();
   applyAppearance();
   await Promise.all([refreshBanks(), refreshAuth()]);
   const examMatch = location.hash.match(/^#exam=([^&]+)/);

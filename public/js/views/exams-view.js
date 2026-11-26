@@ -1,5 +1,6 @@
 import { apiRequest, escapeHtml, getCloudUser, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { openFormDialog } from "../dialog.js";
+import { iconSvg } from "../icons.js";
 import { openCreateExamModal, openEditExamModal, openMySubmissionsModal, openSubmissionsModal } from "./exam-modals.js";
 
 let activeExamCleanup = null;
@@ -41,6 +42,55 @@ const restoreExamInputs = (container, questions, answers) => {
   }
 };
 
+const getExamStatus = (ex) => {
+  const now = Date.now();
+  const start = ex.startTime ? Date.parse(ex.startTime) : NaN;
+  const end = ex.endTime ? Date.parse(ex.endTime) : NaN;
+  if (!Number.isNaN(start) && now < start) return { label: "未开始", cls: "warn" };
+  if (!Number.isNaN(end) && now > end) return { label: "已结束", cls: "bad" };
+  return { label: "进行中", cls: "ok" };
+};
+
+const renderExamCardHtml = (ex, isAdmin) => {
+  const st = getExamStatus(ex);
+  const locked = ex.hasAccessCode ?? Boolean(ex.accessCode);
+  return `
+    <div class="bank-card" data-eid="${escapeHtml(ex.id)}">
+      <div>
+        <div class="row-gap" style="justify-content:space-between;align-items:flex-start;">
+          <h3 style="margin:0;display:flex;align-items:center;gap:6px;">${locked ? `<span style="display:inline-flex;color:var(--warn);" title="密码考试">${iconSvg("lock", 14)}</span>` : ""}${escapeHtml(ex.title)}</h3>
+          <span class="badge ${st.cls}">${st.label}</span>
+        </div>
+        <p class="muted-text" style="margin:8px 0;">来源：${escapeHtml(ex.bankName)} · ${ex.questionCount} 题 / ${ex.durationMinutes} 分钟 · 满分 ${ex.totalScore || 100}（及格 ${ex.passScore}）· 已交卷 ${ex.submissionCount} 人</p>
+        <div class="row-gap">
+          ${ex.disableCopy ? '<span class="badge warn">禁复制</span>' : ""}
+          <span class="badge">限切屏 ${ex.maxTabSwitches} 次</span>
+          ${ex.maxAttempts > 0 ? `<span class="badge warn">限考 ${ex.maxAttempts} 次</span>` : ""}
+          ${ex.startTime || ex.endTime ? '<span class="badge">限时窗口</span>' : ""}
+        </div>
+      </div>
+      <div class="row-gap">
+        <button class="btn primary tiny" data-act="enter">进入考场</button>
+        <button class="btn ghost tiny" data-act="copy">复制链接</button>
+        ${isAdmin ? `
+          <button class="btn ghost tiny" data-act="edit">编辑</button>
+          <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
+          <button class="btn danger tiny" data-act="del">删除</button>
+        ` : ""}
+      </div>
+    </div>
+  `;
+};
+
+const renderEmptyExamsHtml = (isAdmin) => `
+  <div class="empty-state">
+    <div class="empty-state-icon">${iconSvg("clock", 22)}</div>
+    <strong style="font-size:15px;">暂无在线考试</strong>
+    <p class="muted-text" style="margin:0;">管理员可发起在线考试，支持按题型配分、限时窗口、防切屏与简答题人工阅卷。</p>
+    ${isAdmin ? '<button type="button" id="ex-empty-create" class="btn primary tiny" style="margin-top:4px;">+ 发起新考试</button>' : ""}
+  </div>
+`;
+
 export const renderExamsView = async (container, ctx) => {
   if (activeExamCleanup) {
     activeExamCleanup();
@@ -77,50 +127,24 @@ export const renderExamsView = async (container, ctx) => {
       <div class="view-head">
         <div class="row-gap" style="justify-content:space-between;">
           <div>
-            <h2 style="margin:0;">在线考试中心（发卷与防作弊）</h2>
-            <span class="muted-text">支持按题型抽题配分、手动挑题、时间窗与限考管控、简答题人工阅卷及成绩单导出</span>
+            <h2 style="margin:0;">在线考试中心</h2>
+            <span class="muted-text">按题型抽题或固定组卷 · 时间窗与限考管控 · 防切屏与人工阅卷</span>
           </div>
           <div class="row-gap">
-            <button id="ex-my-subs-btn" class="btn ghost">我的成绩单</button>
+            <button id="ex-my-subs-btn" class="btn ghost">${iconSvg("list", 15)}<span>我的成绩单</span></button>
             <button id="ex-create-btn" class="btn primary">${isAdmin ? "+ 发起新考试" : "管理员发考"}</button>
           </div>
         </div>
       </div>
       <div class="view-scroll" style="margin-top:14px;">
-        <div class="cards-grid">
-          ${exams.map((ex) => `
-            <div class="bank-card" data-eid="${escapeHtml(ex.id)}">
-              <div>
-                <div class="row-gap" style="justify-content:space-between;">
-                  <h3>${(ex.hasAccessCode ?? Boolean(ex.accessCode)) ? "🔒 " : ""}${escapeHtml(ex.title)}</h3>
-                  <span class="badge">${ex.questionCount} 题 · ${ex.durationMinutes} 分钟</span>
-                </div>
-                <p class="muted-text" style="margin:6px 0;">来源：${escapeHtml(ex.bankName)} · 满分 ${ex.totalScore || 100} / 及格 ${ex.passScore} 分 · 已交卷 ${ex.submissionCount} 人</p>
-                <div class="row-gap">
-                  ${ex.disableCopy ? '<span class="badge warn">禁复制</span>' : ""}
-                  <span class="badge">限切屏 ${ex.maxTabSwitches} 次</span>
-                  ${ex.maxAttempts > 0 ? `<span class="badge warn">限考 ${ex.maxAttempts} 次</span>` : ""}
-                  ${ex.startTime || ex.endTime ? `<span class="badge">限时窗口</span>` : ""}
-                </div>
-              </div>
-              <div class="row-gap">
-                <button class="btn primary tiny" data-act="enter">进入考场</button>
-                <button class="btn ghost tiny" data-act="copy">复制链接</button>
-                ${isAdmin ? `
-                  <button class="btn ghost tiny" data-act="edit">编辑</button>
-                  <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
-                  <button class="btn danger tiny" data-act="del">删除</button>
-                ` : ""}
-              </div>
-            </div>
-          `).join("") || '<p class="muted-text">暂无在线考试，管理员可点击右上角发起考试。</p>'}
-        </div>
+        ${exams.length ? `<div class="cards-grid">${exams.map((ex) => renderExamCardHtml(ex, isAdmin)).join("")}</div>` : renderEmptyExamsHtml(isAdmin)}
       </div>
     </div>
     <div id="ex-modal" class="modal-backdrop" hidden></div>
   `;
 
   const modal = container.querySelector("#ex-modal");
+  container.querySelector("#ex-empty-create")?.addEventListener("click", () => container.querySelector("#ex-create-btn")?.click());
 
   if (routeParams.openMySubs && isLoggedIn) {
     openMySubmissionsModal(modal).catch((err) => showToast(err.message, "bad"));
@@ -216,7 +240,7 @@ const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
     return startExamSession(container, exam, {
       studentName: draft.studentName,
       studentNo: draft.studentNo || ""
-    }, draft);
+    }, draft, () => renderExamsView(container, { ...ctx, routeParams: {} }));
   }
   if (draft) clearExamDraft(examId);
 
@@ -239,11 +263,11 @@ const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
     startExamSession(container, exam, {
       studentName: container.querySelector("#stu-name").value.trim(),
       studentNo: container.querySelector("#stu-no").value.trim()
-    });
+    }, null, () => renderExamsView(container, { ...ctx, routeParams: {} }));
   });
 };
 
-const startExamSession = (container, exam, student, restoredDraft = null) => {
+const startExamSession = (container, exam, student, restoredDraft = null, onBackExams = null) => {
   const questions = exam.questionsSnapshot || [];
   const answers = restoredDraft?.answers && typeof restoredDraft.answers === "object" ? { ...restoredDraft.answers } : {};
   const fallbackScore = questions.length ? Math.round(((exam.totalScore || 100) / questions.length) * 10) / 10 : 0;
@@ -279,7 +303,10 @@ const startExamSession = (container, exam, student, restoredDraft = null) => {
       container.innerHTML = `
         <div class="view-scroll">
           <div class="panel" style="max-width:720px;margin:0 auto;">
-            <h2 style="margin-top:0;">交卷成功 · ${escapeHtml(exam.title)}</h2>
+            <div class="row-gap" style="justify-content:space-between;margin-bottom:10px;">
+              <h2 style="margin:0;">交卷成功 · ${escapeHtml(exam.title)}</h2>
+              <button type="button" id="er-back-exams" class="btn ghost tiny">返回考试中心</button>
+            </div>
             <div class="row-gap" style="margin-bottom:14px;">
               <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:16px;">得分：${sub.score} / ${exam.totalScore || 100} 分（${sub.passed ? "及格" : "不及格"}）</span>
               <span class="badge">答对 ${sub.correctCount} / ${sub.totalCount}</span>
@@ -299,6 +326,7 @@ const startExamSession = (container, exam, student, restoredDraft = null) => {
           </div>
         </div>
       `;
+      container.querySelector("#er-back-exams")?.addEventListener("click", () => onBackExams?.());
     } catch (err) {
       finished = false;
       persistDraft();

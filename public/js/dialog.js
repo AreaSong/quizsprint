@@ -64,12 +64,10 @@ export const openFormDialog = ({ title = "输入信息", description = "", field
     document.body.appendChild(backdrop);
 
     const close = (val) => {
-      window.removeEventListener("keydown", onEsc);
       backdrop.remove();
       resolve(val);
     };
-    const onEsc = (e) => { if (e.key === "Escape") close(null); };
-    window.addEventListener("keydown", onEsc);
+    backdrop._closeModal = () => close(null);
 
     backdrop.querySelectorAll(".js-dlg-cancel").forEach((b) => b.addEventListener("click", () => close(null)));
     backdrop.querySelector(".js-dlg-form").addEventListener("submit", (e) => {
@@ -89,3 +87,46 @@ export const openFormDialog = ({ title = "输入信息", description = "", field
     const first = backdrop.querySelector("input, select");
     first?.focus();
   });
+
+let modalDismissInited = false;
+
+const closeBackdrop = (backdrop) => {
+  if (!backdrop) return;
+  if (typeof backdrop._closeModal === "function") {
+    backdrop._closeModal();
+    return;
+  }
+  const closeBtn = backdrop.querySelector("[data-modal-close]");
+  if (closeBtn) {
+    closeBtn.click();
+    return;
+  }
+  backdrop.hidden = true;
+};
+
+/** 统一支持全站弹窗点击遮罩空白处与按 Esc 退出 */
+export const initGlobalModalDismiss = () => {
+  if (modalDismissInited) return;
+  modalDismissInited = true;
+  let mouseDownBackdrop = null;
+
+  document.addEventListener("mousedown", (e) => {
+    const t = e.target;
+    mouseDownBackdrop = t instanceof Element && t.classList.contains("modal-backdrop") && !t.hidden ? t : null;
+  });
+
+  document.addEventListener("click", (e) => {
+    const target = mouseDownBackdrop;
+    mouseDownBackdrop = null;
+    if (target && e.target === target && !target.hidden) closeBackdrop(target);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.isComposing) return;
+    const openModals = [...document.querySelectorAll(".modal-backdrop")].filter((el) => !el.hidden);
+    if (!openModals.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeBackdrop(openModals[openModals.length - 1]);
+  });
+};

@@ -229,11 +229,49 @@ table.data-table th { color: var(--muted); font-size: 12px; font-weight: 600; }
 .modal-card {
   width: 100%;
   max-width: 460px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   background: var(--surface);
   border-radius: var(--radius);
   padding: 20px;
   border: 1px solid var(--line);
   box-shadow: var(--shadow-lg);
+}
+.modal-card.modal-shell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+.modal-shell > .modal-head {
+  flex: none;
+  padding: 14px 20px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+}
+.modal-shell > form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-shell .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px;
+}
+.modal-shell .modal-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
 .modal-head {
   display: flex;
@@ -245,6 +283,8 @@ table.data-table th { color: var(--muted); font-size: 12px; font-weight: 600; }
 .stack-form { display: flex; flex-direction: column; gap: 12px; }
 .stack-form label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; }
 .stack-form label.switch-row { flex-direction: row; align-items: center; justify-content: space-between; font-weight: 500; }
+.stack-form label.row-gap,
+.stack-form label.inline-field { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
 .toast-container {
@@ -388,3 +428,37 @@ mark { background: #fef08a; color: #111827; padding: 0 2px; border-radius: 3px; 
 .accent-dot:hover { transform: scale(1.1); }
 .accent-dot.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 .accent-swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); display: inline-block; flex: none; }
+
+/* 通用空状态与考试组卷面板 */
+.empty-state {
+  max-width: 420px; margin: 48px auto; padding: 28px 20px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty-state-icon {
+  width: 46px; height: 46px; border-radius: 12px; display: inline-flex;
+  align-items: center; justify-content: center; background: var(--surface-soft); color: var(--muted);
+}
+.exam-section-title { font-size: 12px; font-weight: 700; color: var(--muted); margin: 4px 0 0; }
+.exam-seg {
+  display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px;
+  background: var(--surface-soft); border: 1px solid var(--line); align-self: flex-start;
+}
+.exam-seg-opt {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  color: var(--muted); cursor: pointer;
+}
+.exam-seg-opt input { margin: 0; accent-color: var(--accent); }
+.exam-seg-opt:has(input:checked) { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-sm); }
+.exam-type-list { display: flex; flex-direction: column; gap: 8px; }
+.exam-type-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+}
+.exam-type-row input[type="number"] { width: 66px; padding: 5px 8px; text-align: center; }
+.exam-switch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.exam-switch-item {
+  padding: 8px 12px !important; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface-soft); cursor: pointer;
+}
+@media (max-width: 600px) { .exam-switch-grid { grid-template-columns: 1fr; } }
