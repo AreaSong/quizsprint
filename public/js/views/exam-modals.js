@@ -193,7 +193,7 @@ export const openCreateExamModal = async (modal, { banks, activeBankId, onCreate
       <div class="row-gap" style="justify-content:space-between;padding:4px 6px;border-bottom:1px solid var(--line);">
         <label class="row-gap" style="flex:1;flex-direction:row;font-weight:400;cursor:pointer;">
           <input type="checkbox" class="m-pick-chk" data-qid="${escapeHtml(q.id)}" ${selectedIds.has(q.id) ? "checked" : ""}>
-          <span class="badge">${TYPE_LABELS[q.type] || "其他"}</span>
+          <span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span>
           <span>${escapeHtml(q.title.slice(0, 46))}</span>
         </label>
         <input type="number" class="m-pick-sc" data-qid="${escapeHtml(q.id)}" min="0.5" step="0.5" value="${manualScores[q.id] || 2}" style="width:66px;">

@@ -433,7 +433,7 @@ export const renderPracticeView = async (container, ctx) => {
             <div class="q-progress-track"><span style="width:${pct}%"></span></div>
             <div class="row-gap q-head" style="justify-content:space-between;">
               <div class="row-gap">
-                <span class="tag-pill">${TYPE_LABELS[q.type] || "其他"}</span>
+                <span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span>
                 ${q.chapter ? `<span class="tag-pill">${escapeHtml(q.chapter)}</span>` : ""}
                 ${examSession ? `<span class="badge ok">${round1(examSession.scoreMap[q.id] || 0)} 分</span>` : ""}
                 ${streakBadge}

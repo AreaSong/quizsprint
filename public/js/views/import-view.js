@@ -87,7 +87,7 @@ export const renderImportView = (container, ctx) => {
       return acc;
     }, {});
     const countTags = Object.entries(typeCounts)
-      .map(([k, v]) => `<span class="badge">${TYPE_LABELS[k] || "其他"} ${v}</span>`)
+      .map(([k, v]) => `<span class="type-pill" data-qtype="${escapeHtml(k)}">${TYPE_LABELS[k] || "其他"} ${v}</span>`)
       .join("");
 
     summaryEl.innerHTML = `
@@ -106,7 +106,7 @@ export const renderImportView = (container, ctx) => {
     const cardsHtml = questions.slice(0, 80).map((q, idx) => `
       <div class="panel" style="padding:10px;">
         <div class="row-gap" style="justify-content:space-between;">
-          <span class="badge">${TYPE_LABELS[q.type] || "其他"}</span>
+          <span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span>
           <span class="muted-text" style="font-size:12px;">#${idx + 1}</span>
         </div>
         <div style="font-weight:600;margin:6px 0;">${escapeHtml(q.title)}</div>

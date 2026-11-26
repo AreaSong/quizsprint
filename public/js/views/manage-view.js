@@ -78,7 +78,7 @@ export const renderManageView = async (container, ctx) => {
               </div>
               <div class="row-gap" style="margin-top:6px;">
                 <span class="muted-text">共 ${questions.length} 题 · 匹配 ${filtered.length} 题</span>
-                ${Object.entries(typeCounts).map(([k, v]) => `<span class="badge">${TYPE_LABELS[k] || "其他"} ${v}</span>`).join("")}
+                ${Object.entries(typeCounts).map(([k, v]) => `<span class="type-pill" data-qtype="${escapeHtml(k)}">${TYPE_LABELS[k] || "其他"} ${v}</span>`).join("")}
               </div>
             </div>
             <div class="row-gap">
@@ -122,7 +122,7 @@ export const renderManageView = async (container, ctx) => {
               ${pageItems.map((q) => `
                 <tr data-qid="${escapeHtml(q.id)}">
                   <td><input class="row-chk" type="checkbox" ${state.selectedIds.has(q.id) ? "checked" : ""}></td>
-                  <td><span class="badge">${TYPE_LABELS[q.type] || "其他"}</span></td>
+                  <td><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span></td>
                   <td>
                     <details>
                       <summary style="cursor:pointer;font-weight:600;">${q.images?.length ? "🖼️ " : ""}${escapeHtml(q.title)}</summary>

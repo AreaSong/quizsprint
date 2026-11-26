@@ -378,7 +378,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
       <div class="view-scroll" style="margin-top:14px;display:flex;flex-direction:column;gap:16px;padding-right:4px;">
         ${questions.map((q, idx) => `
           <div class="panel" data-qid="${escapeHtml(q.id)}">
-            <div><span class="badge">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>${idx + 1}. ${escapeHtml(q.title)}</strong></div>
+            <div><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>${idx + 1}. ${escapeHtml(q.title)}</strong></div>
             ${(q.images || []).length ? `<div class="row-gap" style="margin-top:8px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
             ${q.options?.length ? `
               <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">

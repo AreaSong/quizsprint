@@ -462,3 +462,19 @@ mark { background: #fef08a; color: #111827; padding: 0 2px; border-radius: 3px; 
   background: var(--surface-soft); cursor: pointer;
 }
 @media (max-width: 600px) { .exam-switch-grid { grid-template-columns: 1fr; } }
+
+/* 题型语义色胶囊 + 中性题库胶囊（适配浅色/纸质/深色） */
+.type-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-soft); color: var(--muted); white-space: nowrap; }
+.type-pill[data-qtype="0"] { background: #eff6ff; color: #1d4ed8; }
+.type-pill[data-qtype="1"] { background: #f5f3ff; color: #6d28d9; }
+.type-pill[data-qtype="2"] { background: #fffbeb; color: #b45309; }
+.type-pill[data-qtype="3"] { background: #f0fdfa; color: #0f766e; }
+.type-pill[data-qtype="4"] { background: #fdf2f8; color: #be185d; }
+.type-pill[data-qtype="5"] { background: #eef2ff; color: #4338ca; }
+:root[data-theme="dark"] .type-pill[data-qtype="0"] { background: rgba(59, 130, 246, .16); color: #93c5fd; }
+:root[data-theme="dark"] .type-pill[data-qtype="1"] { background: rgba(139, 92, 246, .18); color: #c4b5fd; }
+:root[data-theme="dark"] .type-pill[data-qtype="2"] { background: rgba(245, 158, 11, .16); color: #fcd34d; }
+:root[data-theme="dark"] .type-pill[data-qtype="3"] { background: rgba(20, 184, 166, .16); color: #5eead4; }
+:root[data-theme="dark"] .type-pill[data-qtype="4"] { background: rgba(236, 72, 153, .16); color: #f9a8d4; }
+:root[data-theme="dark"] .type-pill[data-qtype="5"] { background: rgba(99, 102, 241, .18); color: #a5b4fc; }
+.bank-pill { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--muted); background: transparent; border: 1px solid var(--line); white-space: nowrap; }

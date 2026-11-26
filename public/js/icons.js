@@ -20,7 +20,9 @@ const SVG_PATHS = {
   note: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   rotate: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   chevronLeft: '<polyline points="15 18 9 12 15 6"/>',
-  chevronRight: '<polyline points="9 18 15 12 9 6"/>'
+  chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'
 };
 
 export const iconSvg = (name, size = 16) => {
