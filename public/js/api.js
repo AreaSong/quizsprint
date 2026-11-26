@@ -82,6 +82,7 @@ export const getGlobalSettings = () => {
     accent: "indigo",
     immersive: false,
     asideCollapsed: false,
+    notesCollapsed: null,
     strategy: "default",
     wrongClearStreak: 1
   });

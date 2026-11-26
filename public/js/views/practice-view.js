@@ -1,5 +1,4 @@
 import {
-  aiRequest,
   escapeHtml,
   fetchBankQuestionsSafe,
   getBankPracticeState,
@@ -12,6 +11,7 @@ import {
   TYPE_LABELS
 } from "../api.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
+import { createNotesController } from "./practice-notes.js";
 import { iconSvg } from "../icons.js";
 import {
   buildAnswerPanelHtml,
@@ -19,6 +19,7 @@ import {
   buildImmersiveBarHtml,
   buildInteractionHtml,
   buildModeBarHtml,
+  buildNoteHistoryItemsHtml,
   buildNotesPanelHtml,
   buildSheetInnerHtml,
   computeChapterStats,
@@ -70,11 +71,22 @@ export const renderPracticeView = async (container, ctx) => {
   let examSession = null;
   let examTimer = null;
   let keydownHandler = null;
+  let aiWide = false;
+  let pendingAiPrompt = "";
   const optionCache = new Map();
 
+  const isNotesCollapsed = () => (settings.notesCollapsed == null ? window.innerWidth < 1320 : Boolean(settings.notesCollapsed));
   const stopTimer = () => { if (examTimer) clearInterval(examTimer); examTimer = null; };
   const clearKeydown = () => { if (keydownHandler) window.removeEventListener("keydown", keydownHandler); keydownHandler = null; };
-  activePracticeCleanup = () => { stopTimer(); clearKeydown(); };
+  const notesCtrl = createNotesController({
+    container,
+    bankId: bank.id,
+    bankState,
+    getList: () => list,
+    onJump: (idx) => { currentIndex = idx; multiDraft.clear(); renderMain(); }
+  });
+  const flushPendingNote = () => notesCtrl.flush();
+  activePracticeCleanup = () => { flushPendingNote(); stopTimer(); clearKeydown(); };
 
   const cachedOptions = (q) => {
     const key = `${q.id}_${settings.shuffleOptions}`;
@@ -135,9 +147,10 @@ export const renderPracticeView = async (container, ctx) => {
     saveBankPracticeState(bank.id, bankState, countDaily ? { answered: 1, correct: correct ? 1 : 0, questionId: q.id } : null);
   };
 
-  const goPrev = () => { if (currentIndex > 0) { currentIndex -= 1; multiDraft.clear(); renderMain(); } };
+  const goPrev = () => { if (currentIndex > 0) { flushPendingNote(); currentIndex -= 1; multiDraft.clear(); renderMain(); } };
   const goNext = () => {
     if (currentIndex < list.length - 1) {
+      flushPendingNote();
       currentIndex += 1; multiDraft.clear();
       if (!examSession) { bankState.lastIndex = currentIndex; saveBankPracticeState(bank.id, bankState); }
       renderMain();
@@ -165,7 +178,7 @@ export const renderPracticeView = async (container, ctx) => {
   };
 
   const renderExamSetup = () => {
-    container.innerHTML = buildExamSetupHtml(bank.name, allQuestions);
+    container.innerHTML = `<div class="view-scroll">${buildExamSetupHtml(bank.name, allQuestions)}</div>`;
     const quickBox = container.querySelector("#ex-quick-box");
     const typeBox = container.querySelector("#ex-type-box");
     const totalEl = container.querySelector("#ex-total-preview");
@@ -268,16 +281,8 @@ export const renderPracticeView = async (container, ctx) => {
       if (set.has(q.id)) set.delete(q.id); else { set.add(q.id); bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id); }
       bankState.masteredIds = [...set]; saveBankPracticeState(bank.id, bankState); renderMain();
     });
-    const saveNote = (val) => {
-      bankState.notes = bankState.notes || {};
-      bankState.notes[q.id] = String(val || "").trim();
-      saveBankPracticeState(bank.id, bankState);
-      showToast("笔记已保存", "ok");
-    };
-    container.querySelector("#aside-note-input")?.addEventListener("change", (e) => { saveNote(e.target.value); renderMain(); });
-    container.querySelector("#btn-jump-note")?.addEventListener("click", () => {
-      settings.asideCollapsed = false; saveGlobalSettings(settings);
-      asideTab = "notes"; renderMain();
+    notesCtrl.bind(q.id, () => {
+      settings.notesCollapsed = false; saveGlobalSettings(settings); renderMain();
       container.querySelector("#aside-note-input")?.focus();
     });
     container.querySelector("#btn-eval-ok")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], true, false); renderMain(); });
@@ -294,13 +299,31 @@ export const renderPracticeView = async (container, ctx) => {
     const aiModal = container.querySelector("#ai-chat-modal");
     const asideAiRoot = container.querySelector("#aside-ai-chat");
     const modalAiRoot = container.querySelector("#modal-ai-chat");
-    if (asideAiRoot && asideTab === "ai") mountAiChatWidget(asideAiRoot, q);
-    container.querySelectorAll(".js-open-ai-modal").forEach((b) => b.addEventListener("click", () => { if (aiModal) { mountAiChatWidget(modalAiRoot, q); aiModal.hidden = false; } }));
-    container.querySelector("#ai-chat-modal-close")?.addEventListener("click", () => { if (aiModal) aiModal.hidden = true; if (asideAiRoot && asideTab === "ai") mountAiChatWidget(asideAiRoot, q); });
+    const aiOpts = (allowWide, autoPrompt = "") => ({
+      isWide: aiWide,
+      onToggleWide: allowWide ? () => { aiWide = !aiWide; renderMain(); } : null,
+      onAppendNote: (text) => notesCtrl.append(q.id, text),
+      autoPrompt
+    });
+    if (asideAiRoot && asideTab === "ai") {
+      const prompt = pendingAiPrompt;
+      pendingAiPrompt = "";
+      mountAiChatWidget(asideAiRoot, q, aiOpts(true, prompt));
+    }
+    container.querySelectorAll(".js-open-ai-modal").forEach((b) => b.addEventListener("click", () => {
+      if (aiModal) { mountAiChatWidget(modalAiRoot, q, aiOpts(false)); aiModal.hidden = false; }
+    }));
+    container.querySelector("#ai-chat-modal-close")?.addEventListener("click", () => {
+      if (aiModal) aiModal.hidden = true;
+      if (asideAiRoot && asideTab === "ai") mountAiChatWidget(asideAiRoot, q, aiOpts(true));
+    });
     const sheetModal = container.querySelector("#sheet-modal");
     container.querySelectorAll(".js-open-sheet").forEach((b) => b.addEventListener("click", () => { if (sheetModal) sheetModal.hidden = false; }));
     container.querySelector("#sheet-modal-close")?.addEventListener("click", () => { if (sheetModal) sheetModal.hidden = true; });
-    container.querySelectorAll("button[data-jump]").forEach((b) => b.addEventListener("click", () => { currentIndex = Number(b.dataset.jump); multiDraft.clear(); if (sheetModal) sheetModal.hidden = true; renderMain(); }));
+    container.querySelectorAll("button[data-jump]").forEach((b) => b.addEventListener("click", () => {
+      if (b.closest(".note-history-list")) return;
+      flushPendingNote(); currentIndex = Number(b.dataset.jump); multiDraft.clear(); if (sheetModal) sheetModal.hidden = true; renderMain();
+    }));
     container.querySelectorAll(".js-reset-progress").forEach((b) => b.addEventListener("click", () => {
       if (!confirm("确定清空本题库的刷题记录吗？")) return;
       bankState.records = {}; bankState.lastIndex = 0; drillRecords = {}; saveBankPracticeState(bank.id, bankState); currentIndex = 0; renderMain();
@@ -312,11 +335,14 @@ export const renderPracticeView = async (container, ctx) => {
     container.querySelectorAll(".js-sw-strategy").forEach((el) => el.addEventListener("change", (e) => { settings.strategy = e.target.value; saveGlobalSettings(settings); buildList(); renderMain(); }));
     container.querySelectorAll(".js-sw-streak").forEach((el) => el.addEventListener("change", (e) => { settings.wrongClearStreak = Number(e.target.value || 1); saveGlobalSettings(settings); renderMain(); }));
     container.querySelectorAll(".js-export-wrong").forEach((el) => el.addEventListener("click", () => printQuestionsDocument(`${bank.name} - 错题本`, list, true)));
-    container.querySelector("#btn-ai-explain")?.addEventListener("click", async () => {
-      const box = container.querySelector("#ai-explain-box");
-      if (!box) return;
-      box.hidden = false; box.textContent = "AI 正在生成深度解析...";
-      try { box.textContent = (await aiRequest("/api/ai/explain", { question: q })).explanation; } catch (err) { box.textContent = err.message; }
+    container.querySelector("#btn-ai-explain")?.addEventListener("click", () => {
+      const prompt = "请详细解析这道题：说明正确答案的核心依据，逐项分析错误选项，并提炼 1-2 条记忆要点。";
+      if (window.innerWidth <= 960) {
+        if (aiModal) { mountAiChatWidget(modalAiRoot, q, aiOpts(false, prompt)); aiModal.hidden = false; }
+        return;
+      }
+      settings.asideCollapsed = false; saveGlobalSettings(settings);
+      asideTab = "ai"; pendingAiPrompt = prompt; renderMain();
     });
 
     if (!showAnswerNow) {
@@ -351,18 +377,21 @@ export const renderPracticeView = async (container, ctx) => {
     clearKeydown();
     if (mode === "exam" && !examSession) return renderExamSetup();
     const chapterStats = computeChapterStats(allQuestions, bankState.records || {});
-    const modeBar = buildModeBarHtml({ bank, banks, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings });
+    const notesCollapsed = isNotesCollapsed();
+    const modeBar = buildModeBarHtml({ bank, banks, mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings, notesCollapsed });
     const bindBar = () => {
       container.querySelector("#p-bank-select")?.addEventListener("change", (e) => {
+        flushPendingNote();
         const nextId = e.target.value;
         ctx.onSelectBank?.(nextId);
         renderPracticeView(container, { ...ctx, activeBankId: nextId, routeParams: { mode } });
       });
-      container.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; buildList(); renderMain(); }));
-      container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { typeFilter = e.target.value; buildList(); renderMain(); });
-      container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { chapterFilter = e.target.value; buildList(); renderMain(); });
+      container.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { flushPendingNote(); mode = b.dataset.mode; buildList(); renderMain(); }));
+      container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { flushPendingNote(); typeFilter = e.target.value; buildList(); renderMain(); });
+      container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { flushPendingNote(); chapterFilter = e.target.value; buildList(); renderMain(); });
       container.querySelector("#btn-submit-exam")?.addEventListener("click", submitExam);
       container.querySelector("#btn-quick-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
+      container.querySelector("#btn-toggle-notes")?.addEventListener("click", () => { settings.notesCollapsed = !isNotesCollapsed(); saveGlobalSettings(settings); renderMain(); });
       container.querySelector("#btn-toggle-aside")?.addEventListener("click", () => { settings.asideCollapsed = !settings.asideCollapsed; saveGlobalSettings(settings); renderMain(); });
       container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => { settings.immersive = !settings.immersive; saveGlobalSettings(settings); document.body.classList.toggle("immersive-mode", settings.immersive); renderMain(); });
     };
@@ -387,17 +416,21 @@ export const renderPracticeView = async (container, ctx) => {
     const streakBadge = needStreak > 1 && (bankState.wrongIds || []).includes(q.id)
       ? `<span class="badge warn">巩固 ${curStreak}/${needStreak}</span>` : "";
 
-    const asideBody = asideTab === "sheet" ? sheetInnerHtml : (asideTab === "notes" ? buildNotesPanelHtml(list, q, bankState) : '<div id="aside-ai-chat"></div>');
+    const activeAsideTab = asideTab === "ai" ? "ai" : "sheet";
+    const asideBody = activeAsideTab === "ai" ? '<div id="aside-ai-chat"></div>' : sheetInnerHtml;
 
     container.innerHTML = `
-      <div class="practice-shell ${settings.asideCollapsed ? "aside-collapsed" : ""}">
+      <div class="practice-shell ${notesCollapsed ? "notes-collapsed" : ""} ${settings.asideCollapsed ? "aside-collapsed" : ""} ${activeAsideTab === "ai" && aiWide ? "ai-wide" : ""}">
         ${modeBar}
         ${buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings)}
         ${examRes ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : ""}
         <div class="practice-layout">
+          <aside class="practice-notes panel">
+            ${buildNotesPanelHtml(list, q, bankState, "aside-note-input")}
+          </aside>
           <section class="question-box">
             <div class="q-progress-track"><span style="width:${pct}%"></span></div>
-            <div class="row-gap" style="justify-content:space-between;">
+            <div class="row-gap q-head" style="justify-content:space-between;">
               <div class="row-gap">
                 <span class="tag-pill">${TYPE_LABELS[q.type] || "其他"}</span>
                 ${q.chapter ? `<span class="tag-pill">${escapeHtml(q.chapter)}</span>` : ""}
@@ -410,14 +443,17 @@ export const renderPracticeView = async (container, ctx) => {
                 <button id="btn-master" class="btn tiny ${isMastered ? "ok" : "ghost"}">${iconSvg("check", 13)}<span>${isMastered ? "已斩题" : "斩题"}</span></button>
               </div>
             </div>
-            <div class="q-title">${escapeHtml(q.title)}</div>
-            ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-            ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession })}
-            ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
-            <div class="row-gap practice-nav-footer" style="justify-content:space-between;margin-top:20px;padding-top:14px;border-top:1px solid var(--line);">
+            <div class="q-body-scroll">
+              <div class="q-title">${escapeHtml(q.title)}</div>
+              ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+              ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession })}
+              ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
+            </div>
+            <div class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);">
               <button id="btn-prev" class="btn ghost tiny" ${currentIndex === 0 ? "disabled" : ""}>${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
               <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
               <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
+              <button class="btn ghost tiny mobile-only-btn js-open-notes-modal">笔记</button>
               <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
               <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
               <button id="btn-next" class="btn primary tiny" ${currentIndex >= list.length - 1 ? "disabled" : ""}><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
@@ -425,13 +461,14 @@ export const renderPracticeView = async (container, ctx) => {
           </section>
           <aside class="practice-aside panel">
             <div class="aside-tabs">
-              ${[["sheet", "答题卡"], ["notes", "本题笔记"], ["ai", "AI 助教"]].map(([k, lbl]) => `
-                <button type="button" class="aside-tab-btn js-aside-tab ${asideTab === k ? "active" : ""}" data-tab="${k}">${lbl}</button>
+              ${[["sheet", "答题卡"], ["ai", "AI 助教"]].map(([k, lbl]) => `
+                <button type="button" class="aside-tab-btn js-aside-tab ${activeAsideTab === k ? "active" : ""}" data-tab="${k}">${lbl}</button>
               `).join("")}
             </div>
-            ${asideBody}
+            <div class="aside-body-scroll ${activeAsideTab === "ai" ? "is-ai-tab" : ""}">${asideBody}</div>
           </aside>
         </div>
+        <div id="notes-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>题目笔记</h3><button id="notes-modal-close" class="btn ghost tiny">关闭</button></div>${buildNotesPanelHtml(list, q, bankState, "modal-note-input")}</div></div>
         <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div></div>
         <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-ai-chat"></div></div></div>
       </div>

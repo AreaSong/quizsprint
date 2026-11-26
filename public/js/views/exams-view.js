@@ -73,44 +73,48 @@ export const renderExamsView = async (container, ctx) => {
   }
 
   container.innerHTML = `
-    <div class="panel">
-      <div class="row-gap" style="justify-content:space-between;">
-        <div>
-          <h2 style="margin:0;">在线考试中心（发卷与防作弊）</h2>
-          <span class="muted-text">支持按题型抽题配分、手动挑题、时间窗与限考管控、简答题人工阅卷及成绩单导出</span>
-        </div>
-        <div class="row-gap">
-          <button id="ex-my-subs-btn" class="btn ghost">我的成绩单</button>
-          <button id="ex-create-btn" class="btn primary">${isAdmin ? "+ 发起新考试" : "管理员发考"}</button>
+    <div class="panel view-frame">
+      <div class="view-head">
+        <div class="row-gap" style="justify-content:space-between;">
+          <div>
+            <h2 style="margin:0;">在线考试中心（发卷与防作弊）</h2>
+            <span class="muted-text">支持按题型抽题配分、手动挑题、时间窗与限考管控、简答题人工阅卷及成绩单导出</span>
+          </div>
+          <div class="row-gap">
+            <button id="ex-my-subs-btn" class="btn ghost">我的成绩单</button>
+            <button id="ex-create-btn" class="btn primary">${isAdmin ? "+ 发起新考试" : "管理员发考"}</button>
+          </div>
         </div>
       </div>
-      <div class="cards-grid">
-        ${exams.map((ex) => `
-          <div class="bank-card" data-eid="${escapeHtml(ex.id)}">
-            <div>
-              <div class="row-gap" style="justify-content:space-between;">
-                <h3>${(ex.hasAccessCode ?? Boolean(ex.accessCode)) ? "🔒 " : ""}${escapeHtml(ex.title)}</h3>
-                <span class="badge">${ex.questionCount} 题 · ${ex.durationMinutes} 分钟</span>
+      <div class="view-scroll" style="margin-top:14px;">
+        <div class="cards-grid">
+          ${exams.map((ex) => `
+            <div class="bank-card" data-eid="${escapeHtml(ex.id)}">
+              <div>
+                <div class="row-gap" style="justify-content:space-between;">
+                  <h3>${(ex.hasAccessCode ?? Boolean(ex.accessCode)) ? "🔒 " : ""}${escapeHtml(ex.title)}</h3>
+                  <span class="badge">${ex.questionCount} 题 · ${ex.durationMinutes} 分钟</span>
+                </div>
+                <p class="muted-text" style="margin:6px 0;">来源：${escapeHtml(ex.bankName)} · 满分 ${ex.totalScore || 100} / 及格 ${ex.passScore} 分 · 已交卷 ${ex.submissionCount} 人</p>
+                <div class="row-gap">
+                  ${ex.disableCopy ? '<span class="badge warn">禁复制</span>' : ""}
+                  <span class="badge">限切屏 ${ex.maxTabSwitches} 次</span>
+                  ${ex.maxAttempts > 0 ? `<span class="badge warn">限考 ${ex.maxAttempts} 次</span>` : ""}
+                  ${ex.startTime || ex.endTime ? `<span class="badge">限时窗口</span>` : ""}
+                </div>
               </div>
-              <p class="muted-text" style="margin:6px 0;">来源：${escapeHtml(ex.bankName)} · 满分 ${ex.totalScore || 100} / 及格 ${ex.passScore} 分 · 已交卷 ${ex.submissionCount} 人</p>
               <div class="row-gap">
-                ${ex.disableCopy ? '<span class="badge warn">禁复制</span>' : ""}
-                <span class="badge">限切屏 ${ex.maxTabSwitches} 次</span>
-                ${ex.maxAttempts > 0 ? `<span class="badge warn">限考 ${ex.maxAttempts} 次</span>` : ""}
-                ${ex.startTime || ex.endTime ? `<span class="badge">限时窗口</span>` : ""}
+                <button class="btn primary tiny" data-act="enter">进入考场</button>
+                <button class="btn ghost tiny" data-act="copy">复制链接</button>
+                ${isAdmin ? `
+                  <button class="btn ghost tiny" data-act="edit">编辑</button>
+                  <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
+                  <button class="btn danger tiny" data-act="del">删除</button>
+                ` : ""}
               </div>
             </div>
-            <div class="row-gap">
-              <button class="btn primary tiny" data-act="enter">进入考场</button>
-              <button class="btn ghost tiny" data-act="copy">复制链接</button>
-              ${isAdmin ? `
-                <button class="btn ghost tiny" data-act="edit">编辑</button>
-                <button class="btn ghost tiny" data-act="subs">成绩单/阅卷</button>
-                <button class="btn danger tiny" data-act="del">删除</button>
-              ` : ""}
-            </div>
-          </div>
-        `).join("") || '<p class="muted-text">暂无在线考试，管理员可点击右上角发起考试。</p>'}
+          `).join("") || '<p class="muted-text">暂无在线考试，管理员可点击右上角发起考试。</p>'}
+        </div>
       </div>
     </div>
     <div id="ex-modal" class="modal-backdrop" hidden></div>
@@ -217,14 +221,16 @@ const renderExamRoom = async (container, examId, code = "", ctx = {}) => {
   if (draft) clearExamDraft(examId);
 
   container.innerHTML = `
-    <div class="panel" style="max-width:480px;margin:20px auto;">
-      <h2 style="margin-top:0;">${escapeHtml(exam.title)}</h2>
-      <p class="muted-text">题数：${exam.questionsSnapshot.length} 题 · 满分：${exam.totalScore || 100} 分 · 及格：${exam.passScore} 分 · 时长：${exam.durationMinutes} 分钟 · 最多切屏 ${exam.maxTabSwitches} 次</p>
-      <form id="join-exam-form" class="stack-form">
-        <label><span>考生姓名</span><input id="stu-name" required placeholder="请输入真实姓名"></label>
-        <label><span>学号/工号（可选）</span><input id="stu-no" placeholder="可选"></label>
-        <button type="submit" class="btn primary">开始答题</button>
-      </form>
+    <div class="view-scroll">
+      <div class="panel" style="max-width:480px;margin:20px auto;">
+        <h2 style="margin-top:0;">${escapeHtml(exam.title)}</h2>
+        <p class="muted-text">题数：${exam.questionsSnapshot.length} 题 · 满分：${exam.totalScore || 100} 分 · 及格：${exam.passScore} 分 · 时长：${exam.durationMinutes} 分钟 · 最多切屏 ${exam.maxTabSwitches} 次</p>
+        <form id="join-exam-form" class="stack-form">
+          <label><span>考生姓名</span><input id="stu-name" required placeholder="请输入真实姓名"></label>
+          <label><span>学号/工号（可选）</span><input id="stu-no" placeholder="可选"></label>
+          <button type="submit" class="btn primary">开始答题</button>
+        </form>
+      </div>
     </div>
   `;
 
@@ -271,24 +277,26 @@ const startExamSession = (container, exam, student, restoredDraft = null) => {
       clearExamDraft(exam.id);
       const sub = res.submission;
       container.innerHTML = `
-        <div class="panel" style="max-width:720px;margin:0 auto;">
-          <h2 style="margin-top:0;">交卷成功 · ${escapeHtml(exam.title)}</h2>
-          <div class="row-gap" style="margin-bottom:14px;">
-            <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:16px;">得分：${sub.score} / ${exam.totalScore || 100} 分（${sub.passed ? "及格" : "不及格"}）</span>
-            <span class="badge">答对 ${sub.correctCount} / ${sub.totalCount}</span>
-            <span class="badge warn">切屏 ${sub.tabSwitches} 次</span>
-            ${sub.manualGraded ? "" : '<span class="badge warn">含主观题，待管理员最终阅卷核分</span>'}
-          </div>
-          ${sub.details.map((d, i) => `
-            <div class="panel" style="padding:10px;margin-bottom:8px;">
-              <div class="row-gap" style="justify-content:space-between;">
-                <strong>${i + 1}. ${escapeHtml(d.title)}</strong>
-                <span><span class="badge">${d.earnedScore ?? 0} / ${d.maxScore ?? fallbackScore} 分</span> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : (d.needManual ? "待阅卷" : "错误")}</span></span>
-              </div>
-              ${(d.images || []).length ? `<div class="row-gap" style="margin:6px 0;">${d.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-              <div class="muted-text">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")}${d.answerHidden ? " · 管理员设置交卷后暂不公开参考答案" : ` · 正确答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
+        <div class="view-scroll">
+          <div class="panel" style="max-width:720px;margin:0 auto;">
+            <h2 style="margin-top:0;">交卷成功 · ${escapeHtml(exam.title)}</h2>
+            <div class="row-gap" style="margin-bottom:14px;">
+              <span class="badge ${sub.passed ? "ok" : "bad"}" style="font-size:16px;">得分：${sub.score} / ${exam.totalScore || 100} 分（${sub.passed ? "及格" : "不及格"}）</span>
+              <span class="badge">答对 ${sub.correctCount} / ${sub.totalCount}</span>
+              <span class="badge warn">切屏 ${sub.tabSwitches} 次</span>
+              ${sub.manualGraded ? "" : '<span class="badge warn">含主观题，待管理员最终阅卷核分</span>'}
             </div>
-          `).join("")}
+            ${sub.details.map((d, i) => `
+              <div class="panel" style="padding:10px;margin-bottom:8px;">
+                <div class="row-gap" style="justify-content:space-between;">
+                  <strong>${i + 1}. ${escapeHtml(d.title)}</strong>
+                  <span><span class="badge">${d.earnedScore ?? 0} / ${d.maxScore ?? fallbackScore} 分</span> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : (d.needManual ? "待阅卷" : "错误")}</span></span>
+                </div>
+                ${(d.images || []).length ? `<div class="row-gap" style="margin:6px 0;">${d.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+                <div class="muted-text">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")}${d.answerHidden ? " · 管理员设置交卷后暂不公开参考答案" : ` · 正确答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
+              </div>
+            `).join("")}
+          </div>
         </div>
       `;
     } catch (err) {
@@ -331,15 +339,15 @@ const startExamSession = (container, exam, student, restoredDraft = null) => {
   }, 1000);
 
   container.innerHTML = `
-    <div class="panel" style="max-width:860px;margin:0 auto;${exam.disableCopy ? "user-select:none;" : ""}">
-      <div class="row-gap" style="justify-content:space-between;position:sticky;top:0;background:var(--surface);padding:8px 0;border-bottom:1px solid var(--line);z-index:10;">
+    <div class="panel view-frame exam-room-frame" style="${exam.disableCopy ? "user-select:none;" : ""}">
+      <div class="row-gap view-head" style="justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--line);">
         <div><strong>${escapeHtml(exam.title)}</strong> · ${escapeHtml(student.studentName)}</div>
         <div class="row-gap">
           <span class="badge warn">剩余 <span id="er-clock">${exam.durationMinutes}:00</span></span>
           <button id="er-submit" class="btn primary tiny">交卷</button>
         </div>
       </div>
-      <div style="margin-top:14px;display:flex;flex-direction:column;gap:16px;">
+      <div class="view-scroll" style="margin-top:14px;display:flex;flex-direction:column;gap:16px;padding-right:4px;">
         ${questions.map((q, idx) => `
           <div class="panel" data-qid="${escapeHtml(q.id)}">
             <div><span class="badge">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>${idx + 1}. ${escapeHtml(q.title)}</strong></div>

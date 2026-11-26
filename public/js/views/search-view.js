@@ -12,28 +12,32 @@ export const renderSearchView = (container, ctx) => {
   const { banks, activeBankId, isLoggedIn, onRequireUserLogin } = ctx;
 
   container.innerHTML = `
-    <div class="panel">
-      <div class="row-gap" style="justify-content:space-between;">
-        <h2 style="margin:0;">搜题中心</h2>
-        <span class="muted-text">支持跨题库检索题干、选项与解析</span>
+    <div class="panel view-frame">
+      <div class="view-head">
+        <div class="row-gap" style="justify-content:space-between;">
+          <h2 style="margin:0;">搜题中心</h2>
+          <span class="muted-text">支持跨题库检索题干、选项与解析</span>
+        </div>
+        <div class="row-gap" style="margin-top:12px;">
+          <select id="search-bank">
+            <option value="">全部题库</option>
+            ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === activeBankId ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
+          </select>
+          <select id="search-type">
+            <option value="">全部题型</option>
+            ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
+          </select>
+          <input id="search-input" type="search" placeholder="输入题目关键词..." style="flex:1;min-width:220px;">
+          <button id="search-paste-btn" class="btn ghost">清除并粘贴</button>
+          <button id="search-submit-btn" class="btn primary">搜索</button>
+          <button id="search-ai-btn" class="btn ok">AI 搜题</button>
+        </div>
+        <div id="search-meta" class="muted-text" style="margin-top:10px;"></div>
       </div>
-      <div class="row-gap" style="margin-top:12px;">
-        <select id="search-bank">
-          <option value="">全部题库</option>
-          ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === activeBankId ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
-        </select>
-        <select id="search-type">
-          <option value="">全部题型</option>
-          ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
-        </select>
-        <input id="search-input" type="search" placeholder="输入题目关键词..." style="flex:1;min-width:220px;">
-        <button id="search-paste-btn" class="btn ghost">清除并粘贴</button>
-        <button id="search-submit-btn" class="btn primary">搜索</button>
-        <button id="search-ai-btn" class="btn ok">AI 搜题</button>
+      <div class="view-scroll" style="margin-top:10px;">
+        <div id="search-ai-box" class="answer-box" style="margin-top:0;margin-bottom:10px;" hidden></div>
+        <div id="search-results" style="display:flex;flex-direction:column;gap:10px;"></div>
       </div>
-      <div id="search-ai-box" class="answer-box" hidden></div>
-      <div id="search-meta" class="muted-text" style="margin-top:10px;"></div>
-      <div id="search-results" style="margin-top:12px;display:flex;flex-direction:column;gap:10px;"></div>
     </div>
   `;
 

@@ -64,47 +64,49 @@ export const renderManageView = async (container, ctx) => {
     const allPageSelected = pageItems.length > 0 && pageItems.every((q) => state.selectedIds.has(q.id));
 
     container.innerHTML = `
-      <div class="panel">
-        <div class="row-gap" style="justify-content:space-between;">
-          <div>
+      <div class="panel view-frame">
+        <div class="view-head">
+          <div class="row-gap" style="justify-content:space-between;">
+            <div>
+              <div class="row-gap">
+                <h2 style="margin:0;">${escapeHtml(bank.name)} · 试题管理</h2>
+                ${banks.length > 1 ? `
+                  <select id="m-bank-select" class="bank-select-inline" aria-label="切换管理题库">
+                    ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
+                  </select>
+                ` : ""}
+              </div>
+              <div class="row-gap" style="margin-top:6px;">
+                <span class="muted-text">共 ${questions.length} 题 · 匹配 ${filtered.length} 题</span>
+                ${Object.entries(typeCounts).map(([k, v]) => `<span class="badge">${TYPE_LABELS[k] || "其他"} ${v}</span>`).join("")}
+              </div>
+            </div>
             <div class="row-gap">
-              <h2 style="margin:0;">${escapeHtml(bank.name)} · 试题管理</h2>
-              ${banks.length > 1 ? `
-                <select id="m-bank-select" class="bank-select-inline" aria-label="切换管理题库">
-                  ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
-                </select>
+              <button id="btn-add-one" class="btn primary tiny">${isAdmin ? "+ 单题录入" : "登录管理"}</button>
+              <button id="btn-go-import" class="btn ghost tiny">批量导题</button>
+              <button id="btn-dup-check" class="btn ${state.dupOnly ? "primary" : "ghost"} tiny">试题查重</button>
+              ${isAdmin ? `
+                <button id="btn-batch-chapter" class="btn ghost tiny" ${state.selectedIds.size ? "" : "disabled"}>批量改章节</button>
+                <button id="btn-batch-type" class="btn ghost tiny" ${state.selectedIds.size ? "" : "disabled"}>批量改题型</button>
+                <button id="btn-batch-del" class="btn danger tiny" ${state.selectedIds.size ? "" : "disabled"}>批量删除 (${state.selectedIds.size})</button>
               ` : ""}
             </div>
-            <div class="row-gap" style="margin-top:6px;">
-              <span class="muted-text">共 ${questions.length} 题 · 匹配 ${filtered.length} 题</span>
-              ${Object.entries(typeCounts).map(([k, v]) => `<span class="badge">${TYPE_LABELS[k] || "其他"} ${v}</span>`).join("")}
-            </div>
           </div>
-          <div class="row-gap">
-            <button id="btn-add-one" class="btn primary tiny">${isAdmin ? "+ 单题录入" : "登录管理"}</button>
-            <button id="btn-go-import" class="btn ghost tiny">批量导题</button>
-            <button id="btn-dup-check" class="btn ${state.dupOnly ? "primary" : "ghost"} tiny">试题查重</button>
-            ${isAdmin ? `
-              <button id="btn-batch-chapter" class="btn ghost tiny" ${state.selectedIds.size ? "" : "disabled"}>批量改章节</button>
-              <button id="btn-batch-type" class="btn ghost tiny" ${state.selectedIds.size ? "" : "disabled"}>批量改题型</button>
-              <button id="btn-batch-del" class="btn danger tiny" ${state.selectedIds.size ? "" : "disabled"}>批量删除 (${state.selectedIds.size})</button>
-            ` : ""}
+
+          <div class="row-gap" style="margin-top:12px;">
+            <select id="f-type">
+              <option value="">全部题型</option>
+              ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${state.type === k ? "selected" : ""}>${v}</option>`).join("")}
+            </select>
+            <select id="f-chapter">
+              <option value="">全部章节</option>
+              ${chapters.map((c) => `<option value="${escapeHtml(c)}" ${state.chapter === c ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
+            </select>
+            <input id="f-kw" type="search" value="${escapeHtml(state.keyword)}" placeholder="筛选题干/选项/答案..." style="flex:1;min-width:180px;">
           </div>
         </div>
 
-        <div class="row-gap" style="margin-top:12px;">
-          <select id="f-type">
-            <option value="">全部题型</option>
-            ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${state.type === k ? "selected" : ""}>${v}</option>`).join("")}
-          </select>
-          <select id="f-chapter">
-            <option value="">全部章节</option>
-            ${chapters.map((c) => `<option value="${escapeHtml(c)}" ${state.chapter === c ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
-          </select>
-          <input id="f-kw" type="search" value="${escapeHtml(state.keyword)}" placeholder="筛选题干/选项/答案..." style="flex:1;min-width:180px;">
-        </div>
-
-        <div class="table-wrap">
+        <div class="table-wrap view-scroll" style="margin-top:12px;">
           <table class="data-table">
             <thead>
               <tr>
@@ -145,7 +147,7 @@ export const renderManageView = async (container, ctx) => {
           </table>
         </div>
 
-        <div class="row-gap" style="justify-content:space-between;margin-top:14px;">
+        <div class="row-gap view-foot" style="justify-content:space-between;">
           <span class="muted-text" style="font-size:12px;">第 ${state.page} / ${totalPages} 页（本页显示 ${pageItems.length} 题）</span>
           <div class="row-gap">
             <select id="pg-size" style="padding:4px 8px;font-size:12px;">

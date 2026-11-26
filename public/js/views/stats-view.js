@@ -34,6 +34,7 @@ export const renderStatsView = async (container, ctx = {}) => {
     : (isAdmin ? "管理员本地刷题记录" : "访客模式（登录后开启刷题统计）");
 
   container.innerHTML = `
+    <div class="view-scroll" style="padding-right:4px;">
     <div style="display:flex;flex-direction:column;gap:14px;">
       <div class="kpi-grid">
         <div class="kpi-card">
@@ -112,6 +113,7 @@ export const renderStatsView = async (container, ctx = {}) => {
           `).join("") || '<p class="muted-text">暂无高频错题数据，同学们开始刷题后将自动聚合。</p>'}
         </div>
       </section>
+    </div>
     </div>
   `;
 

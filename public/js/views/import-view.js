@@ -19,50 +19,52 @@ export const renderImportView = (container, ctx) => {
   }
 
   container.innerHTML = `
-    <div class="panel">
-      <div class="row-gap" style="justify-content:space-between;">
-        <div>
-          <h2 style="margin:0;">批量导题与整理工作台</h2>
-          <span class="muted-text">支持纯文本、Word (.docx)、Excel (.xlsx)、JSON 与 AI 智能导题/出题</span>
+    <div class="panel view-frame">
+      <div class="view-head">
+        <div class="row-gap" style="justify-content:space-between;">
+          <div>
+            <h2 style="margin:0;">批量导题与整理工作台</h2>
+            <span class="muted-text">支持纯文本、Word (.docx)、Excel (.xlsx)、JSON 与 AI 智能导题/出题</span>
+          </div>
+          <div class="row-gap">
+            <select id="imp-bank">
+              ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === targetBank.id ? "selected" : ""}>导入到：${escapeHtml(b.name)}</option>`).join("")}
+            </select>
+            <input id="imp-chapter" type="text" placeholder="默认章节（可选）" style="width:130px;">
+            <label class="row-gap" style="font-size:13px;"><input id="imp-skip" type="checkbox" checked> 跳过已有题</label>
+            <button id="imp-submit" class="btn primary">${isAdmin ? "确认导入" : "登录后导入"}</button>
+          </div>
         </div>
-        <div class="row-gap">
-          <select id="imp-bank">
-            ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === targetBank.id ? "selected" : ""}>导入到：${escapeHtml(b.name)}</option>`).join("")}
-          </select>
-          <input id="imp-chapter" type="text" placeholder="默认章节（可选）" style="width:130px;">
-          <label class="row-gap" style="font-size:13px;"><input id="imp-skip" type="checkbox" checked> 跳过已有题</label>
-          <button id="imp-submit" class="btn primary">${isAdmin ? "确认导入" : "登录后导入"}</button>
+
+        <div class="row-gap" style="margin:12px 0;">
+          <button class="btn ghost tiny" data-tool="autoFormat">一键整理格式</button>
+          <button class="btn ghost tiny" data-tool="mergeTrailingAnswers">文末答案回填</button>
+          <button class="btn ghost tiny" data-tool="expandCompactAnswers">1-5 ABCDE转换</button>
+          <button class="btn ghost tiny" data-tool="splitInlineOptions">横排选项转竖排</button>
+          <button class="btn ghost tiny" data-tool="fullToHalf">全角转半角</button>
+          <button class="btn ghost tiny" data-tool="replaceBlankUnderscore">下划线转括号</button>
+          <button class="btn ghost tiny" data-tool="removeEmptyLines">删除空白行</button>
+          <button class="btn ghost tiny" id="imp-sample">填入示例</button>
+          <button class="btn ghost tiny" id="imp-clear">清空</button>
         </div>
-      </div>
 
-      <div class="row-gap" style="margin:12px 0;">
-        <button class="btn ghost tiny" data-tool="autoFormat">一键整理格式</button>
-        <button class="btn ghost tiny" data-tool="mergeTrailingAnswers">文末答案回填</button>
-        <button class="btn ghost tiny" data-tool="expandCompactAnswers">1-5 ABCDE转换</button>
-        <button class="btn ghost tiny" data-tool="splitInlineOptions">横排选项转竖排</button>
-        <button class="btn ghost tiny" data-tool="fullToHalf">全角转半角</button>
-        <button class="btn ghost tiny" data-tool="replaceBlankUnderscore">下划线转括号</button>
-        <button class="btn ghost tiny" data-tool="removeEmptyLines">删除空白行</button>
-        <button class="btn ghost tiny" id="imp-sample">填入示例</button>
-        <button class="btn ghost tiny" id="imp-clear">清空</button>
-      </div>
-
-      <div class="row-gap" style="margin-bottom:12px;">
-        <label class="btn ghost tiny">导入 Word/Excel/JSON
-          <input id="imp-doc-file" type="file" accept=".docx,.xlsx,.xls,.csv,.json" hidden>
-        </label>
-        <a class="btn ghost tiny" href="/api/template.xlsx" style="text-decoration:none;">下载 Excel 模板</a>
-        <a class="btn ghost tiny" href="/api/template.json" style="text-decoration:none;">下载 JSON 模板</a>
-        <button id="imp-ai-parse" class="btn primary tiny">AI 智能识别左侧文本</button>
-        <button id="imp-ai-gen" class="btn ok tiny">AI 一键出题</button>
+        <div class="row-gap" style="margin-bottom:12px;">
+          <label class="btn ghost tiny">导入 Word/Excel/JSON
+            <input id="imp-doc-file" type="file" accept=".docx,.xlsx,.xls,.csv,.json" hidden>
+          </label>
+          <a class="btn ghost tiny" href="/api/template.xlsx" style="text-decoration:none;">下载 Excel 模板</a>
+          <a class="btn ghost tiny" href="/api/template.json" style="text-decoration:none;">下载 JSON 模板</a>
+          <button id="imp-ai-parse" class="btn primary tiny">AI 智能识别左侧文本</button>
+          <button id="imp-ai-gen" class="btn ok tiny">AI 一键出题</button>
+        </div>
       </div>
 
       <div class="split-workbench">
-        <div>
+        <div class="split-col">
           <textarea id="imp-textarea" class="workbench-textarea" placeholder="在此粘贴任意格式试题文本，或上传 Word/Excel/JSON 文件..."></textarea>
         </div>
-        <div>
-          <div id="imp-summary" class="row-gap" style="margin-bottom:8px;"></div>
+        <div class="split-col">
+          <div id="imp-summary" class="row-gap" style="margin-bottom:8px;flex:none;"></div>
           <div id="imp-preview" class="preview-scroll"></div>
         </div>
       </div>

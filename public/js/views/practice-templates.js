@@ -107,7 +107,6 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) 
       </div>
       ${selfEvalHtml}
       ${q.analysis ? `<div style="margin-top:8px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
-      <div id="ai-explain-box" class="muted-text" style="margin-top:8px;white-space:pre-wrap;" hidden></div>
     </div>
   `;
 };
@@ -163,28 +162,34 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
   `;
 };
 
-export const buildNotesPanelHtml = (list, q, bankState) => {
-  const notesMap = bankState.notes || {};
+export const buildNoteHistoryItemsHtml = (list, notesMap = {}) => {
   const notedEntries = list
     .map((item, idx) => ({ item, idx, note: notesMap[item.id] }))
     .filter((entry) => entry.note && entry.note.trim());
+  return {
+    count: notedEntries.length,
+    html: notedEntries.map((entry) => `
+      <button type="button" class="note-history-item" data-jump="${entry.idx}">
+        <div style="font-weight:600;color:var(--accent-fg);">第 ${entry.idx + 1} 题 · ${escapeHtml(entry.item.title.slice(0, 18))}</div>
+        <div class="muted-text" style="margin-top:2px;">${escapeHtml(entry.note.slice(0, 40))}</div>
+      </button>
+    `).join("") || '<p class="muted-text" style="margin:4px 0;font-size:12px;">暂无历史笔记</p>'
+  };
+};
+
+export const buildNotesPanelHtml = (list, q, bankState, inputId = "aside-note-input") => {
+  const notesMap = bankState.notes || {};
+  const { count, html } = buildNoteHistoryItemsHtml(list, notesMap);
 
   return `
-    <div class="stack-form">
-      <div class="row-gap" style="justify-content:space-between;">
-        <strong>本题笔记</strong>
-        <span class="muted-text" style="font-size:12px;">失焦自动保存</span>
+    <div class="notes-panel-body">
+      <div class="row-gap" style="justify-content:space-between;flex:none;">
+        <span class="row-gap" style="gap:6px;">${iconSvg("note", 14)}<strong>本题笔记</strong></span>
+        <span id="note-save-status" class="muted-text" style="font-size:12px;">自动保存</span>
       </div>
-      <textarea id="aside-note-input" class="note-textarea" placeholder="在这里记录解题思路、记忆口诀或易错点...">${escapeHtml(notesMap[q.id] || "")}</textarea>
-      <div><strong>本卷已记 (${notedEntries.length})</strong></div>
-      <div class="note-history-list">
-        ${notedEntries.map((entry) => `
-          <button type="button" class="note-history-item" data-jump="${entry.idx}">
-            <div style="font-weight:600;color:var(--accent);">第 ${entry.idx + 1} 题 · ${escapeHtml(entry.item.title.slice(0, 18))}</div>
-            <div class="muted-text" style="margin-top:2px;">${escapeHtml(entry.note.slice(0, 40))}</div>
-          </button>
-        `).join("") || '<p class="muted-text" style="margin:4px 0;font-size:12px;">暂无历史笔记</p>'}
-      </div>
+      <textarea id="${inputId}" class="note-textarea" placeholder="在此记录解题思路、记忆口诀或易错点（停笔自动保存）...">${escapeHtml(notesMap[q.id] || "")}</textarea>
+      <div style="flex:none;font-size:13px;"><strong>本卷已记 (<span id="note-history-count">${count}</span>)</strong></div>
+      <div id="note-history-wrap" class="note-history-list">${html}</div>
     </div>
   `;
 };
@@ -248,7 +253,7 @@ export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) =
   </div>
 `;
 
-export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings }) => `
+export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings, notesCollapsed = false }) => `
   <div class="practice-toolbar">
     <div class="toolbar-left">
       ${banks.length > 1 ? `
@@ -285,8 +290,9 @@ export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter
         <span class="badge warn">剩余 <span id="exam-clock">${String(Math.floor(examSession.remainSec / 60)).padStart(2, "0")}:${String(examSession.remainSec % 60).padStart(2, "0")}</span></span>
         ${examSession.submitted ? "" : `<button type="button" id="btn-submit-exam" class="btn ok tiny">交卷评分</button>`}
       ` : ""}
-      <button type="button" id="btn-quick-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}" title="开启或关闭背题直出答案">${iconSvg("eye", 14)}<span>背题</span></button>
-      <button type="button" id="btn-toggle-aside" class="btn ghost tiny desktop-only-btn" title="收起或展开右侧辅助栏">${iconSvg("sidebar", 14)}<span>${settings.asideCollapsed ? "展开侧栏" : "收起侧栏"}</span></button>
+      <button type="button" id="btn-quick-recite" class="btn tiny ${settings.reciteMode ? "soft-active" : "ghost"}" title="开启或关闭背题直出答案">${iconSvg("eye", 14)}<span>背题</span></button>
+      <button type="button" id="btn-toggle-notes" class="btn ghost tiny desktop-only-btn" title="收起或展开左侧笔记栏">${iconSvg("sidebarLeft", 14)}<span>${notesCollapsed ? "笔记栏" : "收起笔记"}</span></button>
+      <button type="button" id="btn-toggle-aside" class="btn ghost tiny desktop-only-btn" title="收起或展开右侧辅助栏">${iconSvg("sidebar", 14)}<span>${settings.asideCollapsed ? "辅助栏" : "收起辅助"}</span></button>
       <button type="button" id="btn-toggle-immersive" class="btn ghost tiny" title="全屏沉浸作答">${iconSvg("maximize", 14)}<span>沉浸</span></button>
     </div>
   </div>

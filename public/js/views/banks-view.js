@@ -247,11 +247,13 @@ export const renderBanksView = (container, ctx) => {
       : '<div class="panel"><p class="muted-text" style="margin:0;">暂无题库。</p></div>';
 
     container.innerHTML = `
-      ${renderWorkbenchHtml(curBank)}
-      <section class="banks-section">
-        ${renderSectionHeadHtml({ banksCount: banks.length, folders, activeFolder, keyword, hasCustomFolders, viewMode, isAdmin })}
-        ${listWrapHtml}
-      </section>
+      <div class="view-frame">
+        ${renderWorkbenchHtml(curBank)}
+        <section class="banks-section view-frame">
+          ${renderSectionHeadHtml({ banksCount: banks.length, folders, activeFolder, keyword, hasCustomFolders, viewMode, isAdmin })}
+          <div class="view-scroll banks-scroll-body">${listWrapHtml}</div>
+        </section>
+      </div>
     `;
   };
 

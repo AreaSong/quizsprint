@@ -46,50 +46,52 @@ export const renderUsersView = async (container, ctx) => {
     });
 
     container.innerHTML = `
-      <div class="panel">
-        <div class="row-gap" style="justify-content:space-between;">
-          <div>
-            <h2 style="margin:0;">用户管理</h2>
-            <div class="row-gap" style="margin-top:6px;">
-              <span class="badge">总账号 ${users.length}</span>
-              <span class="badge warn">管理员 ${adminCnt}</span>
-              <span class="badge ok">学员 ${studentCnt}</span>
-            </div>
-          </div>
-          <button id="usr-add-btn" class="btn primary">+ 新建账号</button>
-        </div>
-
-        <div class="panel" style="margin-top:12px;padding:12px;background:var(--surface-soft);">
-          <div class="row-gap" style="justify-content:space-between;flex-wrap:wrap;">
+      <div class="panel view-frame">
+        <div class="view-head">
+          <div class="row-gap" style="justify-content:space-between;">
             <div>
-              <strong>公网注册门禁</strong>
-              <span class="muted-text" style="font-size:12px;margin-left:8px;">控制未登录访客是否可自行注册学员账号</span>
+              <h2 style="margin:0;">用户管理</h2>
+              <div class="row-gap" style="margin-top:6px;">
+                <span class="badge">总账号 ${users.length}</span>
+                <span class="badge warn">管理员 ${adminCnt}</span>
+                <span class="badge ok">学员 ${studentCnt}</span>
+              </div>
             </div>
-            <div class="row-gap" style="flex-wrap:wrap;">
-              <select id="reg-mode">
-                <option value="open" ${regPolicy.mode === "open" ? "selected" : ""}>开放自主注册</option>
-                <option value="invite" ${regPolicy.mode === "invite" ? "selected" : ""}>凭邀请码注册</option>
-                <option value="closed" ${regPolicy.mode === "closed" ? "selected" : ""}>仅管理员手动开号</option>
-              </select>
-              <span id="reg-invite-wrap" class="row-gap" ${regPolicy.mode === "invite" ? "" : "hidden"}>
-                <input id="reg-invite-code" value="${escapeHtml(regPolicy.inviteCode)}" placeholder="设置注册邀请码" style="width:150px;">
-                <button type="button" id="reg-gen-invite" class="btn ghost tiny">随机生成</button>
-              </span>
-              <button type="button" id="reg-save-btn" class="btn primary tiny">保存门禁设置</button>
+            <button id="usr-add-btn" class="btn primary">+ 新建账号</button>
+          </div>
+
+          <div class="panel" style="margin-top:12px;padding:12px;background:var(--surface-soft);">
+            <div class="row-gap" style="justify-content:space-between;flex-wrap:wrap;">
+              <div>
+                <strong>公网注册门禁</strong>
+                <span class="muted-text" style="font-size:12px;margin-left:8px;">控制未登录访客是否可自行注册学员账号</span>
+              </div>
+              <div class="row-gap" style="flex-wrap:wrap;">
+                <select id="reg-mode">
+                  <option value="open" ${regPolicy.mode === "open" ? "selected" : ""}>开放自主注册</option>
+                  <option value="invite" ${regPolicy.mode === "invite" ? "selected" : ""}>凭邀请码注册</option>
+                  <option value="closed" ${regPolicy.mode === "closed" ? "selected" : ""}>仅管理员手动开号</option>
+                </select>
+                <span id="reg-invite-wrap" class="row-gap" ${regPolicy.mode === "invite" ? "" : "hidden"}>
+                  <input id="reg-invite-code" value="${escapeHtml(regPolicy.inviteCode)}" placeholder="设置注册邀请码" style="width:150px;">
+                  <button type="button" id="reg-gen-invite" class="btn ghost tiny">随机生成</button>
+                </span>
+                <button type="button" id="reg-save-btn" class="btn primary tiny">保存门禁设置</button>
+              </div>
             </div>
+          </div>
+
+          <div class="row-gap" style="margin-top:12px;">
+            <select id="usr-role-filter">
+              <option value="">全部角色</option>
+              <option value="student" ${state.role === "student" ? "selected" : ""}>学员</option>
+              <option value="admin" ${state.role === "admin" ? "selected" : ""}>管理员</option>
+            </select>
+            <input id="usr-kw" type="search" value="${escapeHtml(state.keyword)}" placeholder="搜索用户名或昵称..." style="flex:1;min-width:180px;">
           </div>
         </div>
 
-        <div class="row-gap" style="margin-top:12px;">
-          <select id="usr-role-filter">
-            <option value="">全部角色</option>
-            <option value="student" ${state.role === "student" ? "selected" : ""}>学员</option>
-            <option value="admin" ${state.role === "admin" ? "selected" : ""}>管理员</option>
-          </select>
-          <input id="usr-kw" type="search" value="${escapeHtml(state.keyword)}" placeholder="搜索用户名或昵称..." style="flex:1;min-width:180px;">
-        </div>
-
-        <div class="table-wrap">
+        <div class="table-wrap view-scroll" style="margin-top:12px;">
           <table class="data-table">
             <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>注册时间</th><th>操作</th></tr></thead>
             <tbody>
