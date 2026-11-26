@@ -52,10 +52,10 @@ export const mountLoginLogsPanel = async (host) => {
   const tbody = host.querySelector("#ll-tbody");
   const statsEl = host.querySelector("#ll-stats");
 
-  const reload = async () => {
+  const reload = async (fresh = false) => {
     try {
       const url = `/api/admin/login-logs?status=${encodeURIComponent(statusSel.value)}&q=${encodeURIComponent(kwInput.value.trim())}&limit=150`;
-      const res = await apiRequest(url);
+      const res = await apiRequest(url, { fresh: Boolean(fresh) });
       const logs = res.logs || [];
       const okCnt = logs.filter((l) => l.status === "success").length;
       const failCnt = logs.length - okCnt;
@@ -75,7 +75,7 @@ export const mountLoginLogsPanel = async (host) => {
   let timer = null;
   statusSel.addEventListener("change", reload);
   kwInput.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(reload, 220); });
-  host.querySelector("#ll-refresh").addEventListener("click", reload);
+  host.querySelector("#ll-refresh").addEventListener("click", () => reload(true));
   host.querySelector("#ll-clear").addEventListener("click", async () => {
     const ok = await openConfirmDialog({ title: "清空登录日志", message: "确定清空全部历史登录轨迹与 IP 记录吗？", confirmText: "确认清空", danger: true });
     if (!ok) return;

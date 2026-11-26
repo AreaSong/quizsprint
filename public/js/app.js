@@ -1,6 +1,7 @@
 import {
   apiRequest,
   escapeHtml,
+  fetchBankQuestionsSafe,
   getCloudUser,
   getGlobalSettings,
   getLocalAiConfig,
@@ -144,14 +145,23 @@ const renderUserMenu = () => {
   userMenuWrap.querySelector(".js-menu-logout").addEventListener("click", doLogout);
 };
 
-const refreshBanks = async () => {
+const refreshBanks = async (fresh = false) => {
   const [bankData, subData] = await Promise.all([
-    apiRequest("/api/banks").catch(() => ({ banks: [] })),
-    apiRequest("/api/subjects").catch(() => ({ subjects: [] }))
+    apiRequest("/api/banks", { fresh }).catch(() => ({ banks: [] })),
+    apiRequest("/api/subjects", { fresh }).catch(() => ({ subjects: [] }))
   ]);
   appState.banks = bankData.banks || [];
   appState.subjects = subData.subjects || [];
   syncBankSelection();
+};
+
+const prefetchActiveBank = () => {
+  if (!(appState.isAdmin || getCloudUser())) return;
+  const bank = appState.banks.find((b) => b.id === appState.activeBankId);
+  if (!bank || bank.locked) return;
+  setTimeout(() => {
+    if (appState.route === "banks") fetchBankQuestionsSafe(bank.id, { silent: true }).catch(() => {});
+  }, 320);
 };
 
 const refreshSiteInfo = async () => {
@@ -276,7 +286,7 @@ const doLogout = async () => {
     apiRequest("/api/auth/logout", { method: "POST" }).catch(() => {})
   ]);
   await refreshAuth();
-  await refreshBanks();
+  await refreshBanks(true);
   showToast("已退出账号");
   renderCurrentView();
 };
@@ -401,10 +411,11 @@ document.getElementById("user-form").addEventListener("submit", async (e) => {
       }
     }
     await refreshAuth();
-    await refreshBanks();
+    await refreshBanks(true);
     userModal.hidden = true;
     showToast(appState.isAdmin ? "管理员登录成功" : "登录成功，已启用云端同步", "ok");
     renderCurrentView();
+    prefetchActiveBank();
   } catch (err) { showToast(err.message, "bad"); }
 });
 
@@ -456,9 +467,10 @@ const bootstrap = async () => {
   await Promise.all([refreshBanks(), refreshAuth(), refreshSiteInfo()]);
   window.addEventListener("hashchange", syncRouteFromHash);
   syncRouteFromHash();
+  prefetchActiveBank();
   maybeOpenSetupWizard(appState.siteInfo, async () => {
     await Promise.all([refreshAuth(), refreshSiteInfo()]);
-    await refreshBanks();
+    await refreshBanks(true);
     renderCurrentView();
   });
 };

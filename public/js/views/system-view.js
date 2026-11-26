@@ -160,14 +160,15 @@ export const renderSystemView = async (container, ctx) => {
   let outputText = "";
   let maintainReport = "";
 
-  const loadAll = async () => {
+  const loadAll = async (fresh = false) => {
+    const reqOpts = fresh ? { fresh: true } : {};
     const [st, db, keyRes, siteRes, bakRes, audRes] = await Promise.all([
-      apiRequest("/api/admin/system/status"),
-      apiRequest("/api/admin/db/stats"),
-      apiRequest("/api/admin/apikey"),
-      apiRequest("/api/site/info"),
-      apiRequest("/api/admin/backups"),
-      apiRequest("/api/admin/audit-logs?limit=50")
+      apiRequest("/api/admin/system/status", reqOpts),
+      apiRequest("/api/admin/db/stats", reqOpts),
+      apiRequest("/api/admin/apikey", reqOpts),
+      apiRequest("/api/site/info", reqOpts),
+      apiRequest("/api/admin/backups", reqOpts),
+      apiRequest("/api/admin/audit-logs?limit=50", reqOpts)
     ]);
     statusData = st;
     dbStats = db;
@@ -210,7 +211,7 @@ export const renderSystemView = async (container, ctx) => {
 
   const bindEvents = () => {
     container.querySelector("#sys-refresh-btn").addEventListener("click", async () => {
-      try { await loadAll(); checkResult = null; outputText = ""; maintainReport = ""; showToast("状态已刷新", "ok"); renderPage(); }
+      try { await loadAll(true); checkResult = null; outputText = ""; maintainReport = ""; showToast("状态已刷新", "ok"); renderPage(); }
       catch (err) { showToast(err.message, "bad"); }
     });
     container.querySelector("#sys-check-btn").addEventListener("click", async () => {

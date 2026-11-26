@@ -66,20 +66,126 @@ export const showToast = (msg, kind = "") => {
   setTimeout(() => el.remove(), 2640);
 };
 
-export const apiRequest = async (url, options = {}) => {
-  const res = await fetch(url, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(data.msg || `请求失败 (${res.status})`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
+const getCacheRules = [
+  [/^\/api\/banks\/[^/]+\/questions$/, 45000, 600000],
+  [/^\/api\/banks$/, 30000, 300000],
+  [/^\/api\/subjects$/, 60000, 300000],
+  [/^\/api\/exams$/, 30000, 300000],
+  [/^\/api\/stats$/, 20000, 180000],
+  [/^\/api\/user\/submissions$/, 30000, 300000],
+  [/^\/api\/site\/info$/, 20000, 180000],
+  [/^\/api\/admin\/(users|registration|apikey|backups|system\/status|db\/stats)$/, 20000, 180000],
+  [/^\/api\/admin\/audit-logs(\?.*)?$/, 20000, 180000],
+  [/^\/api\/admin\/login-logs(\?.*)?$/, 15000, 120000]
+];
+const apiGetCache = new Map();
+const inflightGets = new Map();
+let fgLoadingCount = 0;
+let loadShowTimer = null;
+let loadDoneTimer = null;
+
+const cloneJsonData = (val) => {
+  try { return typeof structuredClone === "function" ? structuredClone(val) : JSON.parse(JSON.stringify(val)); }
+  catch { return val; }
+};
+
+const matchCacheRule = (url) => getCacheRules.find(([re]) => re.test(url)) || null;
+
+export const clearApiCache = (prefix = "") => {
+  if (!prefix) { apiGetCache.clear(); return; }
+  for (const k of apiGetCache.keys()) {
+    if (k.startsWith(prefix)) apiGetCache.delete(k);
   }
-  return data;
+};
+
+const invalidateCacheOnWrite = (url) => {
+  const pathOnly = String(url || "").split("?")[0];
+  if (pathOnly.startsWith("/api/ai/")) return;
+  if (pathOnly === "/api/user/progress") { clearApiCache("/api/stats"); return; }
+  clearApiCache();
+};
+
+const syncLoadBar = (delta) => {
+  const bar = typeof document !== "undefined" ? document.getElementById("top-load-bar") : null;
+  fgLoadingCount = Math.max(0, fgLoadingCount + delta);
+  if (!bar) return;
+  if (fgLoadingCount > 0) {
+    clearTimeout(loadDoneTimer);
+    if (!bar.classList.contains("is-loading") && !loadShowTimer) {
+      loadShowTimer = setTimeout(() => {
+        loadShowTimer = null;
+        if (fgLoadingCount > 0) { bar.classList.remove("is-done"); bar.classList.add("is-loading"); }
+      }, 90);
+    }
+    return;
+  }
+  clearTimeout(loadShowTimer);
+  loadShowTimer = null;
+  if (bar.classList.contains("is-loading")) {
+    bar.classList.remove("is-loading");
+    bar.classList.add("is-done");
+    loadDoneTimer = setTimeout(() => bar.classList.remove("is-done"), 260);
+  }
+};
+
+const rawFetchJson = async (url, fetchOpts, silent) => {
+  if (!silent) syncLoadBar(1);
+  try {
+    const res = await fetch(url, {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...(fetchOpts.headers || {}) },
+      ...fetchOpts
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.msg || `请求失败 (${res.status})`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  } finally {
+    if (!silent) syncLoadBar(-1);
+  }
+};
+
+export const apiRequest = async (url, options = {}) => {
+  const { fresh = false, silent = false, ...fetchOpts } = options;
+  const method = String(fetchOpts.method || "GET").toUpperCase();
+  const rule = method === "GET" ? matchCacheRule(url) : null;
+  const pwdHeader = String(fetchOpts.headers?.["x-bank-password"] || "");
+  const cacheKey = rule ? `${url}\0${pwdHeader}` : "";
+
+  if (rule && !fresh) {
+    const entry = apiGetCache.get(cacheKey);
+    if (entry) {
+      const age = Date.now() - entry.ts;
+      if (age <= rule[1]) return cloneJsonData(entry.data);
+      if (age <= rule[2]) {
+        if (!inflightGets.has(cacheKey)) {
+          const bg = rawFetchJson(url, fetchOpts, true)
+            .then((d) => { apiGetCache.set(cacheKey, { data: d, ts: Date.now() }); return d; })
+            .catch(() => {})
+            .finally(() => inflightGets.delete(cacheKey));
+          inflightGets.set(cacheKey, bg);
+        }
+        return cloneJsonData(entry.data);
+      }
+    }
+  }
+
+  if (rule) {
+    if (inflightGets.has(cacheKey)) return cloneJsonData(await inflightGets.get(cacheKey));
+    const p = rawFetchJson(url, fetchOpts, silent)
+      .then((d) => { apiGetCache.set(cacheKey, { data: d, ts: Date.now() }); return d; })
+      .finally(() => inflightGets.delete(cacheKey));
+    inflightGets.set(cacheKey, p);
+    return cloneJsonData(await p);
+  }
+
+  const out = await rawFetchJson(url, fetchOpts, silent);
+  if (method !== "GET") invalidateCacheOnWrite(url);
+  return out;
 };
 
 const STORAGE_PREFIX = "as_qb_v2_";
@@ -87,6 +193,9 @@ let currentCloudUser = null;
 let cloudBanksCache = {};
 
 export const setCloudSession = (user, progress = null) => {
+  const prevId = currentCloudUser?.id || "";
+  const nextId = user?.id || "";
+  if (prevId !== nextId) clearApiCache();
   currentCloudUser = user || null;
   cloudBanksCache = progress?.banks || {};
 };
@@ -203,13 +312,14 @@ export const saveBankPracticeState = (bankId, state, dailyDelta = null) => {
 export const getBankPassword = (bankId) => sessionStorage.getItem(`as_qb_pwd_${bankId}`) || "";
 export const setBankPassword = (bankId, pwd) => sessionStorage.setItem(`as_qb_pwd_${bankId}`, pwd);
 
-export const fetchBankQuestionsSafe = async (bankId) => {
+export const fetchBankQuestionsSafe = async (bankId, opts = {}) => {
   const pwd = getBankPassword(bankId);
   const headers = pwd ? { "x-bank-password": pwd } : {};
+  const reqOpts = { headers, fresh: Boolean(opts.fresh), silent: Boolean(opts.silent) };
   try {
-    return await apiRequest(`/api/banks/${encodeURIComponent(bankId)}/questions`, { headers });
+    return await apiRequest(`/api/banks/${encodeURIComponent(bankId)}/questions`, reqOpts);
   } catch (err) {
-    if (err.status === 403 && err.data?.locked) {
+    if (!opts.silent && err.status === 403 && err.data?.locked) {
       const form = await openFormDialog({
         title: "题库访问验证",
         description: "该题库已加密，请输入访问密码：",
@@ -218,7 +328,8 @@ export const fetchBankQuestionsSafe = async (bankId) => {
       if (!form) throw err;
       setBankPassword(bankId, form.password);
       return apiRequest(`/api/banks/${encodeURIComponent(bankId)}/questions`, {
-        headers: { "x-bank-password": form.password }
+        headers: { "x-bank-password": form.password },
+        fresh: Boolean(opts.fresh)
       });
     }
     throw err;
