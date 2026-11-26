@@ -305,8 +305,8 @@ export const renderPracticeView = async (container, ctx) => {
       isWide: aiWide,
       onToggleWide: allowWide ? () => { aiWide = !aiWide; settings.asideWidth = aiWide ? 520 : 332; saveGlobalSettings(settings); renderMain(); } : null,
       onAppendNote: (text) => notesCtrl.append(q.id, text),
-      initialMessages: bankState.aiChats?.[q.id] || [],
-      onHistoryChange: (msgs) => { bankState.aiChats = bankState.aiChats || {}; if (msgs.length) bankState.aiChats[q.id] = msgs.slice(-16); else delete bankState.aiChats[q.id]; saveBankPracticeState(bank.id, bankState); },
+      initialState: bankState.aiChats?.[q.id] || null,
+      onHistoryChange: (st) => { bankState.aiChats = bankState.aiChats || {}; if (st) bankState.aiChats[q.id] = st; else delete bankState.aiChats[q.id]; saveBankPracticeState(bank.id, bankState); },
       autoPrompt
     });
     bindPaneResizers({

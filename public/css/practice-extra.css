@@ -54,10 +54,15 @@
 .flashcard-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .answer-img-wrap { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
 
-/* 题干内表格缩小字号 + Markdown 引用块 */
-.q-title.md-content .md-table { font-size: 13.5px; font-weight: 400; line-height: 1.5; }
+/* 题干内表格消除 pre-wrap 空白 + Markdown 引用与公式块 */
+.q-title.md-content { white-space: normal; }
+.q-title.md-content pre { white-space: pre; }
+.q-title.md-content p { margin: 0 0 8px; }
+.q-title.md-content .table-wrap { margin: 8px 0; }
+.q-title.md-content .md-table { margin: 0; font-size: 13.5px; font-weight: 400; line-height: 1.5; }
 .q-title.md-content .md-table th { font-weight: 600; }
 .md-content blockquote { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--surface-soft); border-radius: 0 6px 6px 0; }
+.md-math { margin: 6px 0; padding: 7px 10px; border-radius: 7px; background: var(--surface-soft); border: 1px solid var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; overflow-x: auto; white-space: pre-wrap; }
 
 /* AI 思考等待动效（微环 + 跳动三点 + 实时耗时） */
 @keyframes aiSpin { to { transform: rotate(360deg); } }
@@ -75,5 +80,7 @@
 .pane-resizer::after { content: ""; width: 3px; height: 42px; border-radius: 999px; background: var(--line-strong); opacity: .45; transition: height .15s, background-color .15s, opacity .15s; }
 .pane-resizer:hover::after, .pane-resizer.dragging::after { height: 84px; background: var(--accent); opacity: 1; }
 body.is-resizing, body.is-resizing * { cursor: col-resize !important; user-select: none !important; }
+.ai-head-bar { flex-wrap: wrap; gap: 6px; }
+.ai-session-sel { flex: 1; min-width: 110px; max-width: none; padding: 3px 7px; font-size: 12px; border-radius: 7px; background: var(--surface-soft); border: 1px solid var(--line); color: var(--ink); }
 
 @media (max-width: 640px) { .match-row { grid-template-columns: 1fr; gap: 4px; } .match-arrow { display: none; } }
