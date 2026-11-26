@@ -79,3 +79,59 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
 
   return { flush, append, bind };
 };
+
+/** 绑定刷题页三栏之间的拖拽调整宽度与双击恢复默认宽度 */
+export const bindPaneResizers = ({ container, settings, onSave }) => {
+  const shell = container.querySelector(".practice-shell");
+  const layout = container.querySelector(".practice-layout");
+  if (!shell || !layout) return;
+
+  const applyWidths = () => {
+    shell.style.setProperty("--notes-w", `${Number(settings.notesWidth || 280)}px`);
+    shell.style.setProperty("--aside-w", `${Number(settings.asideWidth || 332)}px`);
+  };
+  applyWidths();
+
+  container.querySelectorAll(".pane-resizer[data-resize]").forEach((handle) => {
+    const side = handle.dataset.resize;
+    handle.addEventListener("dblclick", () => {
+      const defW = side === "notes" ? 280 : 332;
+      onSave?.(side, defW);
+      applyWidths();
+      showToast("已恢复默认栏宽");
+    });
+
+    handle.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = side === "notes" ? Number(settings.notesWidth || 280) : Number(settings.asideWidth || 332);
+      const totalW = layout.getBoundingClientRect().width;
+      const otherW = side === "notes"
+        ? (shell.classList.contains("aside-collapsed") ? 0 : Number(settings.asideWidth || 332) + 12)
+        : (shell.classList.contains("notes-collapsed") ? 0 : Number(settings.notesWidth || 280) + 12);
+      const maxAllow = Math.max(240, totalW - otherW - 392);
+      const minW = side === "notes" ? 220 : 280;
+      const maxW = Math.min(side === "notes" ? 480 : 620, maxAllow);
+      let latestW = startW;
+
+      handle.classList.add("dragging");
+      document.body.classList.add("is-resizing");
+
+      const onMove = (ev) => {
+        const delta = side === "notes" ? (ev.clientX - startX) : (startX - ev.clientX);
+        latestW = Math.round(Math.min(maxW, Math.max(minW, startW + delta)));
+        shell.style.setProperty(side === "notes" ? "--notes-w" : "--aside-w", `${latestW}px`);
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        handle.classList.remove("dragging");
+        document.body.classList.remove("is-resizing");
+        onSave?.(side, latestW);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  });
+};

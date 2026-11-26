@@ -39,10 +39,12 @@
 }
 .practice-toolbar { flex: none; }
 .practice-layout { flex: 1; min-height: 0; align-items: stretch; }
-.practice-shell.notes-collapsed .practice-layout { grid-template-columns: minmax(0, 1fr) 332px; }
-.practice-shell.notes-collapsed .practice-notes { display: none; }
-.practice-shell.aside-collapsed .practice-layout { grid-template-columns: 296px minmax(0, 1fr); }
-.practice-shell.aside-collapsed .practice-aside { display: none; }
+.practice-shell.notes-collapsed .practice-layout { grid-template-columns: minmax(0, 1fr) 12px var(--aside-w, 332px); }
+.practice-shell.notes-collapsed .practice-notes,
+.practice-shell.notes-collapsed .pane-resizer[data-resize="notes"] { display: none; }
+.practice-shell.aside-collapsed .practice-layout { grid-template-columns: var(--notes-w, 280px) 12px minmax(0, 1fr); }
+.practice-shell.aside-collapsed .practice-aside,
+.practice-shell.aside-collapsed .pane-resizer[data-resize="aside"] { display: none; }
 .practice-shell.notes-collapsed.aside-collapsed .practice-layout { grid-template-columns: minmax(0, 1fr); }
 .practice-shell.notes-collapsed.aside-collapsed .question-box { max-width: 920px; width: 100%; margin: 0 auto; }
 
@@ -92,8 +94,6 @@
 .aside-body-scroll.is-ai-tab { overflow: hidden; display: flex; flex-direction: column; }
 #aside-ai-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #modal-ai-chat { height: 62vh; max-height: 540px; display: flex; flex-direction: column; }
-.practice-shell.ai-wide .practice-layout { grid-template-columns: 260px minmax(0, 1fr) 540px; }
-.practice-shell.ai-wide.notes-collapsed .practice-layout { grid-template-columns: minmax(0, 1fr) 540px; }
 
 /* 题库中心：当前题库刷题台 & 紧凑横条/卡片切换 */
 .bank-workbench {

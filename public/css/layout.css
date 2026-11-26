@@ -224,8 +224,8 @@
 
 .practice-layout {
   display: grid;
-  grid-template-columns: 296px minmax(0, 1fr) 332px;
-  gap: 16px;
+  grid-template-columns: var(--notes-w, 280px) 12px minmax(0, 1fr) 12px var(--aside-w, 332px);
+  gap: 0;
   align-items: start;
 }
 
@@ -424,6 +424,7 @@ body.immersive-mode .app-footer,
 body.immersive-mode .practice-toolbar,
 body.immersive-mode .practice-notes,
 body.immersive-mode .practice-aside,
+body.immersive-mode .pane-resizer,
 body.immersive-mode .mobile-tabbar { display: none !important; }
 .immersive-bar { display: none; }
 body.immersive-mode .immersive-bar { display: flex; }
@@ -434,7 +435,7 @@ body.immersive-mode .immersive-bar { display: flex; }
 @media (max-width: 960px) {
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stats-grid, .practice-layout, .split-workbench { grid-template-columns: 1fr; }
-  .practice-notes, .practice-aside, .desktop-only-btn { display: none; }
+  .practice-notes, .practice-aside, .pane-resizer, .desktop-only-btn { display: none; }
   .mobile-sheet-trigger, .mobile-only-btn { display: inline-flex; }
 }
 

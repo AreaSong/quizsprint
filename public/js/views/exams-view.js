@@ -389,8 +389,8 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
                   </label>
                 `).join("")}
               </div>
-            ` : (q.type === "4"
-              ? `<textarea class="er-fill" rows="3" placeholder="请输入简答内容..." style="width:100%;margin-top:8px;"></textarea>`
+            ` : ((q.type === "4" || q.type === "6" || q.type === "7" || q.type === "8")
+              ? `<textarea class="er-fill ${q.type === "7" || q.type === "8" ? "er-lines" : ""}" rows="4" placeholder="${q.type === "7" ? "每行输入一个正确顺序步骤..." : (q.type === "8" ? "每行输入一条配对（格式：左侧 => 右侧）..." : "请输入作答步骤 / 代码 / 简答内容...")}" style="width:100%;margin-top:8px;"></textarea>`
               : `<input class="er-fill" type="text" placeholder="请输入答案（多空用 | 分隔）" style="width:100%;margin-top:8px;">`)}
           </div>
         `).join("")}
@@ -408,7 +408,10 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
   container.querySelectorAll(".er-fill").forEach((inp) => {
     inp.addEventListener("input", () => {
       const qid = inp.closest("[data-qid]").dataset.qid;
-      answers[qid] = inp.value.split("|").map((s) => s.trim()).filter(Boolean);
+      const sep = inp.classList.contains("er-lines") ? /\r?\n/ : "|";
+      answers[qid] = inp.tagName === "TEXTAREA" && !inp.classList.contains("er-lines")
+        ? (inp.value.trim() ? [inp.value.trim()] : [])
+        : inp.value.split(sep).map((s) => s.trim()).filter(Boolean);
       persistDraft();
     });
   });

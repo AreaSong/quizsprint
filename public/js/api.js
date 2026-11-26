@@ -1,12 +1,49 @@
 import { openFormDialog } from "./dialog.js";
 
+export const BANK_CATEGORIES = {
+  theory: "理论",
+  practice: "实践",
+  comprehensive: "综合",
+  exam: "真题"
+};
+
+export const buildBankOptionsHtml = (banks, selectedId = "", opts = {}) => {
+  const { includeAllLabel = "", prefix = "", showCount = false } = opts;
+  const groupOrder = [];
+  const groups = new Map();
+  for (const b of banks || []) {
+    const key = b.subjectName ? `${b.term ? `[${b.term}] ` : ""}${b.subjectName}` : "未分类题库";
+    if (!groups.has(key)) { groups.set(key, []); groupOrder.push(key); }
+    groups.get(key).push(b);
+  }
+  const useOptgroup = groupOrder.length > 1 || (groupOrder.length === 1 && groupOrder[0] !== "未分类题库");
+  const optHtml = (b) => {
+    const countPart = showCount ? ` (${b.questionCount || 0})` : "";
+    return `<option value="${escapeHtml(b.id)}" ${b.id === selectedId ? "selected" : ""}>${escapeHtml(`${prefix}${b.name}${countPart}`)}</option>`;
+  };
+  const body = useOptgroup
+    ? groupOrder.map((g) => `<optgroup label="${escapeHtml(g)}">${groups.get(g).map(optHtml).join("")}</optgroup>`).join("")
+    : (banks || []).map(optHtml).join("");
+  return (includeAllLabel ? `<option value="">${escapeHtml(includeAllLabel)}</option>` : "") + body;
+};
+
 export const TYPE_LABELS = {
   "0": "单选题",
   "1": "多选题",
   "2": "填空题",
   "3": "判断题",
   "4": "简答题",
-  "5": "不定项选择题"
+  "5": "不定项选择题",
+  "6": "实操题",
+  "7": "排序题",
+  "8": "配对题"
+};
+
+export const parseMatchPair = (raw) => {
+  const s = String(raw || "");
+  const m = s.match(/^(.*?)\s*(?:=>|->|::)\s*(.+)$/);
+  if (!m) return { left: s.trim(), right: "" };
+  return { left: m[1].trim(), right: m[2].trim() };
 };
 
 export const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -229,8 +266,9 @@ export const printQuestionsDocument = (title, questions, withAnswers = true) => 
       <div style="font-weight:600;">${idx + 1}. ${escapeHtml(q.title)}</div>
       ${(q.images || []).map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:160px;margin:6px 6px 4px 0;border:1px solid #ddd;border-radius:4px;">`).join("")}
       ${(q.options || []).map((o, i) => `<div style="margin-left:16px;">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
-      ${withAnswers ? `<div style="color:#16a34a;margin-top:4px;">答案：${escapeHtml((q.answers || []).join(" | "))}</div>` : ""}
-      ${withAnswers && q.analysis ? `<div style="color:#555;font-size:13px;">解析：${escapeHtml(q.analysis)}</div>` : ""}
+      ${withAnswers ? `<div style="color:#16a34a;margin-top:4px;white-space:pre-wrap;">答案：${escapeHtml((q.answers || []).join(" | "))}</div>` : ""}
+      ${withAnswers && (q.answerImages || []).length ? `<div style="margin-top:6px;"><div style="font-size:12px;color:#666;">参考答案配图：</div>${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:300px;max-height:200px;margin:4px 6px 4px 0;border:1px solid #ddd;border-radius:4px;">`).join("")}</div>` : ""}
+      ${withAnswers && q.analysis ? `<div style="color:#555;font-size:13px;white-space:pre-wrap;margin-top:4px;">解析：${escapeHtml(q.analysis)}</div>` : ""}
     </div>
   `).join("");
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>

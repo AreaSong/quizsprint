@@ -1,0 +1,62 @@
+/* 学期 / 科目导航栏、科目概览条与题库性质标签 */
+.subject-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.subject-bar-left { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
+.subject-term-sel { flex: none; padding: 5px 10px; font-size: 12.5px; font-weight: 600; border-radius: 8px; }
+.subject-pills {
+  min-width: 0; flex: 1; display: flex; align-items: center; gap: 6px;
+  overflow-x: auto; scrollbar-width: none; padding: 1px 0;
+}
+.subject-pills::-webkit-scrollbar { display: none; }
+.subject-pill {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface-soft); color: var(--ink); font: inherit; font-size: 12.5px;
+  font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .15s ease;
+}
+.subject-pill:hover { border-color: var(--line-strong); background: var(--surface-hover); }
+.subject-pill.active {
+  background: var(--accent-soft); color: var(--accent-fg);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.subject-pill-cnt { font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.subject-pill.active .subject-pill-cnt { color: var(--accent-fg); opacity: .85; }
+
+.subject-overview {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  padding: 12px 16px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line);
+}
+.subject-ov-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.subject-ov-prog { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+
+.cat-pill {
+  display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.cat-pill[data-cat="theory"] { background: #eff6ff; color: #1d4ed8; }
+.cat-pill[data-cat="practice"] { background: #f0fdfa; color: #0f766e; }
+.cat-pill[data-cat="comprehensive"] { background: #f5f3ff; color: #6d28d9; }
+.cat-pill[data-cat="exam"] { background: #fff7ed; color: #c2410c; }
+:root[data-theme="dark"] .cat-pill[data-cat="theory"] { background: rgba(59, 130, 246, .16); color: #93c5fd; }
+:root[data-theme="dark"] .cat-pill[data-cat="practice"] { background: rgba(20, 184, 166, .16); color: #5eead4; }
+:root[data-theme="dark"] .cat-pill[data-cat="comprehensive"] { background: rgba(139, 92, 246, .18); color: #c4b5fd; }
+:root[data-theme="dark"] .cat-pill[data-cat="exam"] { background: rgba(249, 115, 22, .16); color: #fdba74; }
+
+.cat-filter-row { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+
+@media (max-width: 860px) {
+  .subject-bar { flex-wrap: wrap; padding: 10px 12px; }
+  .subject-bar-left { width: 100%; }
+}

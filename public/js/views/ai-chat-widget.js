@@ -1,6 +1,7 @@
-import { aiRequest, escapeHtml, showToast } from "../api.js";
+import { aiRequest, escapeHtml, getCloudUser, showToast } from "../api.js";
+import { renderRichMarkdown } from "../markdown.js";
 
-const chatHistoryByQid = new Map();
+export { renderRichMarkdown as renderLightMarkdown };
 
 const QUICK_PROMPTS = [
   "详细讲讲这题",
@@ -9,51 +10,46 @@ const QUICK_PROMPTS = [
   "总结易错点"
 ];
 
-const formatInlineMd = (text) =>
-  text
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+const getChatStorageKey = () => `qs_ai_chat_v1_${getCloudUser()?.id || "anon"}`;
 
-export const renderLightMarkdown = (rawText) => {
-  const safe = escapeHtml(String(rawText || ""));
-  const codeBlocks = [];
-  const withPlaceholders = safe.replace(/```[^\n]*\n?([\s\S]*?)```/g, (_m, code) => {
-    const idx = codeBlocks.length;
-    codeBlocks.push(`<pre><code>${code.trimEnd()}</code></pre>`);
-    return `\n@@CODEBLOCK_${idx}@@\n`;
-  });
-
-  const lines = withPlaceholders.split("\n");
-  const out = [];
-  let listTag = "";
-  const closeList = () => { if (listTag) { out.push(`</${listTag}>`); listTag = ""; } };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const codeMatch = trimmed.match(/^@@CODEBLOCK_(\d+)@@$/);
-    if (codeMatch) { closeList(); out.push(codeBlocks[Number(codeMatch[1])] || ""); continue; }
-    const ulMatch = trimmed.match(/^[-*]\s+(.+)$/);
-    if (ulMatch) {
-      if (listTag !== "ul") { closeList(); listTag = "ul"; out.push("<ul>"); }
-      out.push(`<li>${formatInlineMd(ulMatch[1])}</li>`);
-      continue;
-    }
-    const olMatch = trimmed.match(/^\d+\.\s+(.+)$/);
-    if (olMatch) {
-      if (listTag !== "ol") { closeList(); listTag = "ol"; out.push("<ol>"); }
-      out.push(`<li>${formatInlineMd(olMatch[1])}</li>`);
-      continue;
-    }
-    closeList();
-    if (!trimmed) continue;
-    const hMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
-    out.push(hMatch ? `<h4>${formatInlineMd(hMatch[1])}</h4>` : `<p>${formatInlineMd(trimmed)}</p>`);
+const readLocalStore = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getChatStorageKey()) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
   }
-  closeList();
-  return out.join("") || "<p></p>";
 };
 
-const renderMessagesBodyHtml = (messages, sending, hasNoteHook) => {
+const writeLocalStore = (store) => {
+  const entries = Object.entries(store || {})
+    .filter(([, v]) => Array.isArray(v?.messages) && v.messages.length > 0)
+    .sort((a, b) => Number(b[1]?.updatedAt || 0) - Number(a[1]?.updatedAt || 0))
+    .slice(0, 100);
+  const compact = (limit) => Object.fromEntries(
+    entries.slice(0, limit).map(([k, v]) => [k, { updatedAt: v.updatedAt || Date.now(), messages: v.messages.slice(-30) }])
+  );
+  try {
+    localStorage.setItem(getChatStorageKey(), JSON.stringify(compact(100)));
+  } catch {
+    try { localStorage.setItem(getChatStorageKey(), JSON.stringify(compact(40))); } catch { /* ignore */ }
+  }
+};
+
+const getQuestionMessages = (qid, cloudFallback = []) => {
+  const entry = readLocalStore()[qid];
+  if (Array.isArray(entry?.messages) && entry.messages.length) return entry.messages.map((m) => ({ ...m }));
+  return Array.isArray(cloudFallback) ? cloudFallback.map((m) => ({ ...m })) : [];
+};
+
+const persistQuestionMessages = (qid, messages) => {
+  const store = readLocalStore();
+  if (messages.length) store[qid] = { updatedAt: Date.now(), messages: messages.slice(-30) };
+  else delete store[qid];
+  writeLocalStore(store);
+};
+
+const renderMessagesBodyHtml = (messages, sending, elapsedSec, hasNoteHook) => {
   if (!messages.length && !sending) {
     return `
       <div class="ai-empty-state">
@@ -66,7 +62,7 @@ const renderMessagesBodyHtml = (messages, sending, hasNoteHook) => {
   }
   const items = messages.map((m, idx) => {
     const isUser = m.role === "user";
-    const bodyHtml = isUser ? escapeHtml(m.content) : renderLightMarkdown(m.content);
+    const bodyHtml = isUser ? escapeHtml(m.content) : renderRichMarkdown(m.content);
     const actionsHtml = !isUser ? `
       <div class="ai-msg-actions">
         <button type="button" class="ai-act-btn js-ai-copy" data-idx="${idx}">复制</button>
@@ -75,23 +71,48 @@ const renderMessagesBodyHtml = (messages, sending, hasNoteHook) => {
     ` : "";
     return `<div class="ai-msg ${m.role}"><div class="ai-msg-bubble">${bodyHtml}${actionsHtml}</div></div>`;
   }).join("");
-  return items + (sending ? '<div class="ai-msg assistant"><div class="ai-msg-bubble"><p>AI 正在思考...</p></div></div>' : "");
+  const thinkingHtml = sending ? `
+    <div class="ai-msg assistant"><div class="ai-msg-bubble">
+      <div class="ai-thinking">
+        <span class="ai-spinner" aria-hidden="true"></span>
+        <span>AI 正在思考</span>
+        <span class="ai-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="ai-elapsed">${elapsedSec}s</span>
+      </div>
+    </div></div>` : "";
+  return items + thinkingHtml;
 };
 
 export const mountAiChatWidget = (rootEl, question, options = {}) => {
   if (!rootEl || !question) return;
   const qid = question.id;
-  if (!chatHistoryByQid.has(qid)) chatHistoryByQid.set(qid, []);
-  const messages = chatHistoryByQid.get(qid);
-  const { isWide = false, onToggleWide = null, onAppendNote = null, autoPrompt = "" } = options;
+  const { isWide = false, onToggleWide = null, onAppendNote = null, autoPrompt = "", initialMessages = [], onHistoryChange = null } = options;
+  const messages = getQuestionMessages(qid, initialMessages);
   let sending = false;
+  let elapsedSec = 0;
+  let elapsedTimer = null;
+
+  const stopElapsed = () => { if (elapsedTimer) clearInterval(elapsedTimer); elapsedTimer = null; };
+  const syncHistory = () => {
+    persistQuestionMessages(qid, messages);
+    onHistoryChange?.([...messages]);
+  };
 
   const sendQuestion = async (text) => {
     const content = String(text || "").trim();
     if (!content || sending) return;
     messages.push({ role: "user", content });
+    syncHistory();
     sending = true;
+    elapsedSec = 0;
+    stopElapsed();
     render();
+    elapsedTimer = setInterval(() => {
+      if (!document.body.contains(rootEl) || !sending) return stopElapsed();
+      elapsedSec += 1;
+      const el = rootEl.querySelector(".ai-elapsed");
+      if (el) el.textContent = `${elapsedSec}s`;
+    }, 1000);
     try {
       const res = await aiRequest("/api/ai/chat", { question, messages });
       messages.push({ role: "assistant", content: res.reply || "暂无回复" });
@@ -100,6 +121,8 @@ export const mountAiChatWidget = (rootEl, question, options = {}) => {
       showToast(err.message, "bad");
     } finally {
       sending = false;
+      stopElapsed();
+      syncHistory();
       render();
     }
   };
@@ -110,16 +133,16 @@ export const mountAiChatWidget = (rootEl, question, options = {}) => {
     rootEl.innerHTML = `
       <div class="ai-chat-card">
         <div class="ai-head-bar">
-          <span class="muted-text" style="font-size:12px;">${messages.length ? `对话 ${messages.length} 条` : "围绕本题随时追问"}</span>
+          <span class="muted-text" style="font-size:12px;">${messages.length ? `对话 ${messages.length} 条（已自动保存）` : "围绕本题随时追问"}</span>
           <div class="row-gap" style="gap:6px;">
             ${canWide ? `<button type="button" class="btn ghost tiny js-ai-wide">${isWide ? "还原" : "加宽"}</button>` : ""}
             ${messages.length ? `<button type="button" class="btn ghost tiny js-ai-clear">清空</button>` : ""}
           </div>
         </div>
-        <div class="ai-msg-list">${renderMessagesBodyHtml(messages, sending, hasNoteHook)}</div>
+        <div class="ai-msg-list">${renderMessagesBodyHtml(messages, sending, elapsedSec, hasNoteHook)}</div>
         <form class="ai-input-row js-ai-form">
           <input class="js-ai-input" type="text" placeholder="针对本题向 AI 提问..." ${sending ? "disabled" : ""}>
-          <button type="submit" class="btn primary tiny" ${sending ? "disabled" : ""}>发送</button>
+          <button type="submit" class="btn primary tiny" ${sending ? "disabled" : ""}>${sending ? "思考中" : "发送"}</button>
         </form>
       </div>
     `;
@@ -128,7 +151,7 @@ export const mountAiChatWidget = (rootEl, question, options = {}) => {
     if (msgList) msgList.scrollTop = msgList.scrollHeight;
 
     rootEl.querySelector(".js-ai-wide")?.addEventListener("click", () => onToggleWide?.());
-    rootEl.querySelector(".js-ai-clear")?.addEventListener("click", () => { messages.length = 0; render(); });
+    rootEl.querySelector(".js-ai-clear")?.addEventListener("click", () => { messages.length = 0; syncHistory(); render(); });
     rootEl.querySelectorAll(".js-ai-quick").forEach((btn) => btn.addEventListener("click", () => sendQuestion(btn.dataset.q)));
     rootEl.querySelectorAll(".js-ai-copy").forEach((btn) => {
       btn.addEventListener("click", () => {

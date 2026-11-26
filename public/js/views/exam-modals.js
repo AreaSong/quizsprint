@@ -1,4 +1,4 @@
-import { apiRequest, escapeHtml, fetchBankQuestionsSafe, showToast, TYPE_LABELS } from "../api.js";
+import { apiRequest, buildBankOptionsHtml, escapeHtml, fetchBankQuestionsSafe, showToast, TYPE_LABELS } from "../api.js";
 
 const round1 = (n) => Math.round(Number(n || 0) * 10) / 10;
 const localInputToIso = (val) => (val ? new Date(val).toISOString() : "");
@@ -49,7 +49,7 @@ const renderCreateExamShell = (banks, activeBankId) => `
         <div class="row-gap">
           <label style="flex:1.4;"><span>考试名称</span><input id="ex-title" required placeholder="如：2026 期中摸底测试"></label>
           <label style="flex:1;"><span>选择题库</span>
-            <select id="ex-bank">${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === activeBankId ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount})</option>`).join("")}</select>
+            <select id="ex-bank">${buildBankOptionsHtml(banks, activeBankId, { showCount: true })}</select>
           </label>
         </div>
         <div class="exam-section-title">组卷方式与题量配分</div>

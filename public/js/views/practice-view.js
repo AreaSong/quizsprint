@@ -1,31 +1,16 @@
 import {
-  escapeHtml,
-  fetchBankQuestionsSafe,
-  getBankPracticeState,
-  getGlobalSettings,
-  LETTERS,
-  printQuestionsDocument,
-  saveBankPracticeState,
-  saveGlobalSettings,
-  showToast,
-  TYPE_LABELS
+  escapeHtml, fetchBankQuestionsSafe, getBankPracticeState, getGlobalSettings,
+  LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast, TYPE_LABELS
 } from "../api.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
-import { createNotesController } from "./practice-notes.js";
+import { renderRichMarkdown } from "../markdown.js";
+import { bindPaneResizers, createNotesController } from "./practice-notes.js";
 import { iconSvg } from "../icons.js";
+import { bindDragQuestionEvents, initMatchState, initOrderItems, isMatchType, isOrderType, isSubjectiveType } from "./practice-drag.js";
 import {
-  buildAnswerPanelHtml,
-  buildExamSetupHtml,
-  buildImmersiveBarHtml,
-  buildInteractionHtml,
-  buildModeBarHtml,
-  buildNoteHistoryItemsHtml,
-  buildNotesPanelHtml,
-  buildSheetInnerHtml,
-  computeChapterStats,
-  isAnswerCorrect,
-  isMultiChoice,
-  shuffleArray
+  buildAnswerPanelHtml, buildExamSetupHtml, buildImmersiveBarHtml, buildInteractionHtml,
+  buildModeBarHtml, buildNoteHistoryItemsHtml, buildNotesPanelHtml, buildSheetInnerHtml,
+  computeChapterStats, isAnswerCorrect, isMultiChoice, shuffleArray
 } from "./practice-templates.js";
 
 let activePracticeCleanup = null;
@@ -71,9 +56,13 @@ export const renderPracticeView = async (container, ctx) => {
   let examSession = null;
   let examTimer = null;
   let keydownHandler = null;
-  let aiWide = false;
+  let aiWide = Number(settings.asideWidth || 332) >= 460;
   let pendingAiPrompt = "";
   const optionCache = new Map();
+  const orderDraftMap = new Map();
+  const matchDraftMap = new Map();
+  const getOrderItems = (q) => { if (!orderDraftMap.has(q.id)) orderDraftMap.set(q.id, initOrderItems(q)); return orderDraftMap.get(q.id); };
+  const getMatchState = (q) => { if (!matchDraftMap.has(q.id)) matchDraftMap.set(q.id, initMatchState(q)); return matchDraftMap.get(q.id); };
 
   const isNotesCollapsed = () => (settings.notesCollapsed == null ? window.innerWidth < 1320 : Boolean(settings.notesCollapsed));
   const stopTimer = () => { if (examTimer) clearInterval(examTimer); examTimer = null; };
@@ -242,6 +231,7 @@ export const renderPracticeView = async (container, ctx) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); return; }
       if (e.key === "ArrowRight") { e.preventDefault(); goNext(); return; }
+      if (e.key === " " && !showAnswerNow && isSubjectiveType(q)) { e.preventDefault(); container.querySelector("#btn-confirm-essay")?.click(); return; }
       if (e.key === "Enter") {
         if (!showAnswerNow && isMultiChoice(q)) { e.preventDefault(); container.querySelector("#btn-confirm-multi")?.click(); }
         else if (showAnswerNow) { e.preventDefault(); goNext(); }
@@ -286,10 +276,21 @@ export const renderPracticeView = async (container, ctx) => {
       settings.notesCollapsed = false; saveGlobalSettings(settings); renderMain();
       container.querySelector("#aside-note-input")?.focus();
     });
-    container.querySelector("#btn-eval-ok")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], true, false); renderMain(); });
-    container.querySelector("#btn-eval-bad")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], false, false); renderMain(); });
+    const curSel = () => bankState.records[q.id]?.selected || ["已查看"];
+    container.querySelector("#btn-eval-master")?.addEventListener("click", () => {
+      recordAnswer(q, curSel(), true, false);
+      bankState.masteredIds = [...new Set([...(bankState.masteredIds || []), q.id])];
+      bankState.wrongIds = (bankState.wrongIds || []).filter((id) => id !== q.id);
+      saveBankPracticeState(bank.id, bankState); showToast("已标记秒会并斩题", "ok");
+      if (settings.autoNext && currentIndex < list.length - 1) goNext(); else renderMain();
+    });
+    container.querySelector("#btn-eval-fuzzy")?.addEventListener("click", () => { recordAnswer(q, curSel(), true, false); showToast("已记录为模糊，保留后续复习"); renderMain(); });
+    container.querySelector("#btn-eval-bad")?.addEventListener("click", () => { recordAnswer(q, curSel(), false, false); showToast("已加入错题本"); renderMain(); });
+    container.querySelector("#btn-copy-ans")?.addEventListener("click", () => {
+      navigator.clipboard?.writeText((q.answers || []).join("\n")).then(() => showToast("已复制参考答案", "ok")).catch(() => {});
+    });
     container.querySelector("#btn-redo-q")?.addEventListener("click", () => {
-      delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear();
+      delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear(); orderDraftMap.delete(q.id); matchDraftMap.delete(q.id);
       saveBankPracticeState(bank.id, bankState); renderMain();
     });
     container.querySelector("#btn-exit-immersive")?.addEventListener("click", () => { settings.immersive = false; saveGlobalSettings(settings); document.body.classList.remove("immersive-mode"); renderMain(); });
@@ -302,9 +303,15 @@ export const renderPracticeView = async (container, ctx) => {
     const modalAiRoot = container.querySelector("#modal-ai-chat");
     const aiOpts = (allowWide, autoPrompt = "") => ({
       isWide: aiWide,
-      onToggleWide: allowWide ? () => { aiWide = !aiWide; renderMain(); } : null,
+      onToggleWide: allowWide ? () => { aiWide = !aiWide; settings.asideWidth = aiWide ? 520 : 332; saveGlobalSettings(settings); renderMain(); } : null,
       onAppendNote: (text) => notesCtrl.append(q.id, text),
+      initialMessages: bankState.aiChats?.[q.id] || [],
+      onHistoryChange: (msgs) => { bankState.aiChats = bankState.aiChats || {}; if (msgs.length) bankState.aiChats[q.id] = msgs.slice(-16); else delete bankState.aiChats[q.id]; saveBankPracticeState(bank.id, bankState); },
       autoPrompt
+    });
+    bindPaneResizers({
+      container, settings,
+      onSave: (side, w) => { if (side === "notes") settings.notesWidth = w; else { settings.asideWidth = w; aiWide = w >= 460; } saveGlobalSettings(settings); }
     });
     if (asideAiRoot && asideTab === "ai") {
       const prompt = pendingAiPrompt;
@@ -347,6 +354,11 @@ export const renderPracticeView = async (container, ctx) => {
     });
 
     if (!showAnswerNow) {
+      bindDragQuestionEvents({
+        container, q, getOrderItems: () => getOrderItems(q), setOrderItems: (arr) => orderDraftMap.set(q.id, arr),
+        getMatchState: () => getMatchState(q), onRerender: renderMain,
+        onSubmit: (sel) => { recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain(); }
+      });
       container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
         const val = optBtn.dataset.opt;
         if (isMultiChoice(q)) { if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val); renderMain(); }
@@ -429,6 +441,7 @@ export const renderPracticeView = async (container, ctx) => {
           <aside class="practice-notes panel">
             ${buildNotesPanelHtml(list, q, bankState, "aside-note-input")}
           </aside>
+          <div class="pane-resizer" data-resize="notes" title="左右拖动调节笔记栏宽度（双击恢复默认）"></div>
           <section class="question-box">
             <div class="q-progress-track"><span style="width:${pct}%"></span></div>
             <div class="row-gap q-head" style="justify-content:space-between;">
@@ -445,9 +458,9 @@ export const renderPracticeView = async (container, ctx) => {
               </div>
             </div>
             <div class="q-body-scroll">
-              <div class="q-title">${escapeHtml(q.title)}</div>
+              <div class="q-title md-content">${renderRichMarkdown(q.title)}</div>
               ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-              ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession })}
+              ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null })}
               ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
             </div>
             <div class="row-gap practice-nav-footer" style="justify-content:space-between;padding-top:14px;border-top:1px solid var(--line);">
@@ -460,6 +473,7 @@ export const renderPracticeView = async (container, ctx) => {
               <button id="btn-next" class="btn primary tiny" ${currentIndex >= list.length - 1 ? "disabled" : ""}><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
             </div>
           </section>
+          <div class="pane-resizer" data-resize="aside" title="左右拖动调节辅助栏宽度（双击恢复默认）"></div>
           <aside class="practice-aside panel">
             <div class="aside-tabs">
               ${[["sheet", "答题卡"], ["ai", "AI 助教"]].map(([k, lbl]) => `

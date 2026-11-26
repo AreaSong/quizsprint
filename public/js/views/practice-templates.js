@@ -1,5 +1,13 @@
-import { escapeHtml, LETTERS, TYPE_LABELS } from "../api.js";
+import { buildBankOptionsHtml, escapeHtml, LETTERS, parseMatchPair, TYPE_LABELS } from "../api.js";
 import { iconSvg } from "../icons.js";
+import { renderRichMarkdown } from "../markdown.js";
+import {
+  buildMatchQuestionHtml,
+  buildOrderQuestionHtml,
+  isMatchType,
+  isOrderType,
+  isSubjectiveType
+} from "./practice-drag.js";
 
 export const shuffleArray = (arr) => {
   const copy = [...arr];
@@ -29,12 +37,14 @@ export const isAnswerCorrect = (q, userSelected) => {
   const expected = (q.answers || []).map(normText).filter(Boolean);
   const actual = (Array.isArray(userSelected) ? userSelected : [userSelected]).map(normText).filter(Boolean);
   if (!expected.length || actual.length !== expected.length) return false;
-  if (q.type === "2") return expected.every((ans, idx) => ans === actual[idx]);
+  if (q.type === "2" || q.type === "7") return expected.every((ans, idx) => ans === actual[idx]);
   const expSet = new Set(expected);
   return actual.every((item) => expSet.has(item));
 };
 
-export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNow, examSession }) => {
+export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems, matchState }) => {
+  if (isOrderType(q)) return buildOrderQuestionHtml({ q, items: orderItems || [], record, showAnswerNow });
+  if (isMatchType(q)) return buildMatchQuestionHtml({ q, state: matchState, record, showAnswerNow });
   if (opts.length) {
     const expectedSet = new Set((q.answers || []).map(normText));
     const activeSelected = multiDraft.size ? [...multiDraft] : (record?.selected || []);
@@ -66,11 +76,14 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
     `;
   }
   const val = (record?.selected || []).join(" | ");
-  if (q.type === "4") {
+  if (isSubjectiveType(q)) {
+    const ph = q.type === "6"
+      ? "先在心中过一遍实现步骤 / 伪代码 / 算法矩阵（也可以在这里默写关键词），再点下方翻看参考答案..."
+      : "在此输入你的简答作答思路（提交后可对照参考答案自评）...";
     return `
       <div class="stack-form">
-        <textarea id="essay-input" rows="4" placeholder="在此输入你的简答作答思路（提交后可对照参考答案自评）..." ${showAnswerNow && !examSession ? "readonly" : ""}>${escapeHtml(val)}</textarea>
-        ${!showAnswerNow ? `<div><button id="btn-confirm-essay" class="btn primary">核对参考答案</button></div>` : ""}
+        <textarea id="essay-input" rows="5" placeholder="${ph}" ${showAnswerNow && !examSession ? "readonly" : ""}>${escapeHtml(val)}</textarea>
+        ${!showAnswerNow ? `<div><button id="btn-confirm-essay" class="btn primary">翻看参考答案 (Space)</button></div>` : ""}
       </div>
     `;
   }
@@ -82,22 +95,55 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
   `;
 };
 
+const renderAnswerContentHtml = (q) => {
+  const ansList = q.answers || [];
+  if (isOrderType(q)) {
+    return `<div style="margin-top:8px;"><strong style="color:var(--ok);">正确顺序：</strong><ol style="margin:6px 0 0;padding-left:20px;">${ansList.map((a) => `<li>${escapeHtml(a)}</li>`).join("")}</ol></div>`;
+  }
+  if (isMatchType(q)) {
+    return `<div style="margin-top:8px;"><strong style="color:var(--ok);">正确配对：</strong><div class="stack-form" style="gap:4px;margin-top:6px;">${ansList.map((a) => {
+      const p = parseMatchPair(a);
+      return `<div><strong>${escapeHtml(p.left)}</strong> <span class="muted-text">→</span> <span style="color:var(--ok);font-weight:600;">${escapeHtml(p.right)}</span></div>`;
+    }).join("")}</div></div>`;
+  }
+  if (isSubjectiveType(q)) {
+    return `
+      <div style="margin-top:8px;">
+        <div class="row-gap" style="justify-content:space-between;margin-bottom:4px;">
+          <strong style="color:var(--ok);">参考答案：</strong>
+          <button type="button" id="btn-copy-ans" class="btn ghost tiny">${iconSvg("copy", 12)}<span>复制答案</span></button>
+        </div>
+        <div class="md-content">${renderRichMarkdown(ansList.join("\n\n"))}</div>
+      </div>
+    `;
+  }
+  return `<strong style="color:var(--ok);">正确答案：${escapeHtml(ansList.join(" | "))}</strong>`;
+};
+
 export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) => {
   if (!showAnswerNow) return "";
-  const selfEvalHtml = q.type === "4" && !examSession ? `
-    <div class="row-gap" style="margin-top:8px;">
-      <span class="muted-text">主观题自评：</span>
-      <button type="button" id="btn-eval-ok" class="btn tiny ${record?.correct ? "ok" : "ghost"}">✓ 答对了（已掌握）</button>
-      <button type="button" id="btn-eval-bad" class="btn tiny ${record && !record.correct ? "danger" : "ghost"}">✕ 答错了（入错题本）</button>
+  const isSubj = isSubjectiveType(q);
+  const selfEvalHtml = isSubj && !examSession ? `
+    <div class="flashcard-bar">
+      <span class="muted-text" style="font-size:12.5px;">掌握程度自评：</span>
+      <button type="button" id="btn-eval-master" class="btn ok tiny">✓ 秒会 · 斩题</button>
+      <button type="button" id="btn-eval-fuzzy" class="btn ghost tiny">? 模糊 · 留待再背</button>
+      <button type="button" id="btn-eval-bad" class="btn ghost-danger tiny">✕ 不会 · 入错题本</button>
+    </div>
+  ` : "";
+  const ansImgsHtml = (q.answerImages || []).length ? `
+    <div class="answer-img-wrap">
+      <div class="muted-text" style="font-size:12px;font-weight:600;margin-bottom:6px;">参考答案配图（流程图 / 运行结果）</div>
+      <div class="row-gap">${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>
     </div>
   ` : "";
 
   return `
     <div class="answer-box">
       <div class="row-gap" style="justify-content:space-between;">
-        <div>
-          <strong style="color:var(--ok);">正确答案：${escapeHtml((q.answers || []).join(" | "))}</strong>
-          ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}" style="margin-left:8px;">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
+        <div class="row-gap">
+          ${!isSubj && !isOrderType(q) && !isMatchType(q) ? renderAnswerContentHtml(q) : `<span style="font-weight:600;color:var(--ink);">答案与解析</span>`}
+          ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
         </div>
         <div class="row-gap">
           ${record && !examSession ? `<button type="button" id="btn-redo-q" class="btn ghost tiny">${iconSvg("rotate", 13)}<span>重做</span></button>` : ""}
@@ -105,8 +151,10 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) 
           <button type="button" id="btn-ai-explain" class="btn ghost tiny">${iconSvg("sparkles", 13)}<span>AI 解析</span></button>
         </div>
       </div>
+      ${isSubj || isOrderType(q) || isMatchType(q) ? renderAnswerContentHtml(q) : ""}
+      ${ansImgsHtml}
+      ${q.analysis ? `<div style="margin-top:10px;"><strong>解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(q.analysis)}</div></div>` : ""}
       ${selfEvalHtml}
-      ${q.analysis ? `<div style="margin-top:8px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
     </div>
   `;
 };
@@ -263,7 +311,7 @@ export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter
     <div class="toolbar-left">
       ${banks.length > 1 ? `
         <select id="p-bank-select" class="bank-select-inline" aria-label="切换刷题题库">
-          ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
+          ${buildBankOptionsHtml(banks, bank.id, { showCount: true })}
         </select>
       ` : `<span class="toolbar-bank-name">${iconSvg("book", 15)}<span>${escapeHtml(bank.name)}</span></span>`}
       <div class="mode-pills" role="tablist" aria-label="练习模式">

@@ -1,5 +1,5 @@
 import { CLEAN_TOOLS, parseExamTextDetailed, SAMPLE_TEXT } from "../../exam-parse.js";
-import { aiRequest, apiRequest, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
+import { aiRequest, apiRequest, buildBankOptionsHtml, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 
@@ -29,7 +29,7 @@ const buildImportShellHtml = (banks, targetBank, isAdmin) => `
         </div>
         <div class="row-gap">
           <select id="imp-bank">
-            ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === targetBank.id ? "selected" : ""}>导入到：${escapeHtml(b.name)}</option>`).join("")}
+            ${buildBankOptionsHtml(banks, targetBank.id, { prefix: "导入到：" })}
           </select>
           <input id="imp-chapter" type="text" placeholder="默认章节（可选）" style="width:134px;">
           <label class="row-gap" style="font-size:13px;cursor:pointer;"><input id="imp-skip" type="checkbox" checked> 跳过已有题</label>

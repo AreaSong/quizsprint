@@ -51,6 +51,7 @@ const appState = {
   route: "banks",
   routeParams: {},
   banks: [],
+  subjects: [],
   activeBankId: localStorage.getItem("as_qb_active_bank") || "",
   isAdmin: false,
   registrationMode: "open"
@@ -141,8 +142,12 @@ const renderUserMenu = () => {
 };
 
 const refreshBanks = async () => {
-  const data = await apiRequest("/api/banks");
-  appState.banks = data.banks || [];
+  const [bankData, subData] = await Promise.all([
+    apiRequest("/api/banks"),
+    apiRequest("/api/subjects").catch(() => ({ subjects: [] }))
+  ]);
+  appState.banks = bankData.banks || [];
+  appState.subjects = subData.subjects || [];
   syncBankSelection();
 };
 
@@ -204,6 +209,7 @@ const renderCurrentView = () => {
   syncShellMode(appState.route, appState.routeParams);
   const ctx = {
     banks: appState.banks,
+    subjects: appState.subjects,
     activeBankId: appState.activeBankId,
     isAdmin: appState.isAdmin,
     isLoggedIn: Boolean(appState.isAdmin || getCloudUser()),

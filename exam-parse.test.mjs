@@ -636,3 +636,92 @@ test("公网注册门禁与已发布考试轻量编辑正常且不泄露敏感�
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("学期科目管理：创建/改名同步/删除安全解绑及题库性质字段正常", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qb-subject-test-"));
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+    const callRoute = async (method, urlPath, body = {}) => {
+      let result = null;
+      await handleExtraRoutes({ method, headers: {} }, {}, new URL(`http://127.0.0.1:8787${urlPath}`), {
+        store, userStore, examStore, dataDir: tmpDir, uploadsDir: tmpDir,
+        readBody: async () => body,
+        sendJson: (_r, status, payload) => { result = { status, payload }; },
+        requireAdmin: () => true
+      });
+      return result;
+    };
+
+    const createdSub = await callRoute("POST", "/api/subjects", {
+      name: "操作系统", term: "2026 春", examDate: "2026-06-20", description: "核心专业课"
+    });
+    assert.equal(createdSub.status, 200);
+    const subId = createdSub.payload.subject.id;
+
+    const { bank } = store.createBank({ name: "PV 实操题库", subjectId: subId, category: "practice" });
+    store.importQuestions(bank.id, [{ title: "信号量 PV 操作", type: "4", answers: ["P(s) V(s)"] }]);
+    assert.equal(bank.subjectId, subId);
+    assert.equal(bank.category, "practice");
+    assert.equal(bank.subjectName, "操作系统");
+    assert.equal(bank.term, "2026 春");
+
+    const updatedSub = await callRoute("PUT", `/api/subjects/${subId}`, { name: "操作系统原理", term: "2026 春" });
+    assert.equal(updatedSub.status, 200);
+    assert.equal(store.getBank(bank.id).subjectName, "操作系统原理");
+    assert.equal(store.getBank(bank.id).folder, "操作系统原理");
+
+    const listRes = await callRoute("GET", "/api/subjects");
+    assert.equal(listRes.payload.subjects.length, 1);
+    assert.equal(listRes.payload.subjects[0].bankCount, 1);
+    assert.equal(listRes.payload.subjects[0].questionCount, 1);
+
+    const delRes = await callRoute("DELETE", `/api/subjects/${subId}`);
+    assert.equal(delRes.status, 200);
+    const afterBank = store.getBank(bank.id);
+    assert.ok(afterBank);
+    assert.equal(afterBank.subjectId, "");
+    assert.equal(afterBank.questionCount, 1);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("实操题答案图分离持久化、排序/配对拖动判分与考试主观题人工核分标记正常", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qb-drag-test-"));
+  try {
+    const store = createStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+    const { bank } = store.createBank({ name: "实践与拖动测试库", category: "practice" });
+    store.importQuestions(bank.id, [
+      { id: "q-prac", type: "6", title: "画出流程图", answers: ["开始 -> 结束"], answerImages: ["/uploads/flow.svg"] },
+      { id: "q-order", type: "7", title: "步骤排序", answers: ["第一步", "第二步", "第三步"] },
+      { id: "q-match", type: "8", title: "控件配对", answers: ["txt => TextBox", "btn => Button"] }
+    ]);
+
+    const loaded = store.loadBankQuestions(bank.id);
+    assert.deepEqual(loaded[0].answerImages, ["/uploads/flow.svg"]);
+    assert.equal(isAnswerCorrect(loaded[1], ["第一步", "第二步", "第三步"]), true);
+    assert.equal(isAnswerCorrect(loaded[1], ["第二步", "第一步", "第三步"]), false);
+    assert.equal(isAnswerCorrect(loaded[2], ["btn => Button", "txt => TextBox"]), true);
+
+    assert.deepEqual(scoreQuestionAnswer(loaded[1], ["第一步", "第二步", "错"]), { correct: false, ratio: 2 / 3 });
+    assert.deepEqual(scoreQuestionAnswer(loaded[2], ["txt => TextBox"]), { correct: false, ratio: 0.5 });
+
+    const { exam } = examStore.createExam({
+      title: "实践拖动测试卷", bankId: bank.id, durationMinutes: 20,
+      selectedQuestionIds: ["q-prac", "q-order", "q-match"],
+      questionScores: { "q-prac": 10, "q-order": 6, "q-match": 4 }
+    }, loaded);
+    const subRes = examStore.submitExam(exam.id, {
+      studentName: "测试同学",
+      answers: { "q-prac": ["我的步骤"], "q-order": ["第一步", "第二步", "第三步"], "q-match": ["txt => TextBox", "btn => Button"] }
+    });
+    assert.equal(subRes.submission.manualGraded, false);
+    assert.equal(subRes.submission.details[0].needManual, true);
+    assert.equal(subRes.submission.score, 10);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

@@ -1,6 +1,6 @@
-import { aiRequest, apiRequest, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
+import { aiRequest, apiRequest, buildBankOptionsHtml, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { iconSvg } from "../icons.js";
-import { renderLightMarkdown } from "./ai-chat-widget.js";
+import { renderRichMarkdown } from "../markdown.js";
 
 const highlightText = (text, keyword) => {
   const safe = escapeHtml(text);
@@ -14,6 +14,8 @@ const renderSearchItemHtml = (item, q, idx) => {
   const ansList = (item.answers || []).map((a) => String(a).trim()).filter(Boolean);
   const ansSet = new Set(ansList);
   const ansText = ansList.join(" / ");
+  const previewText = ansText.split(/\r?\n/)[0].replace(/[#`*]/g, "").trim();
+  const isRich = item.type === "4" || item.type === "6";
   const optsHtml = (item.options || []).map((opt, oi) => {
     const isCorrect = ansSet.has(String(opt).trim()) || ansSet.has(LETTERS[oi]);
     return `
@@ -33,7 +35,7 @@ const renderSearchItemHtml = (item, q, idx) => {
           <span class="search-q-title">${highlightText(item.title, q)}</span>
         </div>
         <div class="search-sum-right">
-          ${ansText ? `<span class="search-ans-preview" title="${escapeHtml(ansText)}">${escapeHtml(ansText)}</span>` : ""}
+          ${previewText ? `<span class="search-ans-preview" title="${escapeHtml(ansText)}">${escapeHtml(previewText)}</span>` : ""}
           <button type="button" class="btn ghost tiny js-copy-ans" data-idx="${idx}" title="复制答案">${iconSvg("copy", 13)}</button>
           <span class="search-chevron">${iconSvg("chevronRight", 14)}</span>
         </div>
@@ -41,8 +43,12 @@ const renderSearchItemHtml = (item, q, idx) => {
       <div class="search-detail-body">
         ${(item.images || []).length ? `<div class="row-gap">${item.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
         ${optsHtml ? `<div style="display:flex;flex-direction:column;gap:6px;">${optsHtml}</div>` : ""}
-        <div><strong style="color:var(--ok);">正确答案：</strong>${escapeHtml(ansText || "暂无")}</div>
-        ${item.analysis ? `<div class="muted-text"><strong>解析：</strong>${highlightText(item.analysis, q)}</div>` : ""}
+        <div>
+          <strong style="color:var(--ok);">正确答案：</strong>
+          ${isRich ? `<div class="md-content" style="margin-top:4px;">${renderRichMarkdown(ansList.join("\n\n"))}</div>` : escapeHtml(ansText || "暂无")}
+        </div>
+        ${(item.answerImages || []).length ? `<div class="row-gap">${item.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:180px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+        ${item.analysis ? `<div><strong>解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(item.analysis)}</div></div>` : ""}
       </div>
     </details>
   `;
@@ -66,8 +72,7 @@ const buildSearchViewShell = (banks, activeBankId) => `
       </div>
       <div class="row-gap" style="margin-top:12px;">
         <select id="search-bank">
-          <option value="">全部题库</option>
-          ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === activeBankId ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
+          ${buildBankOptionsHtml(banks, activeBankId, { includeAllLabel: "全部题库" })}
         </select>
         <select id="search-type">
           <option value="">全部题型</option>
@@ -146,7 +151,12 @@ export const renderSearchView = (container, ctx) => {
     const q = inputEl.value.trim();
     if (!q) return showToast("请先输入题目", "bad");
     aiBox.hidden = false;
-    aiBox.innerHTML = `<div class="row-gap" style="gap:6px;">${iconSvg("sparkles", 15)}<strong>AI 正在解答...</strong></div>`;
+    aiBox.innerHTML = `
+      <div class="ai-thinking">
+        <span class="ai-spinner" aria-hidden="true"></span>
+        <span>AI 正在分析并生成解答</span>
+        <span class="ai-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>`;
     try {
       const res = await aiRequest("/api/ai/solve", { query: q });
       const answerText = String(res.answer || "");
@@ -158,7 +168,7 @@ export const renderSearchView = (container, ctx) => {
             <button type="button" id="search-ai-hide" class="btn ghost tiny">收起</button>
           </div>
         </div>
-        <div class="ai-msg-bubble">${renderLightMarkdown(answerText)}</div>
+        <div class="ai-msg-bubble">${renderRichMarkdown(answerText)}</div>
       `;
       aiBox.querySelector("#search-ai-copy")?.addEventListener("click", () => {
         navigator.clipboard?.writeText(answerText).then(() => showToast("已复制解答", "ok")).catch(() => {});
