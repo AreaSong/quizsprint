@@ -66,6 +66,7 @@ const applyAppearance = () => {
   const accent = ACCENT_LIST.includes(settings.accent) ? settings.accent : "indigo";
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.accent = accent;
+  document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
   appearanceMenu?.querySelectorAll("[data-set-theme]").forEach((b) => b.classList.toggle("active", b.dataset.setTheme === theme));
   appearanceMenu?.querySelectorAll("[data-set-accent]").forEach((b) => b.classList.toggle("active", b.dataset.setAccent === accent));
 };
@@ -181,9 +182,7 @@ const syncShellMode = (nextRoute, params = {}) => {
   const loggedIn = Boolean(appState.isAdmin || getCloudUser());
   if (adminSubbar) adminSubbar.hidden = !(appState.isAdmin && ADMIN_ROUTES.has(nextRoute));
   if (topAdminBtn) topAdminBtn.classList.toggle("active", ADMIN_ROUTES.has(nextRoute));
-  const curBank = appState.banks.find((b) => b.id === appState.activeBankId);
-  if (nextRoute === "practice" && loggedIn) setFocusMode(true, curBank?.name || "在线刷题", "banks");
-  else if (nextRoute === "exams" && params.examId && loggedIn) setFocusMode(true, "在线考场", "exams");
+  if (nextRoute === "exams" && params.examId && loggedIn) setFocusMode(true, "在线考场", "exams");
   else setFocusMode(false);
 };
 

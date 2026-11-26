@@ -12,6 +12,7 @@ import {
   TYPE_LABELS
 } from "../api.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
+import { iconSvg } from "../icons.js";
 import {
   buildAnswerPanelHtml,
   buildExamSetupHtml,
@@ -273,15 +274,18 @@ export const renderPracticeView = async (container, ctx) => {
       saveBankPracticeState(bank.id, bankState);
       showToast("笔记已保存", "ok");
     };
-    container.querySelector("#q-note-input")?.addEventListener("change", (e) => { saveNote(e.target.value); });
     container.querySelector("#aside-note-input")?.addEventListener("change", (e) => { saveNote(e.target.value); renderMain(); });
+    container.querySelector("#btn-jump-note")?.addEventListener("click", () => {
+      settings.asideCollapsed = false; saveGlobalSettings(settings);
+      asideTab = "notes"; renderMain();
+      container.querySelector("#aside-note-input")?.focus();
+    });
     container.querySelector("#btn-eval-ok")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], true, false); renderMain(); });
     container.querySelector("#btn-eval-bad")?.addEventListener("click", () => { recordAnswer(q, bankState.records[q.id]?.selected || ["已作答"], false, false); renderMain(); });
     container.querySelector("#btn-redo-q")?.addEventListener("click", () => {
       delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear();
       saveBankPracticeState(bank.id, bankState); renderMain();
     });
-    container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => { settings.immersive = !settings.immersive; saveGlobalSettings(settings); document.body.classList.toggle("immersive-mode", settings.immersive); renderMain(); });
     container.querySelector("#btn-exit-immersive")?.addEventListener("click", () => { settings.immersive = false; saveGlobalSettings(settings); document.body.classList.remove("immersive-mode"); renderMain(); });
     container.querySelector("#btn-imm-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
     container.querySelector("#btn-imm-theme")?.addEventListener("click", () => onToggleTheme?.());
@@ -352,16 +356,18 @@ export const renderPracticeView = async (container, ctx) => {
       container.querySelector("#p-bank-select")?.addEventListener("change", (e) => {
         const nextId = e.target.value;
         ctx.onSelectBank?.(nextId);
-        ctx.setFocusMode?.(true, banks.find((b) => b.id === nextId)?.name || "在线刷题", "banks");
         renderPracticeView(container, { ...ctx, activeBankId: nextId, routeParams: { mode } });
       });
       container.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; buildList(); renderMain(); }));
       container.querySelector("#p-type-filter")?.addEventListener("change", (e) => { typeFilter = e.target.value; buildList(); renderMain(); });
       container.querySelector("#p-chapter-filter")?.addEventListener("change", (e) => { chapterFilter = e.target.value; buildList(); renderMain(); });
       container.querySelector("#btn-submit-exam")?.addEventListener("click", submitExam);
+      container.querySelector("#btn-quick-recite")?.addEventListener("click", () => { settings.reciteMode = !settings.reciteMode; saveGlobalSettings(settings); renderMain(); });
+      container.querySelector("#btn-toggle-aside")?.addEventListener("click", () => { settings.asideCollapsed = !settings.asideCollapsed; saveGlobalSettings(settings); renderMain(); });
+      container.querySelector("#btn-toggle-immersive")?.addEventListener("click", () => { settings.immersive = !settings.immersive; saveGlobalSettings(settings); document.body.classList.toggle("immersive-mode", settings.immersive); renderMain(); });
     };
     if (!list.length) {
-      container.innerHTML = `${modeBar}<div class="panel"><p class="muted-text">当前模式下暂无题目（比如错题本/收藏夹/所选章节为空）。</p></div>`;
+      container.innerHTML = `<div class="practice-shell">${modeBar}<div class="panel"><p class="muted-text" style="margin:0;">当前模式下暂无题目（比如错题本/收藏夹/所选章节为空）。</p></div></div>`;
       bindBar(); return;
     }
 
@@ -384,49 +390,51 @@ export const renderPracticeView = async (container, ctx) => {
     const asideBody = asideTab === "sheet" ? sheetInnerHtml : (asideTab === "notes" ? buildNotesPanelHtml(list, q, bankState) : '<div id="aside-ai-chat"></div>');
 
     container.innerHTML = `
-      ${modeBar}
-      ${buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings)}
-      ${examRes ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : ""}
-      <div class="practice-layout">
-        <section class="question-box">
-          <div class="q-progress-track"><span style="width:${pct}%"></span></div>
-          <div class="row-gap" style="justify-content:space-between;">
-            <div class="row-gap">
-              <span class="badge">${TYPE_LABELS[q.type] || "其他"}</span>
-              ${q.chapter ? `<span class="badge warn">${escapeHtml(q.chapter)}</span>` : ""}
-              ${examSession ? `<span class="badge ok">${round1(examSession.scoreMap[q.id] || 0)} 分</span>` : ""}
-              ${streakBadge}
-              <span class="muted-text">第 ${currentIndex + 1} / ${list.length} 题</span>
+      <div class="practice-shell ${settings.asideCollapsed ? "aside-collapsed" : ""}">
+        ${modeBar}
+        ${buildImmersiveBarHtml(bank.name, currentIndex, list.length, settings)}
+        ${examRes ? `<div class="answer-box" style="margin-bottom:14px;border-color:var(--accent);"><strong>模拟考试成绩：${examRes.score} / ${examSession.totalScore} 分</strong>（答对 ${examRes.correctCount} / ${list.length}，及格线 ${examSession.passScore} 分）</div>` : ""}
+        <div class="practice-layout">
+          <section class="question-box">
+            <div class="q-progress-track"><span style="width:${pct}%"></span></div>
+            <div class="row-gap" style="justify-content:space-between;">
+              <div class="row-gap">
+                <span class="tag-pill">${TYPE_LABELS[q.type] || "其他"}</span>
+                ${q.chapter ? `<span class="tag-pill">${escapeHtml(q.chapter)}</span>` : ""}
+                ${examSession ? `<span class="badge ok">${round1(examSession.scoreMap[q.id] || 0)} 分</span>` : ""}
+                ${streakBadge}
+                <span class="muted-text" style="font-variant-numeric:tabular-nums;">第 ${currentIndex + 1} / ${list.length} 题</span>
+              </div>
+              <div class="row-gap">
+                <button class="btn ghost tiny js-fav-btn">${iconSvg("star", 13)}<span>${isFav ? "已收藏" : "收藏"}</span></button>
+                <button id="btn-master" class="btn tiny ${isMastered ? "ok" : "ghost"}">${iconSvg("check", 13)}<span>${isMastered ? "已斩题" : "斩题"}</span></button>
+              </div>
             </div>
-            <div class="row-gap">
-              <button class="btn ghost tiny js-fav-btn">${isFav ? "★ 已收藏" : "☆ 收藏"}</button>
-              <button id="btn-master" class="btn tiny ${isMastered ? "ok" : "ghost"}">${isMastered ? "✓ 已斩题" : "斩题"}</button>
+            <div class="q-title">${escapeHtml(q.title)}</div>
+            ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+            ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession })}
+            ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
+            <div class="row-gap practice-nav-footer" style="justify-content:space-between;margin-top:20px;padding-top:14px;border-top:1px solid var(--line);">
+              <button id="btn-prev" class="btn ghost tiny" ${currentIndex === 0 ? "disabled" : ""}>${iconSvg("chevronLeft", 14)}<span>上一题</span></button>
+              <span class="muted-text kbd-hint" style="font-size:12px;">A-F / 1-6 选 · Enter 确认 · ← / → 切题</span>
+              <button class="btn ghost tiny mobile-only-btn js-fav-btn">${iconSvg("star", 14)}</button>
+              <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
+              <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
+              <button id="btn-next" class="btn primary tiny" ${currentIndex >= list.length - 1 ? "disabled" : ""}><span>下一题</span>${iconSvg("chevronRight", 14)}</button>
             </div>
-          </div>
-          <div class="q-title">${escapeHtml(q.title)}</div>
-          ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
-          ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession })}
-          ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
-          <div class="row-gap practice-nav-footer" style="justify-content:space-between;margin-top:20px;padding-top:14px;border-top:1px solid var(--line);">
-            <button id="btn-prev" class="btn ghost tiny" ${currentIndex === 0 ? "disabled" : ""}>上一题</button>
-            <span class="muted-text kbd-hint" style="font-size:12px;">A-F/1-6 选 · Enter 确认 · ←/→ 切题</span>
-            <button class="btn ghost tiny mobile-only-btn js-fav-btn">${isFav ? "★" : "☆"}</button>
-            <button class="btn ghost tiny mobile-sheet-trigger js-open-sheet">答题卡</button>
-            <button class="btn ghost tiny mobile-only-btn js-open-ai-modal">AI</button>
-            <button id="btn-next" class="btn primary tiny" ${currentIndex >= list.length - 1 ? "disabled" : ""}>下一题</button>
-          </div>
-        </section>
-        <aside class="practice-aside panel">
-          <div class="aside-tabs">
-            ${[["sheet", "答题卡"], ["notes", "本题笔记"], ["ai", "AI 助教"]].map(([k, lbl]) => `
-              <button type="button" class="aside-tab-btn js-aside-tab ${asideTab === k ? "active" : ""}" data-tab="${k}">${lbl}</button>
-            `).join("")}
-          </div>
-          ${asideBody}
-        </aside>
+          </section>
+          <aside class="practice-aside panel">
+            <div class="aside-tabs">
+              ${[["sheet", "答题卡"], ["notes", "本题笔记"], ["ai", "AI 助教"]].map(([k, lbl]) => `
+                <button type="button" class="aside-tab-btn js-aside-tab ${asideTab === k ? "active" : ""}" data-tab="${k}">${lbl}</button>
+              `).join("")}
+            </div>
+            ${asideBody}
+          </aside>
+        </div>
+        <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div></div>
+        <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-ai-chat"></div></div></div>
       </div>
-      <div id="sheet-modal" class="modal-backdrop" hidden><div class="modal-card"><div class="modal-head"><h3>答题卡与设置</h3><button id="sheet-modal-close" class="btn ghost tiny">关闭</button></div>${sheetInnerHtml}</div></div>
-      <div id="ai-chat-modal" class="modal-backdrop" hidden><div class="modal-card" style="max-width:520px;"><div class="modal-head"><h3>AI 题伴助教</h3><button id="ai-chat-modal-close" class="btn ghost tiny">关闭</button></div><div id="modal-ai-chat"></div></div></div>
     `;
     bindBar(); bindMainEvents(q, opts, showAnswerNow);
   };

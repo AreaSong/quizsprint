@@ -81,6 +81,7 @@ export const getGlobalSettings = () => {
     theme: "",
     accent: "indigo",
     immersive: false,
+    asideCollapsed: false,
     strategy: "default",
     wrongClearStreak: 1
   });

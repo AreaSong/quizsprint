@@ -4,8 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>QuizSprint · 自托管题库与在线考试学习平台</title>
+  <style>html[data-theme="dark"]{background:#090a0d;color-scheme:dark}html[data-theme="paper"]{background:#f4f1ea;color-scheme:light}html[data-theme="light"]{background:#f8f9fa;color-scheme:light}</style>
+  <script>
+    try {
+      var s = JSON.parse(localStorage.getItem("as_qb_v2_settings") || "null");
+      var t = (s && (s.theme === "light" || s.theme === "paper" || s.theme === "dark")) ? s.theme : (s && s.eyeCare ? "paper" : "light");
+      var a = (s && (s.accent === "indigo" || s.accent === "emerald" || s.accent === "amber" || s.accent === "violet" || s.accent === "slate")) ? s.accent : "indigo";
+      var root = document.documentElement;
+      root.dataset.theme = t;
+      root.dataset.accent = a;
+      root.style.colorScheme = t === "dark" ? "dark" : "light";
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/views.css">
 </head>
 <body>
   <div class="app-shell">

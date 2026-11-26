@@ -1,4 +1,5 @@
 import { escapeHtml, LETTERS, TYPE_LABELS } from "../api.js";
+import { iconSvg } from "../icons.js";
 
 export const shuffleArray = (arr) => {
   const copy = [...arr];
@@ -81,7 +82,7 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
   `;
 };
 
-export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, examSession }) => {
+export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, examSession }) => {
   if (!showAnswerNow) return "";
   const selfEvalHtml = q.type === "4" && !examSession ? `
     <div class="row-gap" style="margin-top:8px;">
@@ -99,16 +100,14 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
           ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}" style="margin-left:8px;">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
         </div>
         <div class="row-gap">
-          ${record && !examSession ? `<button type="button" id="btn-redo-q" class="btn ghost tiny">重做本题</button>` : ""}
-          <button id="btn-ai-explain" class="btn ghost tiny">AI 深度解析</button>
+          ${record && !examSession ? `<button type="button" id="btn-redo-q" class="btn ghost tiny">${iconSvg("rotate", 13)}<span>重做</span></button>` : ""}
+          ${examSession ? "" : `<button type="button" id="btn-jump-note" class="btn ghost tiny">${iconSvg("note", 13)}<span>记笔记</span></button>`}
+          <button type="button" id="btn-ai-explain" class="btn ghost tiny">${iconSvg("sparkles", 13)}<span>AI 解析</span></button>
         </div>
       </div>
       ${selfEvalHtml}
       ${q.analysis ? `<div style="margin-top:8px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
       <div id="ai-explain-box" class="muted-text" style="margin-top:8px;white-space:pre-wrap;" hidden></div>
-      <div style="margin-top:10px;">
-        <input id="q-note-input" type="text" value="${escapeHtml((bankState.notes || {})[q.id] || "")}" placeholder="写一条个人笔记（自动保存）..." style="width:100%;">
-      </div>
     </div>
   `;
 };
@@ -120,9 +119,13 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
   const rate = doneCount ? Math.round((correctCount / doneCount) * 100) : 0;
 
   return `
-    <div class="row-gap" style="justify-content:space-between;">
-      <strong>答题卡</strong>
-      <button class="btn ghost tiny js-reset-progress">清空进度</button>
+    <div class="row-gap" style="justify-content:space-between;font-size:12px;">
+      <div class="row-gap muted-text" style="font-variant-numeric:tabular-nums;">
+        <span style="color:var(--ok);font-weight:600;">对 ${correctCount}</span>
+        <span style="color:var(--bad);font-weight:600;">错 ${wrongCount}</span>
+        <span>正确率 ${rate}%</span>
+      </div>
+      <button type="button" class="btn ghost tiny js-reset-progress">清空进度</button>
     </div>
     <div class="sheet-grid">
       ${list.map((item, idx) => {
@@ -133,11 +136,6 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         else if (rec && examSession) cls.push("current");
         return `<button class="${cls.join(" ")}" data-jump="${idx}">${idx + 1}</button>`;
       }).join("")}
-    </div>
-    <div class="row-gap muted-text" style="justify-content:space-between;font-size:12px;">
-      <span style="color:var(--ok);">对 ${correctCount}</span>
-      <span style="color:var(--bad);">错 ${wrongCount}</span>
-      <span>正确率 ${rate}%</span>
     </div>
     ${mode === "wrong" && list.length ? `<button class="btn ghost tiny js-export-wrong" style="width:100%;margin-top:8px;">导出/打印错题本</button>` : ""}
     <details class="sheet-settings">
@@ -237,57 +235,59 @@ export const buildExamSetupHtml = (bankName, allQuestions) => {
 export const buildImmersiveBarHtml = (bankName, currentIndex, total, settings) => `
   <div class="immersive-bar">
     <div class="row-gap">
-      <button id="btn-exit-immersive" class="btn ghost tiny">← 退出沉浸</button>
+      <button id="btn-exit-immersive" class="btn ghost tiny">${iconSvg("chevronLeft", 14)}<span>退出沉浸</span></button>
       <strong>${escapeHtml(bankName)}</strong>
-      <span class="muted-text">${currentIndex + 1} / ${total}</span>
+      <span class="muted-text" style="font-variant-numeric:tabular-nums;">${currentIndex + 1} / ${total}</span>
     </div>
     <div class="row-gap">
-      <button id="btn-imm-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}">背题</button>
+      <button id="btn-imm-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}">${iconSvg("eye", 14)}<span>背题</span></button>
       <button id="btn-imm-theme" class="btn ghost tiny">切换主题</button>
-      <button class="btn primary tiny js-open-ai-modal">问 AI</button>
+      <button class="btn ghost tiny js-open-ai-modal">${iconSvg("sparkles", 14)}<span>问 AI</span></button>
       <button class="btn ghost tiny js-open-sheet">答题卡</button>
     </div>
   </div>
 `;
 
 export const buildModeBarHtml = ({ bank, banks = [], mode, bankState, typeFilter, chapterFilter, chapterStats, examSession, settings }) => `
-  <div class="panel practice-modebar" style="margin-bottom:14px;padding:10px 14px;">
-    <div class="row-gap" style="justify-content:space-between;">
-      <div class="row-gap">
-        ${banks.length > 1 ? `
-          <select id="p-bank-select" class="bank-select-inline" aria-label="切换刷题题库">
-            ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
-          </select>
-        ` : `<strong>${escapeHtml(bank.name)}</strong>`}
+  <div class="practice-toolbar">
+    <div class="toolbar-left">
+      ${banks.length > 1 ? `
+        <select id="p-bank-select" class="bank-select-inline" aria-label="切换刷题题库">
+          ${banks.map((b) => `<option value="${escapeHtml(b.id)}" ${b.id === bank.id ? "selected" : ""}>${escapeHtml(b.name)} (${b.questionCount || 0})</option>`).join("")}
+        </select>
+      ` : `<span class="toolbar-bank-name">${iconSvg("book", 15)}<span>${escapeHtml(bank.name)}</span></span>`}
+      <div class="mode-pills" role="tablist" aria-label="练习模式">
         ${[
-          ["order", "顺序练习"],
-          ["chapter", "章节练习"],
-          ["random", "随机练习"],
-          ["type", "题型练习"],
-          ["wrong", `错题本 (${(bankState.wrongIds || []).length})`],
-          ["favorite", `收藏 (${(bankState.favoriteIds || []).length})`],
-          ["exam", "模拟考试"]
-        ].map(([k, label]) => `<button class="btn tiny ${mode === k ? "primary" : "ghost"}" data-mode="${k}">${label}</button>`).join("")}
-        ${mode === "type" ? `
-          <select id="p-type-filter" style="padding:4px 8px;font-size:12px;">
-            <option value="">全部题型</option>
-            ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${typeFilter === k ? "selected" : ""}>${v}</option>`).join("")}
-          </select>
-        ` : ""}
-        ${mode === "chapter" ? `
-          <select id="p-chapter-filter" style="padding:4px 8px;font-size:12px;">
-            <option value="">全部章节 (${chapterStats.reduce((s, c) => s + c.total, 0)} 题)</option>
-            ${chapterStats.map((c) => `<option value="${escapeHtml(c.name)}" ${chapterFilter === c.name ? "selected" : ""}>${escapeHtml(c.name)} (${c.done}/${c.total})</option>`).join("")}
-          </select>
-        ` : ""}
+          ["order", "顺序"],
+          ["chapter", "章节"],
+          ["random", "随机"],
+          ["type", "题型"],
+          ["wrong", `错题 ${(bankState.wrongIds || []).length}`],
+          ["favorite", `收藏 ${(bankState.favoriteIds || []).length}`],
+          ["exam", "模考"]
+        ].map(([k, label]) => `<button type="button" class="mode-pill ${mode === k ? "active" : ""}" data-mode="${k}">${label}</button>`).join("")}
       </div>
-      <div class="row-gap">
-        ${examSession ? `
-          <span class="badge warn">剩余 <span id="exam-clock">${String(Math.floor(examSession.remainSec / 60)).padStart(2, "0")}:${String(examSession.remainSec % 60).padStart(2, "0")}</span></span>
-          ${examSession.submitted ? "" : `<button id="btn-submit-exam" class="btn ok tiny">交卷评分</button>`}
-        ` : ""}
-        <button id="btn-toggle-immersive" class="btn ghost tiny">${settings.immersive ? "退出沉浸" : "沉浸模式"}</button>
-      </div>
+      ${mode === "type" ? `
+        <select id="p-type-filter" class="toolbar-sub-select">
+          <option value="">全部题型</option>
+          ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${typeFilter === k ? "selected" : ""}>${v}</option>`).join("")}
+        </select>
+      ` : ""}
+      ${mode === "chapter" ? `
+        <select id="p-chapter-filter" class="toolbar-sub-select">
+          <option value="">全部章节 (${chapterStats.reduce((s, c) => s + c.total, 0)} 题)</option>
+          ${chapterStats.map((c) => `<option value="${escapeHtml(c.name)}" ${chapterFilter === c.name ? "selected" : ""}>${escapeHtml(c.name)} (${c.done}/${c.total})</option>`).join("")}
+        </select>
+      ` : ""}
+    </div>
+    <div class="toolbar-right">
+      ${examSession ? `
+        <span class="badge warn">剩余 <span id="exam-clock">${String(Math.floor(examSession.remainSec / 60)).padStart(2, "0")}:${String(examSession.remainSec % 60).padStart(2, "0")}</span></span>
+        ${examSession.submitted ? "" : `<button type="button" id="btn-submit-exam" class="btn ok tiny">交卷评分</button>`}
+      ` : ""}
+      <button type="button" id="btn-quick-recite" class="btn tiny ${settings.reciteMode ? "primary" : "ghost"}" title="开启或关闭背题直出答案">${iconSvg("eye", 14)}<span>背题</span></button>
+      <button type="button" id="btn-toggle-aside" class="btn ghost tiny desktop-only-btn" title="收起或展开右侧辅助栏">${iconSvg("sidebar", 14)}<span>${settings.asideCollapsed ? "展开侧栏" : "收起侧栏"}</span></button>
+      <button type="button" id="btn-toggle-immersive" class="btn ghost tiny" title="全屏沉浸作答">${iconSvg("maximize", 14)}<span>沉浸</span></button>
     </div>
   </div>
 `;

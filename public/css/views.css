@@ -1,0 +1,303 @@
+/* 题库中心：当前题库刷题台 & 紧凑横条/卡片切换 */
+.bank-workbench {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow-sm);
+}
+.wb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wb-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.bank-cover {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--accent-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.bank-cover-sm {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.wb-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wb-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wb-head-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wb-ring-wrap {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.wb-ring { width: 38px; height: 38px; transform: rotate(-90deg); }
+.wb-ring-bg { fill: none; stroke: var(--line-strong); stroke-width: 3.5; }
+.wb-ring-val { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
+.wb-ring-text strong { display: block; font-size: 14px; line-height: 1.1; color: var(--ink); }
+.wb-ring-text span { display: block; font-size: 11.5px; color: var(--muted); }
+
+/* 8 项练习模式磁贴 */
+.mode-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.mode-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+.mode-tile:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+.mode-tile-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.mode-tile:hover .mode-tile-icon { color: var(--accent-fg); border-color: var(--line-strong); }
+.mode-tile.is-bad .mode-tile-icon { color: var(--bad); }
+.mode-tile.is-warn .mode-tile-icon { color: var(--warn); }
+.mode-tile-body { min-width: 0; }
+.mode-tile-body strong { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.25; }
+.mode-tile-body span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 下半区：我的题库 */
+.banks-section { margin-top: 24px; }
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-count { font-size: 12.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.view-seg {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  gap: 2px;
+}
+.view-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.view-seg-btn.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.banks-filter-input { width: 210px; padding: 5px 10px; font-size: 12.5px; }
+
+/* 横条列表（无 overflow: hidden 防止裁切菜单） */
+.bank-list {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.bank-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  transition: background-color 0.14s ease;
+}
+.bank-row:first-child { border-top-left-radius: 14px; border-top-right-radius: 14px; }
+.bank-row:last-child { border-bottom: 0; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
+.bank-row:hover { background: var(--surface-hover); }
+.bank-row.selected .bank-cover-sm {
+  color: var(--accent-fg);
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+}
+
+.bank-row-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.bank-row-info { min-width: 0; }
+.bank-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bank-row-meta {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  flex: none;
+}
+.tag-pill.current { color: var(--accent-fg); background: var(--accent-soft); border-color: transparent; }
+
+.bank-row-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: none;
+}
+.bank-row-prog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 156px;
+  font-variant-numeric: tabular-nums;
+}
+.bank-row-prog .progress-bar { flex: 1; height: 5px; }
+.bank-pct-num { font-size: 12.5px; font-weight: 600; color: var(--muted); min-width: 32px; text-align: right; }
+
+/* 卡片网格（兼容考试中心 .cards-grid / .bank-card） */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.bank-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+.bank-card:hover { border-color: var(--line-strong); }
+.bank-card.selected { border-color: var(--line-strong); }
+.bank-card h3 { margin: 0; font-size: 15.5px; }
+.bank-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.bank-card-title { margin: 0; font-size: 15.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.bank-card-meta { margin-top: 4px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card-more-wrap { position: relative; flex: none; }
+.card-more-wrap .dropdown-menu { z-index: 55; }
+
+@media (max-width: 1100px) {
+  .mode-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  .bank-workbench { padding: 16px; }
+  .wb-title { font-size: 17px; }
+  .mode-tiles { gap: 8px; margin-top: 14px; }
+  .mode-tile { padding: 10px 11px; gap: 9px; }
+  .mode-tile-icon { width: 30px; height: 30px; }
+  .bank-row { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px; }
+  .bank-row-right { justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .bank-row-prog { width: auto; flex: 1; min-width: 110px; }
+  .banks-filter-input { width: 100%; }
+}
