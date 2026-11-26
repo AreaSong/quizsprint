@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/views.css">
+  <link rel="stylesheet" href="/css/admin.css">
 </head>
 <body>
   <div class="app-shell">
@@ -88,7 +89,7 @@
           <button type="button" data-route="manage" class="admin-sub-btn">试题管理</button>
           <button type="button" data-route="import" class="admin-sub-btn">批量导题</button>
           <button type="button" data-route="users" class="admin-sub-btn">用户与门禁</button>
-          <button type="button" class="admin-sub-btn js-open-sys-modal">系统与备份</button>
+          <button type="button" data-route="system" class="admin-sub-btn">系统与维护</button>
         </div>
         <button type="button" class="btn ghost tiny" data-route="banks">← 返回学习空间</button>
       </div>
@@ -155,24 +156,6 @@
     </div>
   </div>
 
-  <div id="apikey-modal" class="modal-backdrop" hidden>
-    <div class="modal-card" style="max-width:520px;">
-      <div class="modal-head">
-        <h3>外部调用 API 密钥（CRUD）</h3>
-        <button id="apikey-close" class="btn ghost tiny">关闭</button>
-      </div>
-      <p class="muted-text">外部程序或脚本可在请求头携带 <code>X-API-Key</code>（或 <code>Authorization: Bearer</code>）直接增删改查题库与试题。</p>
-      <div class="stack-form">
-        <div class="row-gap">
-          <input id="apikey-value" readonly style="flex:1;font-family:monospace;">
-          <button type="button" id="apikey-copy" class="btn primary tiny">复制</button>
-          <button type="button" id="apikey-rotate" class="btn danger tiny">重置密钥</button>
-        </div>
-        <pre id="apikey-example" style="margin:0;padding:10px;background:var(--surface-soft);border:1px solid var(--line);border-radius:6px;font-size:12px;overflow-x:auto;"></pre>
-      </div>
-    </div>
-  </div>
-
   <div id="disclaimer-modal" class="modal-backdrop" hidden>
     <div class="modal-card" style="max-width:560px;max-height:86vh;overflow-y:auto;">
       <div class="modal-head">
@@ -186,18 +169,6 @@
         <div><strong>4. 隐私与自托管：</strong>AI 大模型 API Key 仅保存于当前浏览器本地（<code>localStorage</code>），服务端不会持久保存或盗用个人密钥；自托管部署者请妥善保管服务器密码与数据库备份。</div>
       </div>
       <div class="modal-actions"><button type="button" id="disclaimer-ok" class="btn primary">我已知晓</button></div>
-    </div>
-  </div>
-
-  <div id="sys-modal" class="modal-backdrop" hidden>
-    <div class="modal-card" style="max-width:660px;max-height:88vh;overflow-y:auto;">
-      <div class="modal-head">
-        <h3>系统管理（更新与备份）</h3>
-        <button id="sys-close" class="btn ghost tiny">关闭</button>
-      </div>
-      <div id="sys-body" class="stack-form">
-        <p class="muted-text">正在读取系统状态...</p>
-      </div>
     </div>
   </div>
 

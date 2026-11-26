@@ -18,6 +18,7 @@ import { renderManageView } from "./views/manage-view.js";
 import { renderPracticeView } from "./views/practice-view.js";
 import { renderSearchView } from "./views/search-view.js";
 import { renderStatsView } from "./views/stats-view.js";
+import { renderSystemView } from "./views/system-view.js";
 import { renderUsersView } from "./views/users-view.js";
 
 const ROUTE_TITLES = {
@@ -28,9 +29,10 @@ const ROUTE_TITLES = {
   stats: "学习统计",
   manage: "试题管理",
   import: "批量导题",
-  users: "用户管理"
+  users: "用户管理",
+  system: "系统与维护"
 };
-const ADMIN_ROUTES = new Set(["manage", "import", "users"]);
+const ADMIN_ROUTES = new Set(["manage", "import", "users", "system"]);
 const THEME_CYCLE = ["light", "paper", "dark"];
 const ACCENT_LIST = ["indigo", "emerald", "amber", "violet", "slate"];
 
@@ -44,7 +46,6 @@ const appearanceMenu = document.getElementById("appearance-menu");
 const userMenuWrap = document.getElementById("user-menu-wrap");
 const userModal = document.getElementById("user-modal");
 const aiModal = document.getElementById("ai-modal");
-const apiKeyModal = document.getElementById("apikey-modal");
 
 const appState = {
   route: "banks",
@@ -114,9 +115,8 @@ const renderUserMenu = () => {
       ${user ? `<button type="button" class="dropdown-item js-menu-pwd">修改登录密码</button>` : ""}
       ${appState.isAdmin ? `
         <div class="dropdown-sep"></div>
-        <button type="button" class="dropdown-item js-menu-users">用户管理</button>
-        <button type="button" class="dropdown-item js-menu-apikey">外部 API 密钥</button>
-        <button type="button" class="dropdown-item js-open-sys-modal">系统更新与备份</button>
+        <button type="button" class="dropdown-item js-menu-users">用户与门禁</button>
+        <button type="button" class="dropdown-item js-menu-system">系统与维护</button>
       ` : ""}
       <div class="dropdown-sep"></div>
       <button type="button" class="dropdown-item danger js-menu-logout">退出登录</button>
@@ -136,7 +136,7 @@ const renderUserMenu = () => {
   userMenuWrap.querySelector(".js-menu-ai").addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openAiModal(); });
   userMenuWrap.querySelector(".js-menu-pwd")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openChangePwdDialog(); });
   userMenuWrap.querySelector(".js-menu-users")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("users"); });
-  userMenuWrap.querySelector(".js-menu-apikey")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); openApiKeyModal(); });
+  userMenuWrap.querySelector(".js-menu-system")?.addEventListener("click", () => { userDropdownOpen = false; renderUserMenu(); navigate("system"); });
   userMenuWrap.querySelector(".js-menu-logout").addEventListener("click", doLogout);
 };
 
@@ -228,6 +228,7 @@ const renderCurrentView = () => {
   else if (appState.route === "manage") renderManageView(appMain, ctx);
   else if (appState.route === "import") renderImportView(appMain, ctx);
   else if (appState.route === "users") renderUsersView(appMain, ctx);
+  else if (appState.route === "system") renderSystemView(appMain, ctx);
 };
 
 const cycleTheme = () => {
@@ -263,25 +264,6 @@ const openChangePwdDialog = async () => {
   try {
     await apiRequest("/api/user/password", { method: "POST", body: JSON.stringify(form) });
     showToast("密码修改成功", "ok");
-  } catch (err) {
-    showToast(err.message, "bad");
-  }
-};
-
-const renderApiKeyExample = (key) => {
-  document.getElementById("apikey-value").value = key;
-  document.getElementById("apikey-example").textContent =
-`curl -X POST "${location.origin}/api/banks/default/questions" \\
-  -H "Content-Type: application/json" \\
-  -H "X-API-Key: ${key}" \\
-  -d '{"title":"示例题目","type":"0","options":["A1","B1"],"answers":["A1"]}'`;
-};
-
-const openApiKeyModal = async () => {
-  try {
-    const res = await apiRequest("/api/admin/apikey");
-    renderApiKeyExample(res.apiKey);
-    apiKeyModal.hidden = false;
   } catch (err) {
     showToast(err.message, "bad");
   }
@@ -379,17 +361,6 @@ document.getElementById("user-form").addEventListener("submit", async (e) => {
   } catch (err) {
     showToast(err.message, "bad");
   }
-});
-
-document.getElementById("apikey-close").addEventListener("click", () => { apiKeyModal.hidden = true; });
-document.getElementById("apikey-copy").addEventListener("click", () => {
-  navigator.clipboard?.writeText(document.getElementById("apikey-value").value).catch(() => {});
-  showToast("已复制 API Key", "ok");
-});
-document.getElementById("apikey-rotate").addEventListener("click", async () => {
-  if (!confirm("重置后旧 API Key 将立即失效，确认重置吗？")) return;
-  try { renderApiKeyExample((await apiRequest("/api/admin/apikey", { method: "POST" })).apiKey); showToast("API Key 已重置", "ok"); }
-  catch (err) { showToast(err.message, "bad"); }
 });
 
 document.getElementById("ai-close").addEventListener("click", () => { aiModal.hidden = true; });
