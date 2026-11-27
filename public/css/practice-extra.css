@@ -84,3 +84,60 @@ body.is-resizing, body.is-resizing * { cursor: col-resize !important; user-selec
 .ai-session-sel { flex: 1; min-width: 110px; max-width: none; padding: 3px 7px; font-size: 0.75rem; border-radius: 7px; background: var(--surface-soft); border: 1px solid var(--line); color: var(--ink); }
 
 @media (max-width: 640px) { .match-row { grid-template-columns: 1fr; gap: 4px; } .match-arrow { display: none; } }
+
+/* 试题配图白底衬垫（兼容深色主题透明底 PNG）与点击放大灯箱 */
+.q-img,
+.md-content img,
+.answer-img-wrap img,
+.search-detail-body img,
+.q-table-detail-box img {
+  display: inline-block;
+  max-width: 100%;
+  background: #ffffff;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  cursor: zoom-in;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.q-img:hover,
+.md-content img:hover,
+.answer-img-wrap img:hover,
+.search-detail-body img:hover,
+.q-table-detail-box img:hover {
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(15, 23, 42, .12));
+}
+.md-img-wrap { margin: 10px 0; }
+.md-img-wrap img { max-height: 300px; }
+.md-img-inline { max-height: 240px; vertical-align: middle; margin: 4px 0; }
+
+.img-lightbox-card {
+  width: fit-content;
+  max-width: min(94vw, 1180px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+.img-lightbox-stage {
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+}
+.img-lightbox-stage img {
+  display: block;
+  max-width: min(88vw, 1120px);
+  max-height: calc(92vh - 96px);
+  width: auto;
+  height: auto;
+  cursor: zoom-in;
+}
+.img-lightbox-stage img.is-actual {
+  max-width: none;
+  max-height: none;
+  cursor: zoom-out;
+}

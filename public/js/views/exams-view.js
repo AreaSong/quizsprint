@@ -326,7 +326,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
                   <strong>${i + 1}. ${escapeHtml(d.title)}</strong>
                   <span><span class="badge">${d.earnedScore ?? 0} / ${d.maxScore ?? fallbackScore} 分</span> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : (d.needManual ? "待阅卷" : "错误")}</span></span>
                 </div>
-                ${(d.images || []).length ? `<div class="row-gap" style="margin:6px 0;">${d.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+                ${(d.images || []).length ? `<div class="row-gap" style="margin:6px 0;">${d.images.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:220px;max-height:140px;">`).join("")}</div>` : ""}
                 <div class="muted-text">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")}${d.answerHidden ? " · 管理员设置交卷后暂不公开参考答案" : ` · 正确答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
               </div>
             `).join("")}
@@ -387,7 +387,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
           <div class="panel" data-qid="${escapeHtml(q.id)}">
             <div class="row-gap" style="margin-bottom:6px;"><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span> <span class="badge ok">${exam.questionScores?.[q.id] ?? fallbackScore} 分</span> <strong>第 ${idx + 1} 题</strong></div>
             <div class="q-title md-content" style="margin:4px 0 8px;font-size:0.9375rem;">${renderRichMarkdown(q.title)}</div>
-            ${(q.images || []).length ? `<div class="row-gap" style="margin-top:8px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+            ${(q.images || []).length ? `<div class="row-gap" style="margin-top:8px;">${q.images.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:100%;max-height:240px;">`).join("")}</div>` : ""}
             ${renderExamQuestionInputHtml(q, answers[q.id] || [])}
           </div>
         `).join("")}

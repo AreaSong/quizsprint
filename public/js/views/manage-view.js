@@ -9,6 +9,7 @@ import {
 } from "../api.js";
 import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { renderRichMarkdown, stripInlineImages } from "../markdown.js";
 import { openQuestionEditorModal } from "./question-editor-modal.js";
 
 const normalizeKey = (t) => String(t || "").replace(/[\s\p{P}]/gu, "").toLowerCase();
@@ -80,7 +81,10 @@ const buildManageShellHtml = (bank, banks, isAdmin) => `
 
 const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
   if (!pageItems.length) return '<tr><td colspan="6" class="muted-text">没有匹配的试题</td></tr>';
-  return pageItems.map((q) => `
+  return pageItems.map((q) => {
+    const inlineMatches = String(q.title || "").match(/!\[[^\]]*\]\(\/uploads\/[a-zA-Z0-9._-]+\)/g) || [];
+    const totalStemImgs = (q.images?.length || 0) + inlineMatches.length;
+    return `
     <tr data-qid="${escapeHtml(q.id)}">
       <td data-label="选择"><input class="row-chk" type="checkbox" ${selectedIds.has(q.id) ? "checked" : ""}></td>
       <td data-label="题型"><span class="type-pill" data-qtype="${escapeHtml(q.type)}">${TYPE_LABELS[q.type] || "其他"}</span></td>
@@ -88,13 +92,14 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
         <details class="q-table-details">
           <summary>
             <span class="search-chevron">${iconSvg("chevronRight", 13)}</span>
-            <span>${escapeHtml(q.title.split(/\r?\n/)[0].slice(0, 80))}</span>
-            ${q.images?.length ? `<span class="bank-pill">图 ${q.images.length}</span>` : ""}
+            <span>${escapeHtml(stripInlineImages(q.title).slice(0, 80))}</span>
+            ${totalStemImgs ? `<span class="bank-pill">图 ${totalStemImgs}</span>` : ""}
             ${q.answerImages?.length ? `<span class="bank-pill">答图 ${q.answerImages.length}</span>` : ""}
           </summary>
           <div class="q-table-detail-box muted-text">
-            ${(q.images || []).map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;margin:4px 6px 4px 0;border:1px solid var(--line);">`).join("")}
-            ${(q.answerImages || []).map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;margin:4px 6px 4px 0;border:1px solid var(--ok);">`).join("")}
+            ${inlineMatches.length ? `<div class="md-content" style="margin-bottom:6px;">${renderRichMarkdown(q.title)}</div>` : ""}
+            ${(q.images || []).map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:220px;max-height:140px;margin:4px 6px 4px 0;">`).join("")}
+            ${(q.answerImages || []).map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="参考答案配图" style="max-width:220px;max-height:140px;margin:4px 6px 4px 0;border-color:var(--ok);">`).join("")}
             ${(q.options || []).map((o, i) => `<div>${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
             ${q.analysis ? `<div style="margin-top:4px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
           </div>
@@ -111,7 +116,8 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
         ` : '<span class="muted-text">只读</span>'}
       </td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 };
 
 export const renderManageView = async (container, ctx) => {

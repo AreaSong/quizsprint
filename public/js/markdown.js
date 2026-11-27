@@ -17,11 +17,22 @@ const prettifyMath = (expr) => String(expr || "")
   .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)")
   .trim();
 
+const UPLOAD_IMG_LINE_RE = /^!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)$/;
+const UPLOAD_IMG_INLINE_RE = /!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)/g;
+
 const formatInlineMd = (text) =>
   text
+    .replace(UPLOAD_IMG_INLINE_RE, (_m, alt, src) => `<img class="q-img md-img-inline" src="${src}" alt="${alt}" loading="lazy">`)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\\\((.+?)\\\)/g, (_m, expr) => `<code>${prettifyMath(expr)}</code>`);
+
+/** 将题干中的内联图片标记替换为简洁占位符，供列表单行摘要展示 */
+export const stripInlineImages = (text) =>
+  String(text || "")
+    .replace(UPLOAD_IMG_INLINE_RE, " [图] ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const renderTableHtml = (rows) => {
   if (rows.length < 2) return rows.map((r) => `<p>${formatInlineMd(r)}</p>`).join("");
@@ -45,7 +56,13 @@ export const renderRichMarkdown = (rawText) => {
   };
   const withPlaceholders = safe
     .replace(/```[^\n]*\n?([\s\S]*?)```/g, (_m, code) => pushBlock(`<pre><code>${code.trimEnd()}</code></pre>`))
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, expr) => pushBlock(`<div class="md-math">${prettifyMath(expr)}</div>`));
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, expr) => pushBlock(`<div class="md-math">${prettifyMath(expr)}</div>`))
+    .split("\n")
+    .map((line) => {
+      const m = line.trim().match(UPLOAD_IMG_LINE_RE);
+      return m ? pushBlock(`<div class="md-img-wrap"><img class="q-img" src="${m[2]}" alt="${m[1]}" loading="lazy"></div>`) : line;
+    })
+    .join("\n");
 
   const lines = withPlaceholders.split("\n");
   const out = [];

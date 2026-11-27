@@ -1,7 +1,7 @@
 import { aiRequest, apiRequest, buildBankOptionsHtml, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
-import { renderRichMarkdown } from "../markdown.js";
+import { renderRichMarkdown, stripInlineImages } from "../markdown.js";
 import { openQuestionEditorModal } from "./question-editor-modal.js";
 
 const highlightText = (text, keyword) => {
@@ -28,13 +28,14 @@ const renderSearchItemHtml = (item, q, idx, isAdmin = false) => {
     `;
   }).join("");
 
+  const hasInlineImg = /!\[[^\]]*\]\(\/uploads\/[a-zA-Z0-9._-]+\)/.test(item.title || "");
   return `
     <details class="search-item">
       <summary class="search-summary">
         <div class="search-sum-main">
           <span class="type-pill" data-qtype="${escapeHtml(item.type)}">${TYPE_LABELS[item.type] || "其他"}</span>
           <span class="bank-pill">${escapeHtml(item.bankName || "")}</span>
-          <span class="search-q-title">${highlightText(item.title, q)}</span>
+          <span class="search-q-title">${highlightText(stripInlineImages(item.title), q)}</span>
         </div>
         <div class="search-sum-right">
           ${previewText ? `<span class="search-ans-preview" title="${escapeHtml(ansText)}">${escapeHtml(previewText)}</span>` : ""}
@@ -43,13 +44,14 @@ const renderSearchItemHtml = (item, q, idx, isAdmin = false) => {
         </div>
       </summary>
       <div class="search-detail-body">
-        ${(item.images || []).length ? `<div class="row-gap">${item.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+        ${hasInlineImg ? `<div class="md-content" style="margin-bottom:6px;">${renderRichMarkdown(item.title)}</div>` : ""}
+        ${(item.images || []).length ? `<div class="row-gap">${item.images.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:220px;max-height:140px;">`).join("")}</div>` : ""}
         ${optsHtml ? `<div style="display:flex;flex-direction:column;gap:6px;">${optsHtml}</div>` : ""}
         <div>
           <strong style="color:var(--ok);">正确答案：</strong>
           ${isRich ? `<div class="md-content" style="margin-top:4px;">${renderRichMarkdown(ansList.join("\n\n"))}</div>` : escapeHtml(ansText || "暂无")}
         </div>
-        ${(item.answerImages || []).length ? `<div class="row-gap">${item.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:180px;border-radius:6px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+        ${(item.answerImages || []).length ? `<div class="row-gap">${item.answerImages.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="参考答案配图" style="max-width:260px;max-height:180px;">`).join("")}</div>` : ""}
         ${item.analysis ? `<div><strong>解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(item.analysis)}</div></div>` : ""}
         ${isAdmin ? `
           <div class="row-gap" style="justify-content:flex-end;padding-top:6px;border-top:1px dashed var(--line);">

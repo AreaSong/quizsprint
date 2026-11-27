@@ -137,7 +137,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
   const ansImgsHtml = (q.answerImages || []).length ? `
     <div class="answer-img-wrap">
       <div class="muted-text" style="font-size:0.75rem;font-weight:600;margin-bottom:6px;">参考答案配图（流程图 / 运行结果）</div>
-      <div class="row-gap">${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>
+      <div class="row-gap">${q.answerImages.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="参考答案配图" style="max-width:100%;max-height:300px;">`).join("")}</div>
     </div>
   ` : "";
 
@@ -427,7 +427,7 @@ export const buildQuestionHeadHtml = ({ q, currentIndex, total, examSession, sco
 
 export const buildQuestionBodyHtml = ({ q, opts, record, multiDraft, showAnswerNow, bankState, examSession, orderItems, matchState }) => `
   <div class="q-title md-content">${renderRichMarkdown(q.title)}</div>
-  ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img src="${escapeHtml(src)}" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid var(--line);">`).join("")}</div>` : ""}
+  ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:100%;max-height:300px;">`).join("")}</div>` : ""}
   ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems, matchState })}
   ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
 `;

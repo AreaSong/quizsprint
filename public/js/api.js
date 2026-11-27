@@ -380,17 +380,23 @@ export const downloadBankFileSafe = async (bank, format = "xlsx") => {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 };
 
+const renderPrintMdImages = (escapedText) =>
+  String(escapedText || "").replace(
+    /!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)/g,
+    (_m, alt, src) => `<br><img src="${src}" alt="${alt}" style="max-width:300px;max-height:180px;margin:6px 6px 4px 0;background:#fff;padding:4px;border:1px solid #ddd;border-radius:4px;"><br>`
+  );
+
 export const printQuestionsDocument = (title, questions, withAnswers = true) => {
   const win = window.open("", "_blank");
   if (!win) return showToast("请允许弹窗以打印/导出 PDF", "bad");
   const rows = questions.map((q, idx) => `
     <div style="margin-bottom:14px;page-break-inside:avoid;">
-      <div style="font-weight:600;">${idx + 1}. ${escapeHtml(q.title)}</div>
-      ${(q.images || []).map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:160px;margin:6px 6px 4px 0;border:1px solid #ddd;border-radius:4px;">`).join("")}
+      <div style="font-weight:600;white-space:pre-wrap;">${idx + 1}. ${renderPrintMdImages(escapeHtml(q.title))}</div>
+      ${(q.images || []).map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:160px;margin:6px 6px 4px 0;background:#fff;padding:4px;border:1px solid #ddd;border-radius:4px;">`).join("")}
       ${(q.options || []).map((o, i) => `<div style="margin-left:16px;">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
       ${withAnswers ? `<div style="color:#16a34a;margin-top:4px;white-space:pre-wrap;">答案：${escapeHtml((q.answers || []).join(" | "))}</div>` : ""}
-      ${withAnswers && (q.answerImages || []).length ? `<div style="margin-top:6px;"><div style="font-size:12px;color:#666;">参考答案配图：</div>${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:300px;max-height:200px;margin:4px 6px 4px 0;border:1px solid #ddd;border-radius:4px;">`).join("")}</div>` : ""}
-      ${withAnswers && q.analysis ? `<div style="color:#555;font-size:13px;white-space:pre-wrap;margin-top:4px;">解析：${escapeHtml(q.analysis)}</div>` : ""}
+      ${withAnswers && (q.answerImages || []).length ? `<div style="margin-top:6px;"><div style="font-size:12px;color:#666;">参考答案配图：</div>${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:300px;max-height:200px;margin:4px 6px 4px 0;background:#fff;padding:4px;border:1px solid #ddd;border-radius:4px;">`).join("")}</div>` : ""}
+      ${withAnswers && q.analysis ? `<div style="color:#555;font-size:13px;white-space:pre-wrap;margin-top:4px;">解析：${renderPrintMdImages(escapeHtml(q.analysis))}</div>` : ""}
     </div>
   `).join("");
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>

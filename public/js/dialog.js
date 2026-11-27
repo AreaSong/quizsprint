@@ -136,6 +136,40 @@ export const openFormDialog = ({ title = "输入信息", description = "", field
   });
 
 let modalDismissInited = false;
+const LIGHTBOX_IMG_SELECTOR = "img.q-img, .md-content img, .answer-img-wrap img, .search-detail-body img, .q-table-detail-box img";
+
+/** 打开全屏图片放大灯箱，支持适应屏幕与 1:1 原图尺寸切换 */
+export const openImageLightbox = (src, alt = "") => {
+  const cleanSrc = String(src || "").trim();
+  if (!cleanSrc || /^javascript:/i.test(cleanSrc)) return;
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.innerHTML = `
+    <div class="modal-card img-lightbox-card">
+      <div class="modal-head">
+        <h3 style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60vw;">${escapeHtml(alt || "试题配图预览")}</h3>
+        <div class="row-gap" style="gap:6px;">
+          <button type="button" class="btn ghost tiny js-lb-zoom">原图尺寸</button>
+          <button type="button" class="btn ghost tiny js-lb-close">关闭</button>
+        </div>
+      </div>
+      <div class="img-lightbox-stage">
+        <img src="${escapeHtml(cleanSrc)}" alt="${escapeHtml(alt || "试题配图预览")}">
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  const img = backdrop.querySelector("img");
+  const zoomBtn = backdrop.querySelector(".js-lb-zoom");
+  const toggleZoom = () => {
+    const actual = img.classList.toggle("is-actual");
+    zoomBtn.textContent = actual ? "适应屏幕" : "原图尺寸";
+  };
+  backdrop._closeModal = () => closeAnimatedBackdrop(backdrop, () => {});
+  backdrop.querySelector(".js-lb-close").addEventListener("click", () => backdrop._closeModal());
+  zoomBtn.addEventListener("click", toggleZoom);
+  img.addEventListener("click", toggleZoom);
+};
 
 const closeBackdrop = (backdrop) => {
   if (!backdrop || backdrop.dataset.lockDismiss === "1") return;
@@ -165,7 +199,15 @@ export const initGlobalModalDismiss = () => {
   document.addEventListener("click", (e) => {
     const target = mouseDownBackdrop;
     mouseDownBackdrop = null;
-    if (target && e.target === target && !target.hidden) closeBackdrop(target);
+    if (target && e.target === target && !target.hidden) {
+      closeBackdrop(target);
+      return;
+    }
+    const img = e.target instanceof Element ? e.target.closest(LIGHTBOX_IMG_SELECTOR) : null;
+    if (img && !img.closest(".img-lightbox-stage")) {
+      e.preventDefault();
+      openImageLightbox(img.getAttribute("src"), img.alt || "");
+    }
   });
 
   document.addEventListener("keydown", (e) => {
