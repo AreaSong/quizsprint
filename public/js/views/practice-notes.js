@@ -116,12 +116,32 @@ export const createNotesController = ({ container, bankId, bankState, getList, o
 };
 
 export const bindSwipeNav = (el, onPrev, onNext) => {
-  let tx = 0; let ty = 0;
-  el?.addEventListener("touchstart", (e) => { tx = e.changedTouches[0].clientX; ty = e.changedTouches[0].clientY; }, { passive: true });
-  el?.addEventListener("touchend", (e) => {
-    const dx = e.changedTouches[0].clientX - tx; const dy = e.changedTouches[0].clientY - ty;
-    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) onNext?.(); else onPrev?.(); }
+  if (!el) return;
+  let tx = 0; let ty = 0; let active = false;
+  const reset = (animate = true) => {
+    el.style.transition = animate ? "transform 0.18s ease" : "";
+    el.style.transform = "";
+    active = false;
+  };
+  el.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || e.target.closest("input, textarea, select, pre, table, .table-wrap")) return;
+    tx = e.touches[0].clientX; ty = e.touches[0].clientY; active = true;
+    el.style.transition = "none";
   }, { passive: true });
+  el.addEventListener("touchmove", (e) => {
+    if (!active || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - tx; const dy = e.touches[0].clientY - ty;
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+      el.style.transform = `translate3d(${Math.max(-36, Math.min(36, dx * 0.28))}px, 0, 0)`;
+    }
+  }, { passive: true });
+  el.addEventListener("touchend", (e) => {
+    if (!active) return;
+    const dx = e.changedTouches[0].clientX - tx; const dy = e.changedTouches[0].clientY - ty;
+    reset(true);
+    if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy) * 1.25) { if (dx < 0) onNext?.(); else onPrev?.(); }
+  }, { passive: true });
+  el.addEventListener("touchcancel", () => reset(true), { passive: true });
 };
 
 /** 绑定刷题页三栏之间的拖拽调整宽度与双击恢复默认宽度 */
