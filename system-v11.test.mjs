@@ -336,3 +336,74 @@ test("v1.1 可配置定时备份策略、自定义服务器路径、格式切换
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("v1.1 连续编号批量创建用户账号与考试时间通知信息看板正常", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qb-v11-batch-"));
+  const uploadsDir = path.join(tmpDir, "uploads");
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    const store = createStore(tmpDir);
+    const userStore = createUserStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+    const call = makeCaller({ store, userStore, examStore, dataDir: tmpDir, uploadsDir });
+
+    const r1 = await call("POST", "/api/admin/users/batch", {
+      startNum: "100",
+      endNum: "104",
+      nicknamePrefix: "学员",
+      passwordMode: "fixed",
+      fixedPassword: "pass123"
+    });
+    assert.equal(r1.status, 200);
+    assert.equal(r1.payload.createdCount, 5);
+    assert.equal(r1.payload.accounts[0].username, "100");
+    assert.equal(r1.payload.accounts[0].nickname, "学员100");
+    assert.equal((await call("POST", "/api/user/login", { username: "100", password: "pass123" })).status, 200);
+    assert.equal((await call("POST", "/api/user/login", { username: "104", password: "pass123" })).status, 200);
+
+    const r2 = await call("POST", "/api/admin/users/batch", {
+      startNum: "102",
+      endNum: "106",
+      passwordMode: "fixed",
+      fixedPassword: "pass123"
+    });
+    assert.equal(r2.status, 200);
+    assert.equal(r2.payload.skippedCount, 3);
+    assert.equal(r2.payload.createdCount, 2);
+
+    const r3 = await call("POST", "/api/admin/users/batch", {
+      prefix: "stu",
+      startNum: "001",
+      endNum: "003",
+      passwordMode: "random"
+    });
+    assert.equal(r3.status, 200);
+    assert.deepEqual(r3.payload.accounts.map((a) => a.username), ["stu001", "stu002", "stu003"]);
+    assert.equal(r3.payload.accounts[0].password.length, 6);
+    assert.equal((await call("POST", "/api/user/login", { username: "stu001", password: r3.payload.accounts[0].password })).status, 200);
+
+    assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "100", endNum: "400", fixedPassword: "pass123" })).status, 400);
+    assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "200", endNum: "100", fixedPassword: "pass123" })).status, 400);
+    assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "100", endNum: "105", passwordMode: "same" })).status, 400);
+
+    const siteRes = await call("PUT", "/api/admin/site", {
+      examNotices: [
+        { title: "高等数学期末考试", timeText: "2026-12-20 14:00", duration: "90 分钟", note: "提前 15 分钟候考" },
+        { title: "", timeText: "", duration: "", note: "空行应被过滤" }
+      ]
+    });
+    assert.equal(siteRes.status, 200);
+    assert.equal(siteRes.payload.siteConfig.examNotices.length, 1);
+    assert.equal(siteRes.payload.siteConfig.examNotices[0].title, "高等数学期末考试");
+
+    const infoRes = await call("GET", "/api/site/info");
+    assert.equal(infoRes.payload.siteConfig.examNotices[0].duration, "90 分钟");
+
+    const auditRes = await call("GET", "/api/admin/audit-logs");
+    assert.ok(auditRes.payload.logs.some((l) => l.action === "user.batch_create"));
+    assert.ok(auditRes.payload.logs.some((l) => l.action === "site.update"));
+  } finally {
+    closeAllDbs();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

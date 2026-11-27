@@ -247,14 +247,20 @@ export const saveGlobalSettings = (next) => writeJsonStorage("settings", next);
 export const getLocalAiConfig = () => readJsonStorage("ai_config", {
   baseUrl: "https://api.openai.com/v1",
   apiKey: "",
-  model: "gpt-4o-mini"
+  model: "gpt-4o-mini",
+  models: []
 });
 
 export const saveLocalAiConfig = (cfg) => writeJsonStorage("ai_config", {
   baseUrl: String(cfg.baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, ""),
   apiKey: String(cfg.apiKey || "").trim(),
-  model: String(cfg.model || "gpt-4o-mini").trim()
+  model: String(cfg.model || "gpt-4o-mini").trim(),
+  models: Array.isArray(cfg.models) ? cfg.models.map((m) => String(m || "").trim()).filter(Boolean) : []
 });
+
+export const clearLocalAiConfig = () => {
+  try { localStorage.removeItem(`${STORAGE_PREFIX}ai_config`); } catch { /* ignore */ }
+};
 
 export const aiRequest = async (url, payload = {}) => {
   const aiConfig = getLocalAiConfig();

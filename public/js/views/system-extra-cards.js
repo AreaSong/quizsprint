@@ -81,7 +81,21 @@ export const bindAutoBackupConfig = (container, { onSaved, onDelete } = {}) => {
   }));
 };
 
-export const buildSiteConfigCardHtml = (cfg = {}) => `
+const buildExamNoticeRowHtml = (item = {}) => `
+  <div class="exam-notice-edit-row">
+    <input class="js-en-title" value="${escapeHtml(item.title || "")}" placeholder="考试名称/科目（如：期末考）" maxlength="60">
+    <input class="js-en-time" value="${escapeHtml(item.timeText || "")}" placeholder="考试时间（如：2026-12-20 14:00）" maxlength="60">
+    <input class="js-en-dur" value="${escapeHtml(item.duration || "")}" placeholder="时长（如：90 分钟）" maxlength="40">
+    <input class="js-en-note" value="${escapeHtml(item.note || "")}" placeholder="考场/备注（可选）" maxlength="160">
+    <button type="button" class="btn ghost-danger tiny js-del-exam-notice" title="移除">×</button>
+  </div>
+`;
+
+const EN_EMPTY_HINT = '<div class="muted-text js-en-empty" style="font-size:0.75rem;">暂无考试安排，点击右侧「+ 添加考试信息」即可在题库首页展示考试时间与倒计时</div>';
+
+export const buildSiteConfigCardHtml = (cfg = {}) => {
+  const notices = Array.isArray(cfg.examNotices) ? cfg.examNotices : [];
+  return `
   <section class="panel sys-card">
     <div class="row-gap" style="justify-content:space-between;">
       <h3 style="margin:0;font-size:1rem;">站点基础设置与公告</h3>
@@ -93,6 +107,15 @@ export const buildSiteConfigCardHtml = (cfg = {}) => `
         <label style="flex:1;"><span>副标题</span><input id="site-cfg-sub" value="${escapeHtml(cfg.subtitle ?? "Question Bank")}" maxlength="60"></label>
       </div>
       <label><span>顶部通知公告栏（留空则隐藏）</span><input id="site-cfg-ann" value="${escapeHtml(cfg.announcement || "")}" placeholder="如：期末模拟考将于本周五 20:00 开放" maxlength="300"></label>
+      <div class="exam-notice-editor">
+        <div class="row-gap" style="justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:0.8125rem;font-weight:600;">考试时间与通知信息（展示在题库首页顶部）</span>
+          <button type="button" id="site-add-exam-notice" class="btn ghost tiny">+ 添加考试信息</button>
+        </div>
+        <div id="site-exam-notices-list" class="stack-form" style="gap:6px;">
+          ${notices.length ? notices.map(buildExamNoticeRowHtml).join("") : EN_EMPTY_HINT}
+        </div>
+      </div>
       <label class="row-gap" style="flex-direction:row;cursor:pointer;font-weight:500;">
         <input id="site-cfg-guest" type="checkbox" ${cfg.allowGuestBrowse !== false ? "checked" : ""}>
         <span>允许未登录访客浏览公开题库与搜题</span>
@@ -103,6 +126,7 @@ export const buildSiteConfigCardHtml = (cfg = {}) => `
     </form>
   </section>
 `;
+};
 
 export const buildAuditLogsCardHtml = (logs = []) => `
   <section class="panel sys-card full-span">
@@ -134,8 +158,28 @@ export const buildAuditLogsCardHtml = (logs = []) => `
 `;
 
 export const bindSiteConfigCard = (container, onUpdated) => {
+  const listEl = container.querySelector("#site-exam-notices-list");
+  container.querySelector("#site-add-exam-notice")?.addEventListener("click", () => {
+    if (!listEl) return;
+    if (listEl.querySelectorAll(".exam-notice-edit-row").length >= 20) return showToast("最多添加 20 条考试安排", "bad");
+    listEl.querySelector(".js-en-empty")?.remove();
+    listEl.insertAdjacentHTML("beforeend", buildExamNoticeRowHtml({}));
+    listEl.lastElementChild?.querySelector(".js-en-title")?.focus();
+  });
+  listEl?.addEventListener("click", (e) => {
+    const delBtn = e.target.closest(".js-del-exam-notice");
+    if (!delBtn) return;
+    delBtn.closest(".exam-notice-edit-row")?.remove();
+    if (!listEl.querySelector(".exam-notice-edit-row")) listEl.innerHTML = EN_EMPTY_HINT;
+  });
   container.querySelector("#sys-site-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const examNotices = [...(listEl?.querySelectorAll(".exam-notice-edit-row") || [])].map((row) => ({
+      title: row.querySelector(".js-en-title").value.trim(),
+      timeText: row.querySelector(".js-en-time").value.trim(),
+      duration: row.querySelector(".js-en-dur").value.trim(),
+      note: row.querySelector(".js-en-note").value.trim()
+    })).filter((item) => item.title || item.timeText);
     try {
       const res = await apiRequest("/api/admin/site", {
         method: "PUT",
@@ -143,7 +187,8 @@ export const bindSiteConfigCard = (container, onUpdated) => {
           siteName: container.querySelector("#site-cfg-name").value.trim(),
           subtitle: container.querySelector("#site-cfg-sub").value.trim(),
           announcement: container.querySelector("#site-cfg-ann").value.trim(),
-          allowGuestBrowse: container.querySelector("#site-cfg-guest").checked
+          allowGuestBrowse: container.querySelector("#site-cfg-guest").checked,
+          examNotices
         })
       });
       showToast("站点设置已保存并实时生效", "ok");

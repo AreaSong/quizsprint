@@ -60,3 +60,41 @@
   .subject-bar { flex-wrap: wrap; padding: 10px 12px; }
   .subject-bar-left { width: 100%; }
 }
+
+/* 考试时间与通知看板、后台动态编辑行 */
+.exam-notice-board {
+  flex: none;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+.exam-notice-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.exam-notice-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--accent-soft); color: var(--accent-fg);
+}
+.exam-notice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.exam-notice-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 9px 11px; border-radius: 8px;
+  background: var(--surface-soft); border: 1px solid var(--line);
+}
+.exam-notice-title { font-size: 0.8438rem; line-height: 1.35; }
+.exam-notice-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.7813rem; font-weight: 600; color: var(--accent-fg); }
+.exam-notice-note { font-size: 0.75rem; line-height: 1.45; }
+
+.exam-notice-editor { padding: 10px; border-radius: 9px; background: var(--surface-soft); border: 1px solid var(--line); }
+.exam-notice-edit-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 0.8fr 1.2fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.exam-notice-edit-row input { min-width: 0; }

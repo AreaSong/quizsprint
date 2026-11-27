@@ -1,3 +1,4 @@
+import { initAiConfigModal } from "./ai-modal.js";
 import {
   apiRequest,
   escapeHtml,
@@ -5,7 +6,6 @@ import {
   getCloudUser,
   getGlobalSettings,
   getLocalAiConfig,
-  saveLocalAiConfig,
   setCloudSession,
   showToast
 } from "./api.js";
@@ -247,6 +247,7 @@ const renderCurrentView = () => {
     activeBankId: appState.activeBankId,
     isAdmin: appState.isAdmin,
     isLoggedIn: Boolean(appState.isAdmin || getCloudUser()),
+    siteInfo: appState.siteInfo,
     routeParams: appState.routeParams,
     onSelectBank: (id) => {
       appState.activeBankId = id;
@@ -327,19 +328,7 @@ const openChangePwdDialog = async () => {
   }
 };
 
-const aiModelSelect = document.getElementById("ai-model-select");
-const aiModelInput = document.getElementById("ai-model");
-const aiKeyInput = document.getElementById("ai-key");
-
-const openAiModal = () => {
-  const cfg = getLocalAiConfig();
-  document.getElementById("ai-url").value = cfg.baseUrl || "https://api.openai.com/v1";
-  aiModelInput.value = cfg.model || "gpt-4o-mini";
-  aiKeyInput.value = cfg.apiKey || "";
-  aiKeyInput.placeholder = "sk-...";
-  aiModelSelect.hidden = true;
-  aiModal.hidden = false;
-};
+const { openAiModal } = initAiConfigModal({ aiModal, onUpdated: renderUserMenu });
 
 const syncUserModalMode = () => {
   const regMode = appState.registrationMode || "open";
@@ -417,39 +406,6 @@ document.getElementById("user-form").addEventListener("submit", async (e) => {
     renderCurrentView();
     prefetchActiveBank();
   } catch (err) { showToast(err.message, "bad"); }
-});
-
-document.getElementById("ai-close").addEventListener("click", () => { aiModal.hidden = true; });
-document.getElementById("ai-clear-btn")?.addEventListener("click", () => {
-  localStorage.removeItem("as_qb_ai_config");
-  openAiModal();
-  renderUserMenu();
-  showToast("已清除本地 AI 密钥与配置");
-});
-document.getElementById("ai-fetch-models").addEventListener("click", async () => {
-  try {
-    showToast("正在拉取模型列表...");
-    const res = await apiRequest("/api/ai/models", {
-      method: "POST",
-      body: JSON.stringify({ aiConfig: { baseUrl: document.getElementById("ai-url").value.trim(), apiKey: aiKeyInput.value.trim() } })
-    });
-    const models = res.models || [];
-    if (!models.length) return showToast("接口未返回可用模型", "bad");
-    aiModelSelect.innerHTML = models.map((m) => `<option value="${escapeHtml(m)}" ${m === aiModelInput.value ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
-    aiModelSelect.hidden = false;
-    if (!aiModelInput.value) aiModelInput.value = models[0];
-    saveLocalAiConfig({ baseUrl: document.getElementById("ai-url").value.trim(), apiKey: aiKeyInput.value.trim(), model: aiModelInput.value.trim() });
-    renderUserMenu();
-    showToast(`已拉取 ${models.length} 个模型并保存配置`, "ok");
-  } catch (err) { showToast(err.message, "bad"); }
-});
-aiModelSelect.addEventListener("change", () => { if (aiModelSelect.value) aiModelInput.value = aiModelSelect.value; });
-document.getElementById("ai-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  saveLocalAiConfig({ baseUrl: document.getElementById("ai-url").value.trim(), apiKey: aiKeyInput.value.trim(), model: aiModelInput.value.trim() });
-  renderUserMenu();
-  aiModal.hidden = true;
-  showToast("本地 AI 配置已保存（仅当前浏览器可用）", "ok");
 });
 
 const syncRouteFromHash = () => {

@@ -269,6 +269,8 @@
   .hot-row > div:first-child { min-width: 0 !important; }
   .hot-row > .row-gap:last-child { justify-content: flex-end; flex-wrap: wrap !important; }
   #sys-site-form > .row-gap { flex-direction: column; align-items: stretch; }
+  .exam-notice-grid { grid-template-columns: minmax(0, 1fr); }
+  .exam-notice-edit-row { grid-template-columns: minmax(0, 1fr); gap: 6px; padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
 
   .modal-backdrop { align-items: flex-end; padding: 0; }
   .modal-card {

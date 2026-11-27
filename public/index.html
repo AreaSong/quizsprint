@@ -168,9 +168,12 @@
         <div>
           <div class="row-gap" style="justify-content:space-between;margin-bottom:4px;">
             <span style="font-size:0.8125rem;font-weight:600;">模型名称</span>
-            <button type="button" id="ai-fetch-models" class="btn ghost tiny">拉取模型列表</button>
+            <div class="row-gap" style="gap:6px;">
+              <button type="button" id="ai-model-mode-btn" class="btn ghost tiny" hidden>手动输入</button>
+              <button type="button" id="ai-fetch-models" class="btn ghost tiny">拉取模型列表</button>
+            </div>
           </div>
-          <select id="ai-model-select" style="width:100%;margin-bottom:6px;" hidden></select>
+          <select id="ai-model-select" style="width:100%;" hidden></select>
           <input id="ai-model" placeholder="gpt-4o-mini / deepseek-chat" style="width:100%;" required>
         </div>
         <div class="modal-actions" style="justify-content:space-between;">

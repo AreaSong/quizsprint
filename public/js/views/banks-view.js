@@ -49,6 +49,41 @@ const formatExamCountdown = (examDate) => {
   return { text: "考试已过", cls: "" };
 };
 
+const renderExamNoticeBoardHtml = (examNotices = [], isAdmin = false) => {
+  if (!Array.isArray(examNotices) || !examNotices.length) return "";
+  return `
+    <section class="exam-notice-board">
+      <div class="exam-notice-head">
+        <div class="row-gap" style="gap:6px;">
+          <span class="exam-notice-icon">${iconSvg("clock", 15)}</span>
+          <strong>考试时间与通知安排</strong>
+          <span class="badge">${examNotices.length} 条</span>
+        </div>
+        ${isAdmin ? '<button type="button" id="btn-edit-exam-notices" class="btn ghost tiny">编辑</button>' : ""}
+      </div>
+      <div class="exam-notice-grid">
+        ${examNotices.map((n) => {
+          const dateMatch = String(n.timeText || "").match(/\b(\d{4}-\d{2}-\d{2})\b/);
+          const cd = formatExamCountdown(dateMatch?.[1] || "");
+          return `
+            <div class="exam-notice-item">
+              <div class="row-gap" style="justify-content:space-between;gap:6px;">
+                <strong class="exam-notice-title">${escapeHtml(n.title || "考试通知")}</strong>
+                ${cd ? `<span class="badge ${cd.cls}">${escapeHtml(cd.text)}</span>` : ""}
+              </div>
+              <div class="exam-notice-meta">
+                ${n.timeText ? `<span>${escapeHtml(n.timeText)}</span>` : ""}
+                ${n.duration ? `<span class="tag-pill">${escapeHtml(n.duration)}</span>` : ""}
+              </div>
+              ${n.note ? `<div class="muted-text exam-notice-note">${escapeHtml(n.note)}</div>` : ""}
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+};
+
 const renderBankTagsHtml = (bank, isCurrent) => {
   const cat = bank.category || "theory";
   const catTag = `<span class="cat-pill" data-cat="${escapeHtml(cat)}">${BANK_CATEGORIES[cat] || "理论"}</span>`;
@@ -249,7 +284,7 @@ export const renderBanksView = (container, ctx) => {
   banksAbortCtrl?.abort();
   banksAbortCtrl = new AbortController();
   const { signal } = banksAbortCtrl;
-  const { banks, subjects = [], activeBankId, isAdmin, isLoggedIn, onSelectBank, onNavigate, onRefreshBanks, onRequireUserLogin } = ctx;
+  const { banks, subjects = [], activeBankId, isAdmin, isLoggedIn, siteInfo, onSelectBank, onNavigate, onRefreshBanks, onRequireUserLogin } = ctx;
 
   const terms = [...new Set(subjects.map((s) => s.term).filter(Boolean))];
   let activeTerm = localStorage.getItem(ACTIVE_TERM_KEY) || "ALL";
@@ -312,6 +347,7 @@ export const renderBanksView = (container, ctx) => {
 
     container.innerHTML = `
       <div class="view-frame">
+        ${renderExamNoticeBoardHtml(siteInfo?.siteConfig?.examNotices || [], isAdmin)}
         ${renderSubjectBarHtml({ terms, activeTerm, termSubjects, activeSubjectId, banks, isAdmin })}
         ${renderSubjectOverviewHtml(curSubject, scopeBanks, isAdmin)}
         ${renderWorkbenchHtml(curBank)}
@@ -401,6 +437,7 @@ export const renderBanksView = (container, ctx) => {
       return;
     }
     if (e.target.closest("#btn-new-bank")) return openBankCreateModal({ subjects, defaultSubjectId: defSubId, onCreated: async (b) => { onSelectBank(b.id); await onRefreshBanks(); } });
+    if (e.target.closest("#btn-edit-exam-notices")) return onNavigate("system");
     if (e.target.closest("#btn-merge-bank")) return openBankMergeModal({ banks, subjects, defaultSubjectId: defSubId, onMerged: async (b) => { onSelectBank(b.id); await onRefreshBanks(); } });
     if (e.target.closest("#btn-go-import")) return onNavigate("import");
 

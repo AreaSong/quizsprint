@@ -2,6 +2,7 @@ import { apiRequest, escapeHtml, getCloudUser, showToast } from "../api.js";
 import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
 import { mountLoginLogsPanel } from "./login-logs-panel.js";
+import { openBatchCreateUsersModal } from "./users-batch-modal.js";
 
 const buildUsersShellHtml = (regPolicy) => `
   <div class="panel view-frame">
@@ -16,6 +17,7 @@ const buildUsersShellHtml = (regPolicy) => `
             <button type="button" class="btn tiny primary js-usr-tab" data-tab="accounts">账号与门禁</button>
             <button type="button" class="btn tiny ghost js-usr-tab" data-tab="logs">登录轨迹 / IP</button>
           </div>
+          <button id="usr-batch-btn" type="button" class="btn ghost tiny">批量生成</button>
           <button id="usr-add-btn" type="button" class="btn primary tiny">+ 新建账号</button>
         </div>
       </div>
@@ -183,6 +185,10 @@ export const renderUsersView = async (container, ctx) => {
       regPolicy = { mode: res.mode, inviteCode: res.inviteCode || "" };
       showToast("注册门禁设置已保存", "ok");
     } catch (err) { showToast(err.message, "bad"); }
+  });
+
+  container.querySelector("#usr-batch-btn").addEventListener("click", () => {
+    openBatchCreateUsersModal({ onCreated: async () => { await loadUsers(); renderListPart(); } });
   });
 
   container.querySelector("#usr-add-btn").addEventListener("click", async () => {
