@@ -1,17 +1,10 @@
-import {
-  escapeHtml, fetchBankQuestionsSafe, getBankPracticeState, getGlobalSettings,
-  LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast
-} from "../api.js";
+import { escapeHtml, fetchBankQuestionsSafe, getBankPracticeState, getGlobalSettings, LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast } from "../api.js";
 import { openConfirmDialog } from "../dialog.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
 import { bindPaneResizers, bindSwipeNav, createNotesController } from "./practice-notes.js";
 import { bindDragQuestionEvents, initMatchState, initOrderItems, isMatchType, isOrderType, isSubjectiveType } from "./practice-drag.js";
 import { mountExamSetup } from "./practice-exam.js";
-import {
-  buildExamBannerHtml, buildImmersiveBarHtml, buildModeBarHtml, buildNotesPanelHtml,
-  buildPracticeLoginHtml, buildPracticeShellHtml, buildQuestionBodyHtml, buildQuestionHeadHtml,
-  buildSheetInnerHtml, computeChapterStats, isAnswerCorrect, isMultiChoice, shuffleArray
-} from "./practice-templates.js";
+import { buildExamBannerHtml, buildImmersiveBarHtml, buildModeBarHtml, buildNotesPanelHtml, buildPracticeLoginHtml, buildPracticeShellHtml, buildQuestionBodyHtml, buildQuestionHeadHtml, buildSheetInnerHtml, computeChapterStats, isAnswerCorrect, isMultiChoice, shuffleArray } from "./practice-templates.js";
 
 let activePracticeCleanup = null;
 const round1 = (n) => Math.round(Number(n || 0) * 10) / 10;
@@ -352,23 +345,25 @@ export const renderPracticeView = async (container, ctx) => {
   };
 
   const bindInputControls = (q, showAnswerNow) => {
+    if (!showAnswerNow || (!examSession && !settings.reciteMode)) {
+      container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
+        const val = optBtn.dataset.opt;
+        if (isMultiChoice(q)) {
+          if (showAnswerNow) { delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear(); multiDraft.add(val); return renderMain({ forceBody: true }); }
+          if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val);
+          return void optBtn.classList.toggle("selected", multiDraft.has(val));
+        }
+        const correct = isAnswerCorrect(q, [val]); justAnsweredQid = q.id;
+        recordAnswer(q, [val], correct); renderMain();
+        if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) { stopAutoNext(); autoNextTimer = setTimeout(goNext, 420); }
+      }));
+    }
     if (showAnswerNow) return;
     bindDragQuestionEvents({
       container, q, getOrderItems: () => getOrderItems(q), setOrderItems: (arr) => orderDraftMap.set(q.id, arr),
       getMatchState: () => getMatchState(q), onRerender: () => renderMain({ forceBody: true }),
       onSubmit: (sel) => { justAnsweredQid = q.id; recordAnswer(q, sel, isAnswerCorrect(q, sel)); renderMain(); }
     });
-    container.querySelectorAll(".option-item").forEach((optBtn) => optBtn.addEventListener("click", () => {
-      const val = optBtn.dataset.opt;
-      if (isMultiChoice(q)) {
-        if (multiDraft.has(val)) multiDraft.delete(val); else multiDraft.add(val);
-        optBtn.classList.toggle("selected", multiDraft.has(val));
-        return;
-      }
-      const correct = isAnswerCorrect(q, [val]); justAnsweredQid = q.id;
-      recordAnswer(q, [val], correct); renderMain();
-      if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) { stopAutoNext(); autoNextTimer = setTimeout(goNext, 420); }
-    }));
     container.querySelector("#btn-confirm-multi")?.addEventListener("click", () => {
       if (!multiDraft.size) return showToast("请至少选择一个选项", "bad");
       justAnsweredQid = q.id; recordAnswer(q, [...multiDraft], isAnswerCorrect(q, [...multiDraft])); multiDraft.clear(); renderMain();
@@ -448,7 +443,8 @@ export const renderPracticeView = async (container, ctx) => {
     const prevQScroll = !qChanged && wasMounted ? qBodyEl.scrollTop : 0;
     qBodyEl.classList.toggle("is-just-answered", isJustAns);
     qBodyEl.innerHTML = buildQuestionBodyHtml({ q, opts, record: rec, multiDraft, showAnswerNow, bankState, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null });
-    qBodyEl.scrollTop = qChanged ? 0 : prevQScroll;
+    qBodyEl.scrollTop = qChanged ? 0 : prevQScroll; if (qChanged) container.scrollTop = 0;
+    if (isJustAns && window.innerWidth <= 960) requestAnimationFrame(() => qBodyEl.querySelector(".answer-box")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     return true;
   };
 

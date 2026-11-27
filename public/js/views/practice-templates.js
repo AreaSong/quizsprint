@@ -63,7 +63,7 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
             cls += " selected";
           }
           return `
-            <button class="${cls}" data-opt="${escapeHtml(opt)}">
+            <button type="button" class="${cls}" data-opt="${escapeHtml(opt)}">
               <span class="opt-key">${LETTERS[idx] || idx + 1}</span>
               <span>${escapeHtml(opt)}</span>
             </button>
@@ -72,7 +72,7 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
       </div>
       ${isMultiChoice(q) && !showAnswerNow ? `
         <div style="margin-top:12px;">
-          <button id="btn-confirm-multi" class="btn primary">确认${q.type === "5" ? "不定项" : "多选"}答案 (Enter)</button>
+          <button type="button" id="btn-confirm-multi" class="btn primary">确认${q.type === "5" ? "不定项" : "多选"}答案 (Enter)</button>
         </div>
       ` : ""}
     `;
@@ -85,14 +85,14 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
     return `
       <div class="stack-form">
         <textarea id="essay-input" rows="5" placeholder="${ph}" ${showAnswerNow && !examSession ? "readonly" : ""}>${escapeHtml(val)}</textarea>
-        ${!showAnswerNow ? `<div><button id="btn-confirm-essay" class="btn primary">翻看参考答案 (Space)</button></div>` : ""}
+        ${!showAnswerNow ? `<div><button type="button" id="btn-confirm-essay" class="btn primary">翻看参考答案 (Space)</button></div>` : ""}
       </div>
     `;
   }
   return `
     <div class="row-gap">
       <input id="fill-input" type="text" value="${escapeHtml(val)}" placeholder="输入答案（多空用 | 分隔，回车提交）" style="flex:1;" ${showAnswerNow && !examSession ? "readonly" : ""}>
-      ${!showAnswerNow ? `<button id="btn-confirm-fill" class="btn primary">提交核对</button>` : ""}
+      ${!showAnswerNow ? `<button type="button" id="btn-confirm-fill" class="btn primary">提交核对</button>` : ""}
     </div>
   `;
 };
@@ -188,7 +188,7 @@ export const buildSheetInnerHtml = ({ list, currentIndex, activeRecords, examSes
         if (idx === currentIndex) cls.push("current");
         if (rec && (!examSession || examSession.submitted)) cls.push(rec.correct ? "ok" : "bad");
         else if (rec && examSession) cls.push("current");
-        return `<button class="${cls.join(" ")}" data-jump="${idx}">${idx + 1}</button>`;
+        return `<button type="button" class="${cls.join(" ")}" data-jump="${idx}">${idx + 1}</button>`;
       }).join("")}
     </div>
     ${wrongLen || favLen || masterLen ? `
