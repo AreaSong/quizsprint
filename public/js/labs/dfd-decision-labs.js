@@ -68,10 +68,22 @@ const clientToSvgPoint = (svg, clientX, clientY) => {
   return { x: Math.max(64, Math.min(616, Math.round(p.x))), y: Math.max(30, Math.min(280, Math.round(p.y))) };
 };
 
+const describeDfdTarget = (id, nodes, edges) => {
+  const n = nodes.find((x) => x.id === id);
+  if (n) return n.label || id;
+  const e = edges.find((x) => x.id === id);
+  if (!e) return id;
+  const a = nodes.find((x) => x.id === e.from)?.label || e.from;
+  const b = nodes.find((x) => x.id === e.to)?.label || e.to;
+  return `${a}→${b}${e.label ? `(${e.label})` : ""}`;
+};
+
 /** 挂载数据流图（DFD）排错与自由搭建实验台 */
 export const mountDfdLab = (root, opts = {}) => {
   const embedded = Boolean(opts.embedded);
   const readOnly = Boolean(opts.readOnly);
+  const studioSide = opts.studio && opts.sideSlot ? opts.sideSlot : null;
+  const sideRoot = studioSide || root;
   const spec = opts.spec || {};
   const initP = opts.initialPayload || {};
   const fixedChallenge = embedded && spec.mode !== "build" ? resolveDfdChallenge(spec) : null;
@@ -105,8 +117,22 @@ export const mountDfdLab = (root, opts = {}) => {
     const nMap = new Map(nodes.map((n) => [n.id, n]));
     const check = isBuild ? validateDfdGraph(nodes, edges) : null;
     const faultCount = Object.keys(ch.faults || {}).length;
-
-    root.innerHTML = `
+    const markChipsHtml = !isBuild ? `
+      <div class="dfd-mark-list">
+        ${[...state.foundIds].map((id) => `
+          <span class="dfd-mark-chip">
+            <span>${escapeHtml(describeDfdTarget(id, nodes, edges))}</span>
+            ${readOnly ? "" : `<button type="button" class="btn ghost tiny js-dfd-unmark" data-unmark="${escapeHtml(id)}" style="padding:0 4px;">×</button>`}
+          </span>
+        `).join("") || '<span class="muted-text" style="font-size:0.7813rem;">尚未标记任何元素，请在左侧画布点击可疑节点或箭头。</span>'}
+      </div>
+    ` : "";
+    const statusHtml = !isBuild
+      ? `${studioSide ? `<div class="row-gap" style="justify-content:space-between;"><strong>已标违规项</strong><span class="badge ${state.foundIds.size === faultCount ? "ok" : "warn"}">${state.foundIds.size} / ${faultCount} 处</span></div>${markChipsHtml}` : ""}
+         <div class="lab-feedback ${state.lastMsg.startsWith("违规") ? "ok" : "warn"}">${escapeHtml(state.lastMsg || (embedded ? "点击图中可疑的加工框或数据流箭头标记违规处（再次点击可取消）。" : "点击图中可疑的加工框或数据流箭头进行排错。"))}</div>`
+      : `${readOnly ? "" : buildDfdInspectorHtml(state, nodes, edges)}
+         <div class="lab-feedback ${check.valid ? "ok" : "warn"}">${check.valid ? "✓ 当前数据流图符合加工守恒、边界连接与命名规范！" : check.issues.map((i) => escapeHtml(i.msg)).join("；")}</div>`;
+    const toolbarHtml = (!embedded || isBuild) ? `
       <div class="lab-toolbar">
         <div class="row-gap">
           ${embedded ? "" : `
@@ -116,8 +142,8 @@ export const mountDfdLab = (root, opts = {}) => {
             </div>
           `}
           ${!isBuild ? `
-            ${embedded ? "" : `<select id="dfd-ch-sel" class="lab-select">${DFD_CHALLENGES.map((c) => `<option value="${c.id}" ${c.id === state.challengeId ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select>`}
-            <span class="badge ${state.foundIds.size === faultCount ? "ok" : "warn"}">${embedded && !readOnly ? `已标出 ${state.foundIds.size} / ${faultCount} 处` : `已找出 ${state.foundIds.size} / ${faultCount} 处错误`}</span>
+            <select id="dfd-ch-sel" class="lab-select">${DFD_CHALLENGES.map((c) => `<option value="${c.id}" ${c.id === state.challengeId ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select>
+            <span class="badge ${state.foundIds.size === faultCount ? "ok" : "warn"}">已找出 ${state.foundIds.size} / ${faultCount} 处错误</span>
           ` : (readOnly ? "" : `
             <select id="dfd-new-type" class="lab-select">
               <option value="entity" ${state.newNodeType === "entity" ? "selected" : ""}>外部实体</option>
@@ -130,27 +156,30 @@ export const mountDfdLab = (root, opts = {}) => {
           `)}
         </div>
       </div>
-      <p class="muted-text" style="margin:4px 0 6px;font-size:0.7813rem;">${isBuild ? "支持拖拽任意节点位置、输入节点/数据流名称并连线；下方实时进行 DFD 规范体检。" : escapeHtml(ch.desc)}</p>
-      <div class="lab-svg-wrap">
+    ` : "";
+
+    root.innerHTML = `
+      ${toolbarHtml}
+      ${studioSide ? "" : `<p class="muted-text" style="margin:4px 0 6px;font-size:0.7813rem;">${isBuild ? "支持拖拽任意节点位置、输入节点/数据流名称并连线；下方实时进行 DFD 规范体检。" : escapeHtml(ch.desc)}</p>`}
+      <div class="lab-svg-wrap is-canvas">
         <svg class="dfd-svg" viewBox="0 0 680 310" role="img" aria-label="数据流图实验画布">
           <defs><marker id="dfd-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,1 L9,5 L0,9 z" fill="var(--ink)"/></marker></defs>
           ${edges.map((e) => buildDfdEdgeSvg(e, nMap, { foundFault: !isBuild && state.foundIds.has(e.id), selected: isBuild && !readOnly && state.selEdgeId === e.id })).join("")}
           ${nodes.map((n) => buildDfdNodeSvg(n, { draggable: isBuild && !readOnly, foundFault: !isBuild && state.foundIds.has(n.id), selected: isBuild && !readOnly && state.selNodeId === n.id })).join("")}
         </svg>
       </div>
-      ${readOnly ? "" : buildDfdInspectorHtml(state, nodes, edges)}
-      ${!isBuild
-        ? `<div class="lab-feedback ${state.lastMsg.startsWith("违规") ? "ok" : "warn"}">${escapeHtml(state.lastMsg || (embedded ? "点击图中可疑的加工框或数据流箭头进行标记（再次点击可取消），完成后点击下方「提交核对」。" : "点击图中可疑的加工框或数据流箭头进行排错。"))}</div>`
-        : `<div class="lab-feedback ${check.valid ? "ok" : "warn"}">${check.valid ? "✓ 当前数据流图符合加工守恒、边界连接与命名规范！" : check.issues.map((i) => escapeHtml(i.msg)).join("；")}</div>`}
+      ${studioSide ? "" : statusHtml}
     `;
-    bindDfdEvents(ch, isBuild);
+    if (studioSide) studioSide.innerHTML = statusHtml;
+    bindDfdEvents(ch, isBuild, nodes, edges);
   };
 
-  const toggleChallengePick = (ch, id) => {
+  const toggleChallengePick = (ch, id, nodes, edges) => {
     if (readOnly) return;
     if (embedded) {
-      if (state.foundIds.has(id)) { state.foundIds.delete(id); state.lastMsg = "已取消该元素标记，请继续确认其他位置。"; }
-      else { state.foundIds.add(id); state.lastMsg = `已标记 ${id} 为疑似违规点（再次点击可取消）。`; }
+      const label = describeDfdTarget(id, nodes, edges);
+      if (state.foundIds.has(id)) { state.foundIds.delete(id); state.lastMsg = `已取消标记「${label}」。`; }
+      else { state.foundIds.add(id); state.lastMsg = `已标记「${label}」为疑似违规点（再次点击可取消）。`; }
       notify(); return render();
     }
     state.lastMsg = ch.faults[id] || "该元素符合 DFD 规范，请继续查找其他违规之处。";
@@ -158,46 +187,45 @@ export const mountDfdLab = (root, opts = {}) => {
     render();
   };
 
-  const bindDfdEvents = (ch, isBuild) => {
+  const bindDfdEvents = (ch, isBuild, nodes, edges) => {
     root.querySelectorAll("[data-dfd-mode]").forEach((b) => b.addEventListener("click", () => { state.mode = b.dataset.dfdMode; state.lastMsg = ""; state.connectMode = false; state.selNodeId = ""; state.selEdgeId = ""; render(); }));
     root.querySelector("#dfd-ch-sel")?.addEventListener("change", (e) => { state.challengeId = e.target.value; state.foundIds = new Set(); state.lastMsg = ""; render(); });
+    sideRoot.querySelectorAll(".js-dfd-unmark").forEach((b) => b.addEventListener("click", () => {
+      state.foundIds.delete(b.dataset.unmark); state.lastMsg = "已取消标记。"; notify(); render();
+    }));
     if (!readOnly && isBuild) {
       root.querySelector("#dfd-new-type")?.addEventListener("change", (e) => { state.newNodeType = e.target.value; });
       root.querySelector("#dfd-new-name")?.addEventListener("input", (e) => { state.newNodeName = e.target.value; });
       root.querySelector("#dfd-add-btn")?.addEventListener("click", () => {
-        const idx = state.nextSeq++;
-        const t = state.newNodeType;
+        const idx = state.nextSeq++; const t = state.newNodeType;
         const label = state.newNodeName.trim() || (t === "entity" ? `实体${idx}` : (t === "process" ? `${idx}.处理` : `存储${idx}`));
-        const x = t === "entity" ? 95 : (t === "process" ? 335 : 575);
-        const y = 65 + ((idx % 3) * 90);
-        const id = `cn_${idx}`;
-        state.customNodes.push({ id, type: t, label, x, y });
-        state.newNodeName = ""; state.selNodeId = id; state.selEdgeId = ""; notify(); render();
+        const x = t === "entity" ? 95 : (t === "process" ? 335 : 575); const y = 65 + ((idx % 3) * 90); const id = `cn_${idx}`;
+        state.customNodes.push({ id, type: t, label, x, y }); state.newNodeName = ""; state.selNodeId = id; state.selEdgeId = ""; notify(); render();
       });
       root.querySelector("#dfd-clear-edges")?.addEventListener("click", () => { state.customEdges = []; state.connectMode = false; state.selEdgeId = ""; notify(); render(); });
-      root.querySelector("#dfd-rename-node")?.addEventListener("input", (e) => {
+      sideRoot.querySelector("#dfd-rename-node")?.addEventListener("input", (e) => {
         const n = state.customNodes.find((x) => x.id === state.selNodeId);
         if (n) { n.label = e.target.value; const t = root.querySelector(`g[data-dfd-node="${n.id}"] text`); if (t) t.textContent = e.target.value; notify(); }
       });
-      root.querySelector("#dfd-flow-name")?.addEventListener("input", (e) => { state.pendingFlowName = e.target.value; });
-      root.querySelector("#dfd-connect-btn")?.addEventListener("click", () => { state.connectMode = !state.connectMode; render(); });
-      root.querySelector("#dfd-del-node")?.addEventListener("click", () => {
+      sideRoot.querySelector("#dfd-flow-name")?.addEventListener("input", (e) => { state.pendingFlowName = e.target.value; });
+      sideRoot.querySelector("#dfd-connect-btn")?.addEventListener("click", () => { state.connectMode = !state.connectMode; render(); });
+      sideRoot.querySelector("#dfd-del-node")?.addEventListener("click", () => {
         state.customNodes = state.customNodes.filter((n) => n.id !== state.selNodeId);
         state.customEdges = state.customEdges.filter((e) => e.from !== state.selNodeId && e.to !== state.selNodeId);
         state.selNodeId = ""; state.connectMode = false; notify(); render();
       });
-      root.querySelector("#dfd-rename-edge")?.addEventListener("input", (e) => {
+      sideRoot.querySelector("#dfd-rename-edge")?.addEventListener("input", (e) => {
         const edge = state.customEdges.find((x) => x.id === state.selEdgeId);
-        if (edge) { edge.label = e.target.value; notify(); render(); root.querySelector("#dfd-rename-edge")?.focus(); }
+        if (edge) { edge.label = e.target.value; notify(); render(); sideRoot.querySelector("#dfd-rename-edge")?.focus(); }
       });
-      root.querySelector("#dfd-del-edge")?.addEventListener("click", () => { state.customEdges = state.customEdges.filter((x) => x.id !== state.selEdgeId); state.selEdgeId = ""; notify(); render(); });
+      sideRoot.querySelector("#dfd-del-edge")?.addEventListener("click", () => { state.customEdges = state.customEdges.filter((x) => x.id !== state.selEdgeId); state.selEdgeId = ""; notify(); render(); });
     }
 
     const svg = root.querySelector(".dfd-svg");
     let dragInfo = null;
     root.querySelectorAll("g[data-dfd-node]").forEach((g) => g.addEventListener("pointerdown", (e) => {
       const id = g.dataset.dfdNode;
-      if (!isBuild) return toggleChallengePick(ch, id);
+      if (!isBuild) return toggleChallengePick(ch, id, nodes, edges);
       if (readOnly) return;
       if (state.connectMode && state.selNodeId && state.selNodeId !== id) {
         state.customEdges.push({ id: `ce_${Date.now()}`, from: state.selNodeId, to: id, label: state.pendingFlowName.trim() || `数据流${state.customEdges.length + 1}` });
@@ -222,7 +250,7 @@ export const mountDfdLab = (root, opts = {}) => {
     });
     root.querySelectorAll("g[data-dfd-edge]").forEach((el) => el.addEventListener("click", () => {
       const id = el.dataset.dfdEdge;
-      if (!isBuild) return toggleChallengePick(ch, id);
+      if (!isBuild) return toggleChallengePick(ch, id, nodes, edges);
       if (readOnly) return;
       state.selEdgeId = id; state.selNodeId = ""; state.connectMode = false; render();
     }));
@@ -252,6 +280,7 @@ const renderDecisionTreeHtml = (caseDef, cols) => {
 export const mountDecisionLab = (root, opts = {}) => {
   const embedded = Boolean(opts.embedded);
   const readOnly = Boolean(opts.readOnly);
+  const studioSide = opts.studio && opts.sideSlot ? opts.sideSlot : null;
   let caseDef = embedded && opts.spec ? resolveDecisionCase(opts.spec) : DECISION_CASES[0];
   const initCols = opts.initialPayload?.columns;
   let cols = Array.isArray(initCols) && initCols.length ? structuredClone(initCols) : structuredClone(caseDef.columns);
@@ -263,6 +292,10 @@ export const mountDecisionLab = (root, opts = {}) => {
   const render = () => {
     const minimal = isDecisionTableMinimal(cols);
     const disAttr = readOnly ? "disabled" : "";
+    const sideHtml = `
+      <div class="lab-feedback ${minimal ? "ok" : "warn"}" style="margin-top:0;">${escapeHtml(feedback)}</div>
+      ${renderDecisionTreeHtml(caseDef, cols)}
+    `;
     root.innerHTML = `
       <div class="lab-toolbar">
         <div class="row-gap">
@@ -305,9 +338,9 @@ export const mountDecisionLab = (root, opts = {}) => {
           </tbody>
         </table>
       </div>
-      <div class="lab-feedback ${minimal ? "ok" : "warn"}" style="margin-top:10px;">${escapeHtml(feedback)}</div>
-      ${renderDecisionTreeHtml(caseDef, cols)}
+      ${studioSide ? "" : `<div style="margin-top:10px;">${sideHtml}</div>`}
     `;
+    if (studioSide) studioSide.innerHTML = sideHtml;
     bindDecisionEvents();
   };
 

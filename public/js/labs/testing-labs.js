@@ -2,11 +2,14 @@ import { escapeHtml } from "../api.js";
 import { resolveBlackboxCase } from "./lab-grader.js";
 import { BLACKBOX_CASES, evaluateBlackboxInputs, evaluateWhiteboxCases, WHITEBOX_SPEC } from "./se-lab-core.js";
 
-const buildAxisSvg = (caseDef, report) => {
+const getAxisBounds = (caseDef) => {
   const { min, max } = caseDef;
   const pad = Math.max(2, Math.round((max - min) * 0.12));
-  const lo = min - pad;
-  const hi = max + pad;
+  return { min, max, lo: min - pad, hi: max + pad };
+};
+
+const buildAxisSvg = (caseDef, report) => {
+  const { min, max, lo, hi } = getAxisBounds(caseDef);
   const mapX = (val) => 40 + ((Math.max(lo, Math.min(hi, val)) - lo) / (hi - lo)) * 620;
   const xMin = mapX(min);
   const xMax = mapX(max);
@@ -36,22 +39,21 @@ const buildAxisSvg = (caseDef, report) => {
 export const mountBlackboxLab = (root, opts = {}) => {
   const embedded = Boolean(opts.embedded);
   const readOnly = Boolean(opts.readOnly);
+  const studioSide = opts.studio && opts.sideSlot ? opts.sideSlot : null;
+  const sideRoot = studioSide || root;
   let caseDef = embedded && opts.spec ? resolveBlackboxCase(opts.spec) : BLACKBOX_CASES[0];
   let inputStr = typeof opts.initialPayload?.inputStr === "string"
     ? opts.initialPayload.inputStr
     : (Array.isArray(opts.initialPayload?.values) ? opts.initialPayload.values.join(", ") : (embedded ? "" : `${caseDef.min}, ${caseDef.max}`));
 
-  const getPayload = () => {
-    const values = inputStr.split(/[\s,，;；]+/).filter(Boolean);
-    return { inputStr, values };
-  };
+  const getPayload = () => ({ inputStr, values: inputStr.split(/[\s,，;；]+/).filter(Boolean) });
   const notify = () => opts.onChange?.(getPayload());
 
   const render = () => {
     const rawList = inputStr.split(/[\s,，;；]+/).filter(Boolean);
     const report = evaluateBlackboxInputs(caseDef, rawList);
     const showHints = !embedded || readOnly;
-    root.innerHTML = `
+    const controlsHtml = `
       <div class="lab-toolbar">
         <div class="row-gap">
           ${embedded ? "" : `
@@ -64,12 +66,10 @@ export const mountBlackboxLab = (root, opts = {}) => {
         </div>
         ${embedded ? "" : '<button type="button" id="bb-fill-btn" class="btn ghost tiny">填入完整边界用例</button>'}
       </div>
-      <p class="muted-text" style="margin:4px 0 8px;font-size:0.7813rem;">${escapeHtml(embedded && !readOnly ? `输入范围 [${caseDef.min}, ${caseDef.max}]${caseDef.unit || ""}，请设计覆盖全部有效/无效等价类及边界值的测试数据（逗号或空格分隔）。` : (caseDef.hint || ""))}</p>
-      <div class="row-gap" style="margin-bottom:10px;">
-        <input id="bb-input" type="text" value="${escapeHtml(inputStr)}" placeholder="输入测试数值，用逗号或空格分隔..." style="flex:1;min-width:220px;" ${readOnly ? "readonly" : ""}>
+      <div class="row-gap" style="margin:6px 0 8px;">
+        <input id="bb-input" type="text" value="${escapeHtml(inputStr)}" placeholder="输入测试数值，用逗号或空格分隔..." style="flex:1;min-width:200px;" ${readOnly ? "readonly" : ""}>
       </div>
-      <div class="lab-svg-wrap">${buildAxisSvg(caseDef, report)}</div>
-      <div class="row-gap" style="margin-top:8px;">
+      <div class="row-gap">
         ${report.eqClasses.map((c) => `<span class="badge ${c.hit ? "ok" : ""}">${c.hit ? "✓" : "○"} ${escapeHtml(c.label)}</span>`).join("")}
       </div>
       <div class="lab-feedback ${report.missingBoundaries.length ? "warn" : "ok"}" style="margin-top:8px;">
@@ -78,22 +78,39 @@ export const mountBlackboxLab = (root, opts = {}) => {
           : "✓ 已覆盖全部有效/无效等价类与 6 个关键边界点！"}
       </div>
     `;
-    root.querySelector("#bb-case-sel")?.addEventListener("change", (e) => {
+    const canvasHtml = `
+      <div class="lab-svg-wrap is-canvas">${buildAxisSvg(caseDef, report)}</div>
+      <p class="muted-text" style="margin:4px 0 0;font-size:0.7813rem;">${readOnly ? escapeHtml(caseDef.hint || "") : `范围 [${caseDef.min}, ${caseDef.max}]${caseDef.unit || ""}：点击数轴可直接落点添加测试数值，也可在输入框微调`}</p>
+    `;
+    root.innerHTML = studioSide ? canvasHtml : `${controlsHtml}<div style="margin-top:8px;">${canvasHtml}</div>`;
+    if (studioSide) studioSide.innerHTML = controlsHtml;
+
+    sideRoot.querySelector("#bb-case-sel")?.addEventListener("change", (e) => {
       caseDef = BLACKBOX_CASES.find((c) => c.id === e.target.value) || BLACKBOX_CASES[0];
-      inputStr = `${caseDef.min}, ${caseDef.max}`;
-      notify(); render();
+      inputStr = `${caseDef.min}, ${caseDef.max}`; notify(); render();
     });
     if (!readOnly) {
-      root.querySelector("#bb-input")?.addEventListener("input", (e) => {
-        const pos = e.target.selectionStart;
-        inputStr = e.target.value;
-        notify(); render();
-        const nextIn = root.querySelector("#bb-input");
+      sideRoot.querySelector("#bb-input")?.addEventListener("input", (e) => {
+        const pos = e.target.selectionStart; inputStr = e.target.value; notify(); render();
+        const nextIn = sideRoot.querySelector("#bb-input");
         if (nextIn) { nextIn.focus(); if (pos != null) nextIn.setSelectionRange(pos, pos); }
       });
-      root.querySelector("#bb-fill-btn")?.addEventListener("click", () => {
+      sideRoot.querySelector("#bb-fill-btn")?.addEventListener("click", () => {
         const m = caseDef.min; const x = caseDef.max;
         inputStr = `${m - 1}, ${m}, ${m + 1}, ${Math.round((m + x) / 2)}, ${x - 1}, ${x}, ${x + 1}`;
+        notify(); render();
+      });
+      const axisSvg = root.querySelector(".axis-svg");
+      axisSvg?.addEventListener("click", (ev) => {
+        const pt = axisSvg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+        const ctm = axisSvg.getScreenCTM();
+        if (!ctm) return;
+        const { lo, hi } = getAxisBounds(caseDef);
+        const svgX = pt.matrixTransform(ctm.inverse()).x;
+        const val = Math.round(lo + ((svgX - 40) / 620) * (hi - lo));
+        const nums = inputStr.split(/[\s,，;；]+/).filter(Boolean);
+        if (!nums.includes(String(val))) nums.push(String(val));
+        inputStr = nums.join(", ");
         notify(); render();
       });
     }
@@ -146,6 +163,8 @@ const buildCfgSvg = (evalRes) => {
 export const mountWhiteboxLab = (root, opts = {}) => {
   const embedded = Boolean(opts.embedded);
   const readOnly = Boolean(opts.readOnly);
+  const studioSide = opts.studio && opts.sideSlot ? opts.sideSlot : null;
+  const sideRoot = studioSide || root;
   const initCases = opts.initialPayload?.cases;
   let cases = Array.isArray(initCases) ? structuredClone(initCases) : (embedded ? [{ A: 2, B: 0, X: 2 }] : structuredClone(WHITEBOX_SPEC.trapCases));
   const getPayload = () => ({ cases: structuredClone(cases) });
@@ -157,7 +176,7 @@ export const mountWhiteboxLab = (root, opts = {}) => {
     const targetBadge = embedded
       ? `<span class="badge">${opts.spec?.target === "trap" ? "目标：条件覆盖 100% 且判定覆盖 &lt; 100%" : "目标：6 项逻辑覆盖均达 100%"}</span>`
       : "";
-    root.innerHTML = `
+    const toolbarHtml = `
       <div class="lab-toolbar">
         <div class="row-gap">
           ${targetBadge}
@@ -168,24 +187,23 @@ export const mountWhiteboxLab = (root, opts = {}) => {
           ${readOnly ? "" : '<button type="button" id="wb-add-btn" class="btn ghost tiny">+ 添加用例</button>'}
         </div>
       </div>
-      <div class="wb-lab-grid">
-        <div>
-          <pre class="wb-code">${escapeHtml(WHITEBOX_SPEC.code)}</pre>
-          <div class="wb-cases-list">
-            ${cases.map((c, idx) => `
-              <div class="row-gap wb-case-row">
-                <span class="badge">#${idx + 1}</span>
-                <label>A <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="A" value="${c.A}" ${disAttr}></label>
-                <label>B <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="B" value="${c.B}" ${disAttr}></label>
-                <label>X <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="X" value="${c.X}" ${disAttr}></label>
-                <span class="muted-text" style="font-size:0.75rem;">路径 ${evalRes.traces[idx]?.pathKey || "-"} · 终值 X=${evalRes.traces[idx]?.outX ?? "-"}</span>
-                ${readOnly ? "" : `<button type="button" class="btn ghost tiny" data-wb-del="${idx}">删</button>`}
-              </div>
-            `).join("")}
+    `;
+    const casesHtml = `
+      <pre class="wb-code">${escapeHtml(WHITEBOX_SPEC.code)}</pre>
+      <div class="wb-cases-list">
+        ${cases.map((c, idx) => `
+          <div class="row-gap wb-case-row">
+            <span class="badge">#${idx + 1}</span>
+            <label>A <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="A" value="${c.A}" ${disAttr}></label>
+            <label>B <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="B" value="${c.B}" ${disAttr}></label>
+            <label>X <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="X" value="${c.X}" ${disAttr}></label>
+            <span class="muted-text" style="font-size:0.75rem;">路径 ${evalRes.traces[idx]?.pathKey || "-"} · X=${evalRes.traces[idx]?.outX ?? "-"}</span>
+            ${readOnly ? "" : `<button type="button" class="btn ghost tiny" data-wb-del="${idx}">删</button>`}
           </div>
-        </div>
-        <div class="lab-svg-wrap">${buildCfgSvg(evalRes)}</div>
+        `).join("")}
       </div>
+    `;
+    const metricsHtml = `
       <div class="wb-metrics-grid">
         ${METRIC_LABELS.map(([k, lbl]) => `
           <div class="wb-metric-pill ${evalRes.metrics[k] === 100 ? "is-full" : ""}">
@@ -194,14 +212,19 @@ export const mountWhiteboxLab = (root, opts = {}) => {
         `).join("")}
       </div>
     `;
+    if (studioSide) {
+      root.innerHTML = `${toolbarHtml}<div class="lab-svg-wrap is-canvas" style="margin-top:6px;">${buildCfgSvg(evalRes)}</div>${metricsHtml}`;
+      studioSide.innerHTML = casesHtml;
+    } else {
+      root.innerHTML = `${toolbarHtml}<div class="wb-lab-grid"><div>${casesHtml}</div><div class="lab-svg-wrap is-canvas">${buildCfgSvg(evalRes)}</div></div>${metricsHtml}`;
+    }
     root.querySelector("#wb-trap-btn")?.addEventListener("click", () => { cases = structuredClone(WHITEBOX_SPEC.trapCases); notify(); render(); });
     root.querySelector("#wb-full-btn")?.addEventListener("click", () => { cases = structuredClone(WHITEBOX_SPEC.fullCases); notify(); render(); });
     if (!readOnly) {
       root.querySelector("#wb-add-btn")?.addEventListener("click", () => { cases.push({ A: 2, B: 0, X: 4 }); notify(); render(); });
-      root.querySelectorAll("[data-wb-del]").forEach((b) => b.addEventListener("click", () => { cases.splice(Number(b.dataset.wbDel), 1); notify(); render(); }));
-      root.querySelectorAll("[data-wb-idx]").forEach((inp) => inp.addEventListener("change", () => {
-        cases[Number(inp.dataset.wbIdx)][inp.dataset.wbKey] = Number(inp.value);
-        notify(); render();
+      sideRoot.querySelectorAll("[data-wb-del]").forEach((b) => b.addEventListener("click", () => { cases.splice(Number(b.dataset.wbDel), 1); notify(); render(); }));
+      sideRoot.querySelectorAll("[data-wb-idx]").forEach((inp) => inp.addEventListener("change", () => {
+        cases[Number(inp.dataset.wbIdx)][inp.dataset.wbKey] = Number(inp.value); notify(); render();
       }));
     }
   };

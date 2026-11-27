@@ -47,7 +47,7 @@ export const renderPracticeView = async (container, ctx) => {
   const clearKeydown = () => { if (keydownHandler) window.removeEventListener("keydown", keydownHandler); keydownHandler = null; };
   const notesCtrl = createNotesController({ container, bankId: bank.id, bankState, getList: () => list, onJump: (idx) => { currentIndex = idx; multiDraft.clear(); renderMain(); } });
   const flushPendingNote = () => notesCtrl.flush();
-  activePracticeCleanup = () => { flushPendingNote(); stopAutoNext(); stopTimer(); clearKeydown(); };
+  activePracticeCleanup = () => { flushPendingNote(); stopAutoNext(); stopTimer(); clearKeydown(); document.body.classList.remove("lab-studio-mode"); };
 
   const cachedOptions = (q) => {
     const key = `${q.id}_${settings.shuffleOptions}`;
