@@ -53,33 +53,23 @@ const renderExamNoticeBoardHtml = (examNotices = [], isAdmin = false) => {
   if (!Array.isArray(examNotices) || !examNotices.length) return "";
   return `
     <section class="exam-notice-board">
-      <div class="exam-notice-head">
-        <div class="row-gap" style="gap:6px;">
-          <span class="exam-notice-icon">${iconSvg("clock", 15)}</span>
-          <strong>考试时间与通知安排</strong>
-          <span class="badge">${examNotices.length} 条</span>
-        </div>
-        ${isAdmin ? '<button type="button" id="btn-edit-exam-notices" class="btn ghost tiny">编辑</button>' : ""}
-      </div>
-      <div class="exam-notice-grid">
+      <div class="exam-notice-lead">${iconSvg("clock", 14)}<span>考试安排</span></div>
+      <div class="exam-notice-list">
         ${examNotices.map((n) => {
           const dateMatch = String(n.timeText || "").match(/\b(\d{4}-\d{2}-\d{2})\b/);
           const cd = formatExamCountdown(dateMatch?.[1] || "");
           return `
-            <div class="exam-notice-item">
-              <div class="row-gap" style="justify-content:space-between;gap:6px;">
-                <strong class="exam-notice-title">${escapeHtml(n.title || "考试通知")}</strong>
-                ${cd ? `<span class="badge ${cd.cls}">${escapeHtml(cd.text)}</span>` : ""}
-              </div>
-              <div class="exam-notice-meta">
-                ${n.timeText ? `<span>${escapeHtml(n.timeText)}</span>` : ""}
-                ${n.duration ? `<span class="tag-pill">${escapeHtml(n.duration)}</span>` : ""}
-              </div>
-              ${n.note ? `<div class="muted-text exam-notice-note">${escapeHtml(n.note)}</div>` : ""}
+            <div class="exam-notice-chip">
+              <strong>${escapeHtml(n.title || "考试通知")}</strong>
+              ${n.timeText ? `<span class="exam-notice-time">${escapeHtml(n.timeText)}</span>` : ""}
+              ${n.duration ? `<span class="tag-pill">${escapeHtml(n.duration)}</span>` : ""}
+              ${cd ? `<span class="badge ${cd.cls}">${escapeHtml(cd.text)}</span>` : ""}
+              ${n.note ? `<span class="muted-text exam-notice-note" title="${escapeHtml(n.note)}">${escapeHtml(n.note)}</span>` : ""}
             </div>
           `;
         }).join("")}
       </div>
+      ${isAdmin ? '<button type="button" id="btn-edit-exam-notices" class="btn ghost tiny exam-notice-edit-btn">编辑</button>' : ""}
     </section>
   `;
 };
@@ -95,21 +85,22 @@ const renderBankTagsHtml = (bank, isCurrent) => {
 
 const renderModeTilesHtml = (stats) => {
   const tiles = [
-    { mode: "order", icon: "play", title: "顺序练习", sub: `从头刷题 · ${stats.done}/${stats.total}` },
-    { mode: "chapter", icon: "layers", title: "章节练习", sub: "按章节分块专项" },
-    { mode: "random", icon: "shuffle", title: "随机练习", sub: `打乱未掌握 ${Math.max(0, stats.total - stats.mastered)} 题` },
-    { mode: "recite", icon: "eye", title: "背题模式", sub: "直出答案与解析" },
-    { mode: "wrong", icon: "alert", title: "错题本", sub: stats.wrong ? `${stats.wrong} 道待巩固` : "暂无错题", tone: stats.wrong ? "is-bad" : "" },
-    { mode: "favorite", icon: "star", title: "收藏夹", sub: stats.fav ? `已收藏 ${stats.fav} 题` : "重点收藏回顾", tone: stats.fav ? "is-warn" : "" },
-    { mode: "type", icon: "sliders", title: "题型专项", sub: "单选/多选/填空等" },
-    { mode: "exam", icon: "clock", title: "模拟考试", sub: "限时抽题自测" }
+    { mode: "order", icon: "play", title: "顺序练习", tone: "tone-accent", meta: stats.total ? `${stats.done}/${stats.total}` : "全部", isCount: Boolean(stats.total) },
+    { mode: "chapter", icon: "layers", title: "章节练习", tone: "tone-accent", meta: "分章", isCount: false },
+    { mode: "random", icon: "shuffle", title: "随机练习", tone: "tone-violet", meta: "抽题", isCount: false },
+    { mode: "recite", icon: "eye", title: "背题模式", tone: "tone-ok", meta: "看解", isCount: false },
+    { mode: "wrong", icon: "alert", title: "错题本", tone: "tone-bad", meta: stats.wrong ? String(stats.wrong) : "0题", isCount: stats.wrong > 0 },
+    { mode: "favorite", icon: "star", title: "收藏夹", tone: "tone-warn", meta: stats.fav ? String(stats.fav) : "0题", isCount: stats.fav > 0 },
+    { mode: "type", icon: "sliders", title: "题型专项", tone: "tone-violet", meta: "分类", isCount: false },
+    { mode: "exam", icon: "clock", title: "模拟考试", tone: "tone-warn", meta: "限时", isCount: false }
   ];
   return `
     <div class="mode-tiles">
       ${tiles.map((t) => `
-        <button type="button" class="mode-tile ${t.tone || ""}" data-wb-mode="${t.mode}">
-          <span class="mode-tile-icon">${iconSvg(t.icon, 16)}</span>
-          <span class="mode-tile-body"><strong>${t.title}</strong><span>${t.sub}</span></span>
+        <button type="button" class="mode-tile ${t.tone}" data-wb-mode="${t.mode}">
+          <span class="mode-tile-icon">${iconSvg(t.icon, 14)}</span>
+          <span class="mode-tile-label">${t.title}</span>
+          <span class="mode-tile-badge" data-count="${t.isCount ? "1" : "0"}">${t.meta}</span>
         </button>
       `).join("")}
     </div>
@@ -120,27 +111,33 @@ const renderWorkbenchHtml = (bank) => {
   if (!bank) return "";
   const st = getBankStats(bank);
   const offset = RING_CIRCUMFERENCE * (1 - st.pct / 100);
-  const lockIcon = bank.locked ? iconSvg("lock", 15) : "";
-  const desc = isMeaningfulDesc(bank.description) ? ` · ${escapeHtml(bank.description)}` : "";
+  const lockIcon = bank.locked ? iconSvg("lock", 14) : "";
+  const desc = isMeaningfulDesc(bank.description) ? escapeHtml(bank.description) : "当前选中练习题库，支持顺序、分章、背题与限时模考";
   return `
     <section class="bank-workbench">
       <div class="wb-head">
         <div class="wb-title-wrap">
-          <span class="bank-cover">${iconSvg("book", 20)}</span>
+          <span class="bank-cover">${iconSvg("book", 19)}</span>
           <div style="min-width:0;">
             <h2 class="wb-title">${lockIcon}<span>${escapeHtml(bank.name)}</span>${renderBankTagsHtml(bank, false)}</h2>
-            <div class="wb-sub">共 ${st.total} 题 · 已练 ${st.done} 题 · 错题 ${st.wrong} · 收藏 ${st.fav}${desc}</div>
+            <div class="wb-sub" title="${desc}">${desc}</div>
           </div>
         </div>
         <div class="wb-head-right">
+          <div class="wb-kpis">
+            <div class="wb-kpi"><strong>${st.total}</strong><span>总题量</span></div>
+            <div class="wb-kpi"><strong>${st.done}</strong><span>已练习</span></div>
+            <div class="wb-kpi ${st.wrong ? "is-bad" : ""}"><strong>${st.wrong}</strong><span>错题</span></div>
+            <div class="wb-kpi ${st.fav ? "is-warn" : ""}"><strong>${st.fav}</strong><span>收藏</span></div>
+          </div>
           <div class="wb-ring-wrap">
             <svg class="wb-ring" viewBox="0 0 40 40" aria-hidden="true">
               <circle class="wb-ring-bg" cx="20" cy="20" r="16"></circle>
               <circle class="wb-ring-val" cx="20" cy="20" r="16" stroke-dasharray="${RING_CIRCUMFERENCE.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"></circle>
             </svg>
-            <div class="wb-ring-text"><strong>${st.pct}%</strong><span>掌握进度</span></div>
+            <div class="wb-ring-text"><strong>${st.pct}%</strong><span>进度</span></div>
           </div>
-          <button type="button" id="wb-start-btn" class="btn primary">${st.done > 0 ? "继续刷题" : "开始顺序刷题"}</button>
+          <button type="button" id="wb-start-btn" class="btn primary tiny">${iconSvg("play", 13)}<span>${st.done > 0 ? "继续刷题" : "开始刷题"}</span></button>
         </div>
       </div>
       ${renderModeTilesHtml(st)}
@@ -346,7 +343,7 @@ export const renderBanksView = (container, ctx) => {
     `).join("");
 
     container.innerHTML = `
-      <div class="view-frame">
+      <div class="view-frame banks-view-frame">
         ${renderExamNoticeBoardHtml(siteInfo?.siteConfig?.examNotices || [], isAdmin)}
         ${renderSubjectBarHtml({ terms, activeTerm, termSubjects, activeSubjectId, banks, isAdmin })}
         ${renderSubjectOverviewHtml(curSubject, scopeBanks, isAdmin)}

@@ -205,6 +205,20 @@
   .sheet-cell { height: 40px; font-size: 0.8125rem; }
 
   /* 题库中心、统计页适配 */
+  .exam-notice-board { flex-wrap: wrap; padding: 8px 10px; gap: 6px; }
+  .exam-notice-list { order: 3; flex: 1 1 100%; }
+  .exam-notice-edit-btn { margin-left: auto; min-height: 28px !important; padding: 3px 9px !important; }
+  .exam-notice-note { max-width: 180px; }
+  .wb-head { gap: 8px; }
+  .wb-sub { max-width: 100%; }
+  .wb-head-right { width: 100%; justify-content: space-between; gap: 8px; }
+  .wb-kpis { width: 100%; justify-content: space-around; padding: 5px 6px; }
+  .wb-kpi { flex: 1; justify-content: center; padding: 0 4px; }
+  .mode-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px; margin-top: 9px; }
+  .mode-tile { position: relative; flex-direction: column; justify-content: center; padding: 8px 4px; gap: 4px; text-align: center; }
+  .mode-tile-label { font-size: 0.7188rem; }
+  .mode-tile-badge[data-count="0"] { display: none !important; }
+  .mode-tile-badge[data-count="1"] { position: absolute; top: 3px; right: 4px; margin: 0; font-size: 0.625rem; padding: 0 4px; }
   .section-head > .row-gap { width: 100%; }
   .banks-filter-input { flex: 1; min-width: 0; width: auto; }
   .rank-list { max-height: none; overflow: visible; }
@@ -269,7 +283,6 @@
   .hot-row > div:first-child { min-width: 0 !important; }
   .hot-row > .row-gap:last-child { justify-content: flex-end; flex-wrap: wrap !important; }
   #sys-site-form > .row-gap { flex-direction: column; align-items: stretch; }
-  .exam-notice-grid { grid-template-columns: minmax(0, 1fr); }
   .exam-notice-edit-row { grid-template-columns: minmax(0, 1fr); gap: 6px; padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
 
   .modal-backdrop { align-items: flex-end; padding: 0; }
