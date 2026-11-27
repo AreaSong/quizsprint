@@ -1,0 +1,144 @@
+/* 软件工程 5 合 1 交互式实验台样式（兼容浅色/深色/护眼主题与移动端） */
+.se-lab-card {
+  width: min(980px, 95vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.se-lab-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.se-lab-tabs .btn { flex: none; }
+.se-lab-stage {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.lab-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lab-select {
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+.lab-num-in {
+  width: 62px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+.lab-svg-wrap {
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.pert-svg, .dfd-svg, .axis-svg, .cfg-svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+.axis-svg { max-height: 115px; }
+.cfg-svg { min-width: 280px; max-height: 240px; }
+
+/* PERT 节点与边 */
+.pert-node { cursor: pointer; }
+.pert-node circle { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; transition: stroke .15s, stroke-width .15s; }
+.pert-node line { stroke: var(--ink); stroke-width: 1.1; }
+.pert-node.is-sel circle { stroke: var(--accent); stroke-width: 2.6; }
+.pert-node.is-crit circle { stroke: var(--bad); stroke-width: 2.3; }
+.pert-node.is-ok circle { stroke: var(--ok); stroke-width: 2.4; }
+.pert-node.is-bad circle { stroke: var(--bad); stroke-width: 2.6; }
+.pert-nid { font-size: 13px; font-weight: 700; fill: var(--ink); }
+.pert-val { font-size: 12px; font-weight: 600; fill: var(--ink); }
+.pert-val.is-bad-txt, .pert-tf.is-bad-txt { fill: var(--bad); font-weight: 700; }
+
+.pert-edge { cursor: pointer; }
+.pert-edge-hit { stroke: transparent; stroke-width: 16; }
+.pert-edge-line { stroke: var(--ink); stroke-width: 1.5; }
+.pert-edge-line.is-dummy { stroke-dasharray: 5 4; }
+.pert-edge.is-sel .pert-edge-line { stroke: var(--accent); stroke-width: 2.4; }
+.pert-edge.is-crit .pert-edge-line { stroke: var(--bad); stroke-width: 2.4; }
+.pert-edge.is-ok .pert-edge-line { stroke: var(--ok); stroke-width: 2.4; }
+.pert-edge.is-bad .pert-edge-line { stroke: var(--bad); stroke-width: 2.6; }
+.pert-dur { font-size: 12px; font-weight: 700; fill: var(--ink); }
+.pert-tf { font-size: 11px; fill: var(--muted); }
+
+.lab-inspector {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.lab-inspector-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.8125rem; }
+.lab-inspector-row label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.lab-feedback {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.lab-feedback.ok { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+.lab-feedback.warn { border-color: var(--warn, #d97706); }
+
+/* DFD 与判定表/判定树 */
+.dfd-node { cursor: pointer; }
+.dfd-node rect, .dfd-node path { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; }
+.dfd-node text { font-size: 12px; font-weight: 600; fill: var(--ink); }
+.dfd-node.is-sel rect, .dfd-node.is-sel path { stroke: var(--accent); stroke-width: 2.6; }
+.dfd-node.is-fault rect, .dfd-node.is-fault path { stroke: var(--bad); stroke-width: 2.6; }
+.dfd-edge { cursor: pointer; }
+.dfd-edge-line { stroke: var(--ink); stroke-width: 1.5; }
+.dfd-edge text { font-size: 11px; fill: var(--muted); }
+.dfd-edge.is-fault .dfd-edge-line { stroke: var(--bad); stroke-width: 2.5; }
+
+.dec-col-chk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.dtree-wrap { margin-top: 10px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-soft); }
+.dtree-list { display: flex; flex-direction: column; gap: 6px; }
+.dtree-branch { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.8125rem; }
+
+/* 白盒测试 */
+.wb-lab-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-top: 8px; align-items: start; }
+.wb-code { margin: 0 0 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-soft); font-size: 0.7813rem; overflow-x: auto; }
+.wb-cases-list { display: flex; flex-direction: column; gap: 6px; }
+.wb-case-row { font-size: 0.8125rem; }
+.wb-case-row label { display: inline-flex; align-items: center; gap: 4px; }
+.wb-metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 10px; }
+.wb-metric-pill {
+  padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-soft);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.75rem;
+}
+.wb-metric-pill.is-full { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+.cfg-edge { fill: none; stroke: var(--line-strong); stroke-width: 1.8; }
+.cfg-edge.is-hit { stroke: var(--ok); stroke-width: 2.6; }
+.cfg-node rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+.cfg-node.is-hit rect { stroke: var(--ok); stroke-width: 2; }
+.cfg-node text { font-size: 11px; font-weight: 600; fill: var(--ink); }
+
+.md-lab-wrap { margin: 8px 0; }
+
+@media (max-width: 720px) {
+  .wb-lab-grid { grid-template-columns: 1fr; }
+  .wb-metrics-grid { grid-template-columns: repeat(3, 1fr); }
+}

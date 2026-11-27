@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test *.test.mjs",
-    "check": "for f in server.mjs question-record.mjs lib/*.mjs public/exam-parse.js public/js/*.js public/js/views/*.js; do node --check \"$f\" || exit 1; done && echo SYNTAX_OK",
+    "check": "for f in server.mjs question-record.mjs lib/*.mjs public/exam-parse.js public/js/*.js public/js/views/*.js public/js/labs/*.js; do node --check \"$f\" || exit 1; done && echo SYNTAX_OK",
     "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {

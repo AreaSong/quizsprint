@@ -203,6 +203,12 @@ export const initGlobalModalDismiss = () => {
       closeBackdrop(target);
       return;
     }
+    const labBtn = e.target instanceof Element ? e.target.closest(".js-open-se-lab[data-lab]") : null;
+    if (labBtn) {
+      e.preventDefault();
+      import("./labs/se-lab-modal.js").then((m) => m.openSeLabModal(labBtn.dataset.lab)).catch(() => {});
+      return;
+    }
     const img = e.target instanceof Element ? e.target.closest(LIGHTBOX_IMG_SELECTOR) : null;
     if (img && !img.closest(".img-lightbox-stage")) {
       e.preventDefault();

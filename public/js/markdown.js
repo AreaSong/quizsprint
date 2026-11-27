@@ -19,10 +19,13 @@ const prettifyMath = (expr) => String(expr || "")
 
 const UPLOAD_IMG_LINE_RE = /^!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)$/;
 const UPLOAD_IMG_INLINE_RE = /!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)/g;
+const LAB_BTN_LINE_RE = /^::lab\[(pert|dfd|decision|blackbox|whitebox)\|([^\]]+)\]$/;
+const LAB_BTN_INLINE_RE = /::lab\[(pert|dfd|decision|blackbox|whitebox)\|([^\]]+)\]/g;
 
 const formatInlineMd = (text) =>
   text
     .replace(UPLOAD_IMG_INLINE_RE, (_m, alt, src) => `<img class="q-img md-img-inline" src="${src}" alt="${alt}" loading="lazy">`)
+    .replace(LAB_BTN_INLINE_RE, (_m, tab, label) => `<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="${tab}">🧪 ${label}</button>`)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\\\((.+?)\\\)/g, (_m, expr) => `<code>${prettifyMath(expr)}</code>`);
@@ -31,6 +34,7 @@ const formatInlineMd = (text) =>
 export const stripInlineImages = (text) =>
   String(text || "")
     .replace(UPLOAD_IMG_INLINE_RE, " [图] ")
+    .replace(LAB_BTN_INLINE_RE, " [实验] ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -60,7 +64,9 @@ export const renderRichMarkdown = (rawText) => {
     .split("\n")
     .map((line) => {
       const m = line.trim().match(UPLOAD_IMG_LINE_RE);
-      return m ? pushBlock(`<div class="md-img-wrap"><img class="q-img" src="${m[2]}" alt="${m[1]}" loading="lazy"></div>`) : line;
+      if (m) return pushBlock(`<div class="md-img-wrap"><img class="q-img" src="${m[2]}" alt="${m[1]}" loading="lazy"></div>`);
+      const labM = line.trim().match(LAB_BTN_LINE_RE);
+      return labM ? pushBlock(`<div class="md-lab-wrap"><button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="${labM[1]}">🧪 ${labM[2]}</button></div>`) : line;
     })
     .join("\n");
 

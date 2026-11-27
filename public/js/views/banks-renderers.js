@@ -181,6 +181,9 @@ export const renderSubjectOverviewHtml = (subject, subjectBanks, isAdmin) => {
   const notesCount = subjectBanks.filter((b) => (b.category || "theory") === "notes").length;
   const quizCount = subjectBanks.length - notesCount;
   const modText = notesCount && quizCount ? `刷题库 ${quizCount} · 课本重点 ${notesCount}` : `共 ${subjectBanks.length} 个模块`;
+  const labBtn = String(subject.name || "").includes("软件工程")
+    ? '<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="pert">🧪 交互实验台</button>'
+    : "";
   return `
     <div class="subject-overview">
       <div class="subject-ov-main">
@@ -197,6 +200,7 @@ export const renderSubjectOverviewHtml = (subject, subjectBanks, isAdmin) => {
           <div class="progress-bar" style="flex:1;height:6px;"><span style="width:${pct}%"></span></div>
           <span class="bank-pct-num">${pct}%</span>
         </div>
+        ${labBtn}
         ${isAdmin ? '<button type="button" id="btn-edit-subject" class="btn ghost tiny">编辑科目</button><button type="button" id="btn-del-subject" class="btn ghost-danger tiny">删除</button>' : ""}
       </div>
     </div>
@@ -295,6 +299,9 @@ const renderSubjectGroupBlockHtml = (subject, groupBanks, viewMode, ctx) => {
   const catSummary = [...catCounts.entries()]
     .map(([c, n]) => `<span class="cat-pill" data-cat="${escapeHtml(c)}">${BANK_CATEGORIES[c] || "理论"} ${n}</span>`)
     .join("");
+  const labBtn = String(subject?.name || "").includes("软件工程")
+    ? '<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="pert">🧪 实验台</button>'
+    : "";
   return `
     <section class="subject-group-block" data-group-subject="${escapeHtml(subId)}">
       <div class="subject-group-head" data-enter-subject="${escapeHtml(subId)}" title="点击进入该科目查看分模块详情">
@@ -307,6 +314,7 @@ const renderSubjectGroupBlockHtml = (subject, groupBanks, viewMode, ctx) => {
         <div class="subject-group-head-right">
           <span class="muted-text" style="font-size:0.75rem;">${groupBanks.length} 个模块 · ${total} 题</span>
           <div class="subject-group-prog"><div class="progress-bar" style="flex:1;height:5px;"><span style="width:${pct}%"></span></div><span class="bank-pct-num">${pct}%</span></div>
+          ${labBtn}
           <button type="button" class="btn ghost tiny" data-enter-subject="${escapeHtml(subId)}">进入科目 →</button>
         </div>
       </div>

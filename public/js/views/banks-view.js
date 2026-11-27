@@ -149,6 +149,7 @@ export const renderBanksView = (container, ctx) => {
   }, { signal });
   container.addEventListener("input", (e) => { if (e.target.id === "banks-kw") { keyword = e.target.value; renderListArea(); } }, { signal });
   container.addEventListener("click", async (e) => {
+    if (e.target.closest(".js-open-se-lab")) return;
     if (e.target.closest("#btn-back-all-subjects")) { activeSubjectId = ""; localStorage.setItem(ACTIVE_SUBJECT_KEY, ""); return render(); }
     const enterEl = e.target.closest("[data-enter-subject]");
     if (enterEl) { activeSubjectId = enterEl.dataset.enterSubject; localStorage.setItem(ACTIVE_SUBJECT_KEY, activeSubjectId); return render(); }
