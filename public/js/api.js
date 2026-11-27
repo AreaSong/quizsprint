@@ -2,6 +2,7 @@ import { openFormDialog } from "./dialog.js";
 
 export const BANK_CATEGORIES = {
   theory: "理论",
+  notes: "课本重点",
   practice: "实践",
   comprehensive: "综合",
   exam: "真题"

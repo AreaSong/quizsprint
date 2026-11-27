@@ -1,12 +1,20 @@
 import { apiRequest, escapeHtml, showToast } from "./api.js";
 
+const formatInlineMarkdown = (raw) => escapeHtml(raw)
+  .replace(/`([^`]+)`/g, '<code style="padding:1px 5px;border-radius:4px;background:var(--surface-soft);border:1px solid var(--line);font-size:0.75rem;">$1</code>')
+  .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+  .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--accent-fg);text-decoration:underline;">$1</a>');
+
 const renderChangelogHtml = (info) => {
   const lines = String(info?.changelog || "暂无更新日志。").trim().split(/\r?\n/);
   return lines.map((line) => {
-    if (line.startsWith("## ")) return `<h4 style="margin:12px 0 4px;color:var(--accent-fg);">${escapeHtml(line.slice(3))}</h4>`;
-    if (line.startsWith("### ")) return `<div style="font-weight:700;margin:6px 0 2px;">${escapeHtml(line.slice(4))}</div>`;
-    if (line.startsWith("- ")) return `<div style="padding-left:10px;">• ${escapeHtml(line.slice(2))}</div>`;
-    return line.trim() ? `<div class="muted-text">${escapeHtml(line)}</div>` : "";
+    if (line.startsWith("# ")) return `<h3 style="margin:6px 0 6px;font-size:1rem;">${formatInlineMarkdown(line.slice(2))}</h3>`;
+    if (line.startsWith("## ")) return `<h4 style="margin:14px 0 6px;color:var(--accent-fg);">${formatInlineMarkdown(line.slice(3))}</h4>`;
+    if (line.startsWith("### ")) return `<div style="font-weight:700;margin:8px 0 4px;">${formatInlineMarkdown(line.slice(4))}</div>`;
+    if (line.startsWith("> ")) return `<div class="muted-text" style="padding:4px 10px;margin:4px 0 8px;border-left:3px solid var(--accent-fg);">${formatInlineMarkdown(line.slice(2))}</div>`;
+    if (line.startsWith("  - ")) return `<div style="padding-left:22px;margin:2px 0;">◦ ${formatInlineMarkdown(line.slice(4))}</div>`;
+    if (line.startsWith("- ")) return `<div style="padding-left:10px;margin:3px 0;">• ${formatInlineMarkdown(line.slice(2))}</div>`;
+    return line.trim() ? `<div class="muted-text" style="margin:2px 0;">${formatInlineMarkdown(line)}</div>` : "";
   }).join("");
 };
 
@@ -83,7 +91,6 @@ export const openChangelogModal = (info, isAdmin = latestIsAdmin) => {
       <div class="modal-body" style="font-size:0.8125rem;line-height:1.65;">
         <div class="row-gap" style="margin-bottom:10px;">
           <span class="badge ok">应用版本 v${escapeHtml(info?.version || "1.2.0")}</span>
-          <span class="badge">数据库 Schema v${escapeHtml(String(info?.schemaVersion || 3))}</span>
         </div>
         ${renderContentUpdatesHtml(info?.contentUpdates || [], isAdmin)}
         ${renderChangelogHtml(info)}

@@ -32,7 +32,7 @@ import { appendContentUpdate, getSiteConfig } from "./lib/site-store.mjs";
 import { createStore } from "./lib/store.mjs";
 import { startUpdateProbeScheduler } from "./lib/system-updater.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
-import { APP_VERSION, DB_SCHEMA_VERSION } from "./lib/version.mjs";
+import { APP_VERSION } from "./lib/version.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.HOST || "0.0.0.0";
@@ -100,25 +100,31 @@ const serveSafeFile = (baseDir, relPath, res) => {
   const absBase = path.resolve(baseDir);
   const resolved = path.resolve(absBase, relPath);
   if (!resolved.startsWith(absBase + path.sep) && resolved !== absBase) {
-    sendJson(res, 403, { code: 403, msg: "禁止访问" });
-    return true;
+    return sendJson(res, 403, { code: 403, msg: "禁止访问" }), true;
   }
   if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) return false;
-  const ext = path.extname(resolved).toLowerCase();
+  const realBase = fs.realpathSync(absBase);
+  const realFile = fs.realpathSync(resolved);
+  if (!realFile.startsWith(realBase + path.sep) && realFile !== realBase) {
+    return sendJson(res, 403, { code: 403, msg: "禁止访问" }), true;
+  }
+  const ext = path.extname(realFile).toLowerCase();
   const isCodeAsset = [".html", ".css", ".js", ".mjs"].includes(ext);
+  const isUpload = absBase === path.resolve(UPLOADS_DIR);
   res.writeHead(200, applySecurityHeaders({
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
     "Cache-Control": isCodeAsset ? "no-store, no-cache, must-revalidate" : "public, max-age=300",
-    ...(isCodeAsset ? { "CDN-Cache-Control": "no-store" } : {})
+    ...(isCodeAsset ? { "CDN-Cache-Control": "no-store" } : {}),
+    ...(isUpload ? { "Content-Security-Policy": "default-src 'none'; sandbox" } : {})
   }));
   if (ext === ".html" && absBase === path.resolve(PUBLIC_DIR)) {
-    const html = fs.readFileSync(resolved, "utf8")
+    const html = fs.readFileSync(realFile, "utf8")
       .replace(/(href="\/css\/[^"]+\.css)(")/g, `$1?v=${APP_VERSION}$2`)
       .replace(/(src="\/js\/app\.js)(")/g, `$1?v=${APP_VERSION}$2`);
     res.end(html);
     return true;
   }
-  const stream = fs.createReadStream(resolved);
+  const stream = fs.createReadStream(realFile);
   stream.on("error", () => { if (!res.writableEnded) res.destroy(); });
   stream.pipe(res);
   return true;
@@ -130,7 +136,7 @@ const readBody = (req) => new Promise((resolve, reject) => {
   req.on("data", (chunk) => {
     size += chunk.length;
     if (size > MAX_BODY_BYTES) {
-      reject(new Error("请求体过大（超过 16MB）"));
+      reject(Object.assign(new Error("请求体过大（超过 24MB）"), { statusCode: 413 }));
       req.destroy();
       return;
     }
@@ -142,7 +148,7 @@ const readBody = (req) => new Promise((resolve, reject) => {
     try {
       resolve(JSON.parse(text));
     } catch {
-      reject(new Error("JSON 格式无效"));
+      reject(Object.assign(new Error("JSON 格式无效"), { statusCode: 400 }));
     }
   });
   req.on("error", reject);
@@ -161,6 +167,8 @@ const requireGuestAllowed = (req, res) => {
   return false;
 };
 
+const FORCE_PWD_ALLOW = new Set(["/api/site/info", "/api/user/me", "/api/user/login", "/api/user/register", "/api/user/password", "/api/user/logout"]);
+
 const handleApi = async (req, res, url) => {
   const method = req.method || "GET";
   const pathname = url.pathname;
@@ -175,7 +183,6 @@ const handleApi = async (req, res, url) => {
     return sendJson(res, 200, {
       ok: true,
       version: APP_VERSION,
-      schemaVersion: DB_SCHEMA_VERSION,
       uptimeSeconds: Math.floor(process.uptime()),
       count: questionCount,
       bankCount: banks.length,
@@ -183,10 +190,11 @@ const handleApi = async (req, res, url) => {
     });
   }
   if (method === "GET" && pathname === "/api/auth/me") {
+    const admin = isAdminRequest(req, userStore.getApiKey(), userStore);
     return sendJson(res, 200, {
       code: 200,
-      admin: isAdminRequest(req, userStore.getApiKey(), userStore),
-      usingGeneratedPassword: isUsingGeneratedPassword()
+      admin,
+      usingGeneratedPassword: admin ? isUsingGeneratedPassword() : false
     });
   }
   if (method === "POST" && pathname === "/api/auth/login") {
@@ -209,6 +217,10 @@ const handleApi = async (req, res, url) => {
   }
   if (method === "GET" && pathname === "/api/template.json") {
     return sendDownload(res, "quizsprint-question-template.json", TEMPLATE);
+  }
+  const curUser = getUserFromRequest(req, userStore);
+  if (curUser?.mustChangePassword && !FORCE_PWD_ALLOW.has(pathname)) {
+    return sendJson(res, 403, { code: 403, mustChangePassword: true, msg: "首次登录请先修改初始密码" });
   }
   if (method === "GET" && pathname === "/api/search") {
     if (!requireGuestAllowed(req, res)) return;
@@ -426,6 +438,7 @@ const server = http.createServer(async (req, res) => {
       readBody,
       sendJson,
       sendDownload,
+      requireGuestAllowed,
       template: TEMPLATE
     });
     if (handledLegacy) return;
@@ -434,6 +447,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && url.pathname.startsWith("/uploads/")) {
+      if (!requireGuestAllowed(req, res)) return;
       if (serveSafeFile(UPLOADS_DIR, url.pathname.slice(9), res)) return;
     }
     if (req.method === "GET") {
@@ -444,8 +458,11 @@ const server = http.createServer(async (req, res) => {
     }
     sendJson(res, 404, { code: 404, msg: "资源不存在" });
   } catch (error) {
+    const status = Number(error?.statusCode);
+    const isClient = status >= 400 && status < 500;
+    if (!isClient) console.error("[server]", error);
     if (!res.headersSent) {
-      sendJson(res, 500, { code: 500, msg: error instanceof Error ? error.message : "服务内部错误" });
+      sendJson(res, isClient ? status : 500, { code: isClient ? status : 500, msg: isClient ? error.message : "服务内部错误" });
     }
   }
 });

@@ -45,6 +45,9 @@ test("题库密码清空、批量改难度、用户昵称更新与进度清理�
     store.updateBank(bank.id, { password: "" });
     assert.equal(store.getBank(bank.id).password, "");
 
+    const { bank: notesBank } = store.createBank({ name: "课本重点测试", category: "notes" });
+    assert.equal(store.getBank(notesBank.id).category, "notes");
+
     store.importQuestions(bank.id, [{ id: "q1", title: "测试题1", type: "0", options: ["A", "B"], answers: ["A"] }]);
     const bRes = store.batchUpdateOrDelete(bank.id, { ids: ["q1"], action: "update", difficulty: "困难" });
     assert.equal(bRes.affected, 1);

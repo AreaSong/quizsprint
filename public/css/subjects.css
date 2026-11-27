@@ -46,10 +46,12 @@
   font-size: 0.7188rem; font-weight: 600; white-space: nowrap;
 }
 .cat-pill[data-cat="theory"] { background: #eff6ff; color: #1d4ed8; }
+.cat-pill[data-cat="notes"] { background: #fef3c7; color: #b45309; }
 .cat-pill[data-cat="practice"] { background: #f0fdfa; color: #0f766e; }
 .cat-pill[data-cat="comprehensive"] { background: #f5f3ff; color: #6d28d9; }
 .cat-pill[data-cat="exam"] { background: #fff7ed; color: #c2410c; }
 :root[data-color-scheme="dark"] .cat-pill[data-cat="theory"] { background: rgba(59, 130, 246, .16); color: #93c5fd; }
+:root[data-color-scheme="dark"] .cat-pill[data-cat="notes"] { background: rgba(245, 158, 11, .18); color: #fcd34d; }
 :root[data-color-scheme="dark"] .cat-pill[data-cat="practice"] { background: rgba(20, 184, 166, .16); color: #5eead4; }
 :root[data-color-scheme="dark"] .cat-pill[data-cat="comprehensive"] { background: rgba(139, 92, 246, .18); color: #c4b5fd; }
 :root[data-color-scheme="dark"] .cat-pill[data-cat="exam"] { background: rgba(249, 115, 22, .16); color: #fdba74; }
@@ -102,3 +104,45 @@
   align-items: center;
 }
 .exam-notice-edit-row input { min-width: 0; }
+
+/* 科目分层分组容器与科目内「刷题库 / 课本重点」分节 */
+.subject-group-list { display: flex; flex-direction: column; gap: 14px; }
+.subject-group-block {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.subject-group-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 11px 15px; background: var(--surface-soft); border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background .15s ease;
+}
+.subject-group-head:hover { background: var(--surface-hover); }
+.subject-group-head-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.subject-group-name { font-size: 0.9375rem; font-weight: 700; color: var(--ink); }
+.subject-group-head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.subject-group-prog { display: inline-flex; align-items: center; gap: 8px; min-width: 120px; }
+.subject-group-body { padding: 12px; }
+.subject-group-body .bank-list { gap: 8px; }
+
+.module-section { display: flex; flex-direction: column; gap: 10px; }
+.module-section + .module-section { margin-top: 16px; }
+.module-section-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 12px; border-radius: 9px;
+  background: var(--surface-soft); border: 1px solid var(--line);
+  font-size: 0.8125rem; font-weight: 700; color: var(--ink);
+}
+.module-section-head.is-notes {
+  background: #fffbeb; border-color: #fde68a; color: #92400e;
+}
+:root[data-color-scheme="dark"] .module-section-head.is-notes {
+  background: rgba(245, 158, 11, .12); border-color: rgba(245, 158, 11, .32); color: #fcd34d;
+}
+
+@media (max-width: 640px) {
+  .subject-group-head { padding: 10px 12px; gap: 8px; }
+  .subject-group-body { padding: 10px; }
+  .subject-group-prog { min-width: 96px; }
+}

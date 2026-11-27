@@ -27,7 +27,9 @@ const sessionTitleOf = (sess) => {
 };
 
 const makeSession = (messages = [], updatedAt = Date.now(), meta = {}) => {
-  const clean = Array.isArray(messages) ? messages.map((m) => ({ ...m })).slice(-30) : [];
+  const clean = Array.isArray(messages)
+    ? messages.map((m) => ({ ...m, role: m?.role === "user" ? "user" : "assistant" })).slice(-30)
+    : [];
   const customTitle = Boolean(meta.customTitle && String(meta.title || "").trim());
   const base = { id: meta.id || newSessionId(), customTitle, title: meta.title || "", updatedAt, messages: clean };
   base.title = sessionTitleOf(base);
@@ -110,7 +112,8 @@ const renderMessagesBodyHtml = (sess, sending, elapsedSec, hasNoteHook) => {
     ? `<div class="muted-text" style="text-align:center;font-size:0.6875rem;opacity:.8;">最近活跃 · ${escapeHtml(formatChatTime(sess.updatedAt))}</div>`
     : "";
   const items = messages.map((m, idx) => {
-    const isUser = m.role === "user";
+    const safeRole = m.role === "user" ? "user" : "assistant";
+    const isUser = safeRole === "user";
     const bodyHtml = isUser ? escapeHtml(m.content) : renderRichMarkdown(m.content);
     const tLabel = formatChatTime(m.ts);
     const actionsHtml = `
@@ -123,7 +126,7 @@ const renderMessagesBodyHtml = (sess, sending, elapsedSec, hasNoteHook) => {
         ${tLabel ? `<span class="muted-text" style="font-size:0.6875rem;font-variant-numeric:tabular-nums;">${escapeHtml(tLabel)}</span>` : ""}
       </div>
     `;
-    return `<div class="ai-msg ${m.role}"><div class="ai-msg-bubble">${bodyHtml}${actionsHtml}</div></div>`;
+    return `<div class="ai-msg ${safeRole}"><div class="ai-msg-bubble">${bodyHtml}${actionsHtml}</div></div>`;
   }).join("");
   const thinkingHtml = sending ? `
     <div class="ai-msg assistant"><div class="ai-msg-bubble">
