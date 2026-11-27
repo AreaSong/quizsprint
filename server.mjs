@@ -28,7 +28,7 @@ import {
 } from "./lib/http-guard.mjs";
 import { handleLegacyRoutes } from "./lib/legacy-routes.mjs";
 import { recordLoginEvent } from "./lib/login-log.mjs";
-import { getSiteConfig } from "./lib/site-store.mjs";
+import { appendContentUpdate, getSiteConfig } from "./lib/site-store.mjs";
 import { createStore } from "./lib/store.mjs";
 import { startUpdateProbeScheduler } from "./lib/system-updater.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
@@ -265,6 +265,7 @@ const handleApi = async (req, res, url) => {
     if (!requireAdmin(req, res)) return;
     const out = store.createBank(await readBody(req));
     if (out.error) return sendJson(res, 400, { code: 400, msg: out.error });
+    appendContentUpdate(DATA_DIR, { category: "题库", title: `新建题库「${out.bank.name}」` });
     return sendJson(res, 200, { code: 200, bank: out.bank });
   }
 
@@ -331,7 +332,11 @@ const handleApi = async (req, res, url) => {
     }
     if (action === "questions" && method === "POST") {
       if (!requireAdmin(req, res)) return;
-      const result = store.upsertQuestion(bank.id, await readBody(req));
+      const body = await readBody(req);
+      const result = store.upsertQuestion(bank.id, body);
+      if (result.status === 200 && result.created) {
+        appendContentUpdate(DATA_DIR, { category: "题目", title: `题库「${bank.name}」新增 1 道题`, detail: String(body?.title || "").slice(0, 48) });
+      }
       return sendJson(res, result.status, { code: result.status, ...result });
     }
     if (action === "import" && method === "POST") {
@@ -340,6 +345,9 @@ const handleApi = async (req, res, url) => {
       const items = Array.isArray(body) ? body : (Array.isArray(body.questions) ? body.questions : []);
       if (!items.length) return sendJson(res, 400, { code: 400, msg: "没有可导入的题目" });
       const result = store.importQuestions(bank.id, items, Boolean(body.skipIfExists));
+      if (result.status === 200 && (result.created > 0 || result.updated > 0)) {
+        appendContentUpdate(DATA_DIR, { category: "导题", title: `题库「${bank.name}」新增 ${result.created} 题${result.updated ? ` / 更新 ${result.updated} 题` : ""}` });
+      }
       return sendJson(res, result.status, {
         code: result.status,
         ...result,

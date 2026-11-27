@@ -169,7 +169,7 @@ const refreshSiteInfo = async () => {
   const info = await apiRequest("/api/site/info").catch(() => null);
   if (info) {
     appState.siteInfo = info;
-    applySiteInfo(info);
+    applySiteInfo(info, appState.isAdmin);
   }
 };
 
@@ -177,6 +177,7 @@ const refreshAuth = async () => {
   const [adminRes, userRes] = await Promise.all([apiRequest("/api/auth/me"), apiRequest("/api/user/me")]);
   appState.isAdmin = Boolean(adminRes.admin);
   appState.registrationMode = userRes.registrationMode || "open";
+  applySiteInfo(appState.siteInfo, appState.isAdmin);
   if (userRes.user) {
     const prog = await apiRequest("/api/user/progress").catch(() => ({ progress: null }));
     setCloudSession(userRes.user, prog.progress);

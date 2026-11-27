@@ -72,7 +72,17 @@ test("v1.1 版本与 Schema 版本、滑动窗口限流、首装向导、站点�
     const info0 = await call("GET", "/api/site/info");
     assert.equal(info0.status, 200);
     assert.equal(info0.payload.version, APP_VERSION);
+    assert.equal(APP_VERSION, "1.2.0");
     assert.equal(info0.payload.needsSetup, true);
+    assert.ok(Array.isArray(info0.payload.contentUpdates));
+
+    const addCu = await call("POST", "/api/admin/content-updates", { category: "导题", title: "新增计算机组成原理 120 题" });
+    assert.equal(addCu.status, 200);
+    assert.equal(addCu.payload.entry.category, "导题");
+    const infoCu = await call("GET", "/api/site/info");
+    assert.equal(infoCu.payload.contentUpdates[0].title, "新增计算机组成原理 120 题");
+    assert.equal((await call("DELETE", `/api/admin/content-updates/${addCu.payload.entry.id}`)).status, 200);
+    assert.equal((await call("GET", "/api/site/info")).payload.contentUpdates.length, 0);
 
     const setupOk = await call("POST", "/api/setup", { username: "rootadmin", password: "secret123", siteName: "我的云端题库" });
     assert.equal(setupOk.status, 200);

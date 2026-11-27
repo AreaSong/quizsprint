@@ -74,7 +74,8 @@
   }
   #user-dropdown { max-width: calc(100vw - 20px); max-height: calc(100dvh - 70px); overflow-y: auto; z-index: 65; }
 
-  .app-main { padding: 10px 10px calc(66px + env(safe-area-inset-bottom)); }
+  .panel { padding: 11px 12px; border-radius: 11px; }
+  .app-main { padding: 9px 10px calc(62px + env(safe-area-inset-bottom)); }
   .app-main.practice-full { padding: 8px 10px calc(106px + env(safe-area-inset-bottom)); }
   body.focus-mode .app-main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   body.immersive-mode .app-main { padding: 0 0 calc(64px + env(safe-area-inset-bottom)); }
@@ -172,7 +173,32 @@
   .cat-filter-row .btn { flex: 0 0 auto; }
   .section-head > .row-gap { width: 100%; }
   .banks-filter-input { flex: 1; min-width: 0; width: auto; }
-  .rank-list { max-height: none; overflow: visible; }
+
+  /* 学习统计页（#stats）：紧凑 KPI 与趋势图、首屏展示更多排行榜 */
+  .kpi-grid { gap: 8px; }
+  .kpi-card { padding: 9px 11px; border-radius: 10px; }
+  .kpi-icon { width: 22px; height: 22px; border-radius: 6px; }
+  .kpi-val { font-size: 1.1875rem; margin-top: 2px; line-height: 1.2; }
+  .kpi-sub { margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stats-grid { gap: 10px; }
+  .stats-grid .seg-row.cols-2 { min-width: 116px !important; }
+  .chart-stage { height: 108px; padding: 10px 6px 4px; margin-top: 8px; }
+  .rank-list { max-height: none; overflow: visible; gap: 4px; }
+  .rank-row { padding: 5px 8px; gap: 4px; }
+
+  /* 搜题、考试、试题管理与批量导题页紧凑横滑适配 */
+  #search-bank, #search-type, #f-type, #f-chapter { flex: 1 1 42%; min-width: 0; }
+  #search-input, #f-kw, #imp-bank, #imp-chapter { min-width: 0 !important; max-width: 100%; }
+  #search-input, #f-kw { flex: 1 1 100% !important; }
+  .search-summary { padding: 9px 11px; gap: 8px; }
+  .bank-card { padding: 12px 13px; gap: 9px; border-radius: 11px; }
+  #m-stats-row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px; }
+  #m-stats-row::-webkit-scrollbar { display: none; }
+  #m-stats-row > * { flex: none; }
+  #m-foot { gap: 8px; }
+  #usr-kw { min-width: 0 !important; }
+  .workbench-textarea { min-height: 170px; }
+  .preview-scroll { max-height: 280px; }
 
   /* 管理后台与弹窗表格响应式卡片化 */
   .admin-table-wrap { border: 0; background: transparent; overflow: visible; }

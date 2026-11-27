@@ -10,33 +10,93 @@ const renderChangelogHtml = (info) => {
   }).join("");
 };
 
-export const openChangelogModal = (info) => {
+const renderContentUpdatesHtml = (updates = [], isAdmin = false) => `
+  <div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:var(--surface-soft);border:1px solid var(--line);">
+    <div class="row-gap" style="justify-content:space-between;margin-bottom:8px;">
+      <strong>题库与内容更新动态</strong>
+      <span class="badge">${updates.length} 条记录</span>
+    </div>
+    ${isAdmin ? `
+      <form id="cl-cu-form" class="row-gap" style="gap:6px;margin-bottom:8px;">
+        <select id="cl-cu-cat" style="padding:4px 8px;font-size:0.75rem;">
+          ${["导题", "题库", "题目", "考试", "公告", "更新"].map((c) => `<option value="${c}">${c}</option>`).join("")}
+        </select>
+        <input id="cl-cu-title" placeholder="记录新增题目、新题库或通知说明..." required maxlength="120" style="flex:1;min-width:140px;padding:4px 8px;font-size:0.75rem;">
+        <button type="submit" class="btn primary tiny">发布动态</button>
+      </form>
+    ` : ""}
+    <div style="display:flex;flex-direction:column;gap:5px;max-height:170px;overflow-y:auto;">
+      ${updates.map((u) => `
+        <div class="row-gap" style="justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);">
+          <div style="min-width:0;flex:1;">
+            <span class="badge">${escapeHtml(u.category || "更新")}</span>
+            <span class="muted-text" style="font-size:0.7188rem;margin:0 4px;">${escapeHtml(u.date || "")}</span>
+            <span>${escapeHtml(u.title || "")}</span>
+            ${u.detail ? `<span class="muted-text" style="font-size:0.7188rem;"> · ${escapeHtml(u.detail)}</span>` : ""}
+          </div>
+          ${isAdmin ? `<button type="button" class="btn ghost-danger tiny js-del-cu" data-cu-id="${escapeHtml(u.id)}" style="padding:1px 6px;">×</button>` : ""}
+        </div>
+      `).join("") || '<span class="muted-text" style="font-size:0.75rem;">暂无内容更新记录，后续新建题库、批量导题、录入试题与发布考试将自动记入此处。</span>'}
+    </div>
+  </div>
+`;
+
+let latestSiteInfo = null;
+let latestIsAdmin = false;
+let changelogClickBound = false;
+
+const bindChangelogAdminEvents = (modal, info, isAdmin) => {
+  modal.querySelector("#cl-cu-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = modal.querySelector("#cl-cu-title").value.trim();
+    if (!title) return;
+    try {
+      const res = await apiRequest("/api/admin/content-updates", {
+        method: "POST",
+        body: JSON.stringify({ category: modal.querySelector("#cl-cu-cat").value, title })
+      });
+      info.contentUpdates = res.updates || [];
+      showToast("已记录到更新动态", "ok");
+      openChangelogModal(info, isAdmin);
+    } catch (err) { showToast(err.message, "bad"); }
+  });
+  modal.querySelectorAll(".js-del-cu").forEach((btn) => btn.addEventListener("click", async () => {
+    try {
+      const res = await apiRequest(`/api/admin/content-updates/${encodeURIComponent(btn.dataset.cuId)}`, { method: "DELETE" });
+      info.contentUpdates = res.updates || [];
+      openChangelogModal(info, isAdmin);
+    } catch (err) { showToast(err.message, "bad"); }
+  }));
+};
+
+export const openChangelogModal = (info, isAdmin = latestIsAdmin) => {
   const modal = document.getElementById("site-modal");
   if (!modal) return;
+  delete modal.dataset.lockDismiss;
   modal.hidden = false;
   modal.innerHTML = `
-    <div class="modal-card modal-shell" style="max-width:600px;">
+    <div class="modal-card modal-shell" style="max-width:640px;">
       <div class="modal-head">
-        <h3>版本与更新日志 · v${escapeHtml(info?.version || "1.1.0")}</h3>
+        <h3>版本与更新日志 · v${escapeHtml(info?.version || "1.2.0")}</h3>
         <button type="button" id="cl-close" class="btn ghost tiny" data-modal-close>关闭</button>
       </div>
       <div class="modal-body" style="font-size:0.8125rem;line-height:1.65;">
-        <div class="row-gap" style="margin-bottom:8px;">
-          <span class="badge ok">应用版本 v${escapeHtml(info?.version || "1.1.0")}</span>
+        <div class="row-gap" style="margin-bottom:10px;">
+          <span class="badge ok">应用版本 v${escapeHtml(info?.version || "1.2.0")}</span>
           <span class="badge">数据库 Schema v${escapeHtml(String(info?.schemaVersion || 3))}</span>
         </div>
+        ${renderContentUpdatesHtml(info?.contentUpdates || [], isAdmin)}
         ${renderChangelogHtml(info)}
       </div>
     </div>
   `;
   modal.querySelector("#cl-close").addEventListener("click", () => { modal.hidden = true; });
+  if (isAdmin) bindChangelogAdminEvents(modal, info, isAdmin);
 };
 
-let latestSiteInfo = null;
-let changelogClickBound = false;
-
 /** 将站点名称、公告栏与页脚版本应用到全局外壳 */
-export const applySiteInfo = (info) => {
+export const applySiteInfo = (info, isAdmin) => {
+  if (isAdmin !== undefined) latestIsAdmin = Boolean(isAdmin);
   if (!info) return;
   latestSiteInfo = info;
   if (!changelogClickBound) {
@@ -45,7 +105,7 @@ export const applySiteInfo = (info) => {
       if (!e.target.closest(".js-open-changelog")) return;
       const appMenu = document.getElementById("appearance-menu");
       if (appMenu) appMenu.hidden = true;
-      openChangelogModal(latestSiteInfo);
+      openChangelogModal(latestSiteInfo, latestIsAdmin);
     });
   }
   const cfg = info.siteConfig || {};
@@ -62,8 +122,8 @@ export const applySiteInfo = (info) => {
 
   const verBtn = document.getElementById("app-version-btn");
   if (verBtn) {
-    verBtn.textContent = `v${info.version || "1.1.0"}`;
-    verBtn.onclick = () => openChangelogModal(info);
+    verBtn.textContent = `v${info.version || "1.2.0"}`;
+    verBtn.onclick = () => openChangelogModal(info, latestIsAdmin);
   }
 
   const bar = document.getElementById("site-announcement-bar");

@@ -57,7 +57,7 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
       </div>
       <div class="sys-meta-box">
         <div class="row-gap" style="margin-bottom:4px;">
-          <span class="badge ok">版本 v${escapeHtml(st.appVersion || "1.1.0")}</span>
+          <span class="badge ok">版本 v${escapeHtml(st.appVersion || "1.2.0")}</span>
           <span class="badge">Schema v${escapeHtml(String(st.schemaVersion || 3))}</span>
           <strong>${st.isGitRepo ? `分支：${escapeHtml(st.branch)}` : "非 Git 仓库运行"}</strong>
         </div>
