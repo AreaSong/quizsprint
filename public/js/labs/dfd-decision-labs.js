@@ -2,21 +2,11 @@ import { escapeHtml } from "../api.js";
 import { canMergeDecisionCols, DECISION_CASES, DFD_CHALLENGES, isDecisionTableMinimal, mergeDecisionCols, validateDfdGraph } from "./se-lab-core.js";
 
 const buildDfdNodeSvg = (n, opts = {}) => {
-  const cls = [
-    "dfd-node",
-    opts.picked ? "is-picked" : "",
-    opts.foundFault ? "is-fault" : "",
-    opts.selected ? "is-sel" : ""
-  ].filter(Boolean).join(" ");
-  let shape = `<rect x="-52" y="-20" width="104" height="40" rx="4" />`;
-  if (n.type === "process") shape = `<rect x="-54" y="-22" width="108" height="44" rx="18" />`;
+  const cls = ["dfd-node", opts.draggable ? "is-draggable" : "", opts.foundFault ? "is-fault" : "", opts.selected ? "is-sel" : ""].filter(Boolean).join(" ");
+  let shape = `<rect x="-54" y="-20" width="108" height="40" rx="4" />`;
+  if (n.type === "process") shape = `<rect x="-56" y="-22" width="112" height="44" rx="18" />`;
   if (n.type === "store") shape = `<path d="M-54,-18 L54,-18 M-54,18 L54,18 M-54,-18 L-54,18" />`;
-  return `
-    <g class="${cls}" transform="translate(${n.x}, ${n.y})" data-dfd-node="${escapeHtml(n.id)}">
-      ${shape}
-      <text x="0" y="5" text-anchor="middle">${escapeHtml(n.label)}</text>
-    </g>
-  `;
+  return `<g class="${cls}" transform="translate(${n.x}, ${n.y})" data-dfd-node="${escapeHtml(n.id)}">${shape}<text x="0" y="5" text-anchor="middle">${escapeHtml(n.label)}</text></g>`;
 };
 
 const buildDfdEdgeSvg = (e, nMap, opts = {}) => {
@@ -30,16 +20,51 @@ const buildDfdEdgeSvg = (e, nMap, opts = {}) => {
   const y1 = a.y + (dy / len) * 24;
   const x2 = b.x - (dx / len) * 58;
   const y2 = b.y - (dy / len) * 26;
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2 - 8;
-  const cls = ["dfd-edge", opts.foundFault ? "is-fault" : "", opts.picked ? "is-picked" : ""].filter(Boolean).join(" ");
+  const cls = ["dfd-edge", opts.foundFault ? "is-fault" : "", opts.selected ? "is-sel" : ""].filter(Boolean).join(" ");
   return `
     <g class="${cls}" data-dfd-edge="${escapeHtml(e.id)}">
       <line class="pert-edge-hit" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />
       <line class="dfd-edge-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#dfd-arr)" />
-      <text x="${mx}" y="${my}" text-anchor="middle">${escapeHtml(e.label || "(未命名)")}</text>
+      <text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 8}" text-anchor="middle">${escapeHtml(e.label || "(未命名)")}</text>
     </g>
   `;
+};
+
+const buildDfdInspectorHtml = (state, nodes, edges) => {
+  if (state.mode !== "build") return "";
+  const selNode = nodes.find((n) => n.id === state.selNodeId);
+  const selEdge = edges.find((e) => e.id === state.selEdgeId);
+  if (selNode) {
+    return `
+      <div class="lab-inspector"><div class="lab-inspector-row">
+        <strong>已选节点：</strong>
+        <input id="dfd-rename-node" class="lab-txt-in" type="text" value="${escapeHtml(selNode.label)}" placeholder="输入节点名称...">
+        <input id="dfd-flow-name" class="lab-txt-in" type="text" value="${escapeHtml(state.pendingFlowName)}" placeholder="连线数据流名称...">
+        <button type="button" id="dfd-connect-btn" class="btn tiny ${state.connectMode ? "soft-active" : "ghost"}">${state.connectMode ? "请点击画布目标节点..." : "从此处连线 →"}</button>
+        <button type="button" id="dfd-del-node" class="btn ghost-danger tiny">删除节点</button>
+      </div></div>
+    `;
+  }
+  if (selEdge) {
+    return `
+      <div class="lab-inspector"><div class="lab-inspector-row">
+        <strong>已选数据流：</strong>
+        <input id="dfd-rename-edge" class="lab-txt-in" type="text" value="${escapeHtml(selEdge.label)}" placeholder="输入数据流名称...">
+        <button type="button" id="dfd-del-edge" class="btn ghost-danger tiny">删除连线</button>
+      </div></div>
+    `;
+  }
+  return `<div class="lab-inspector"><div class="lab-inspector-row muted-text">提示：拖拽画布上的方框/圆角加工可自由排版；点击节点或连线可重命名、连线或删除。</div></div>`;
+};
+
+const clientToSvgPoint = (svg, clientX, clientY) => {
+  const pt = svg.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 100, y: 100 };
+  const p = pt.matrixTransform(ctm.inverse());
+  return { x: Math.max(64, Math.min(616, Math.round(p.x))), y: Math.max(30, Math.min(280, Math.round(p.y))) };
 };
 
 /** 挂载数据流图（DFD）排错与自由搭建实验台 */
@@ -50,89 +75,153 @@ export const mountDfdLab = (root) => {
     foundIds: new Set(),
     lastMsg: "",
     customNodes: [
-      { id: "c_s1", type: "entity", label: "用户", x: 90, y: 155 },
-      { id: "c_p1", type: "process", label: "1.登录校验", x: 310, y: 155 },
-      { id: "c_d1", type: "store", label: "用户表", x: 540, y: 155 }
+      { id: "c_s1", type: "entity", label: "用户", x: 95, y: 155 },
+      { id: "c_p1", type: "process", label: "1.登录校验", x: 335, y: 155 },
+      { id: "c_d1", type: "store", label: "用户表", x: 575, y: 155 }
     ],
     customEdges: [{ id: "ce1", from: "c_s1", to: "c_p1", label: "账号密码" }],
-    connectFrom: "",
+    selNodeId: "",
+    selEdgeId: "",
+    connectMode: false,
+    newNodeType: "process",
+    newNodeName: "",
+    pendingFlowName: "处理结果",
     nextSeq: 2
   };
 
   const render = () => {
     const ch = DFD_CHALLENGES.find((x) => x.id === state.challengeId) || DFD_CHALLENGES[0];
-    const nodes = state.mode === "challenge" ? ch.nodes : state.customNodes;
-    const edges = state.mode === "challenge" ? ch.edges : state.customEdges;
+    const isBuild = state.mode === "build";
+    const nodes = isBuild ? state.customNodes : ch.nodes;
+    const edges = isBuild ? state.customEdges : ch.edges;
     const nMap = new Map(nodes.map((n) => [n.id, n]));
-    const check = state.mode === "build" ? validateDfdGraph(nodes, edges) : null;
+    const check = isBuild ? validateDfdGraph(nodes, edges) : null;
     const faultCount = Object.keys(ch.faults).length;
 
     root.innerHTML = `
       <div class="lab-toolbar">
         <div class="row-gap">
           <div class="view-seg">
-            <button type="button" class="view-seg-btn ${state.mode === "challenge" ? "active" : ""}" data-dfd-mode="challenge">图面排错挑战</button>
-            <button type="button" class="view-seg-btn ${state.mode === "build" ? "active" : ""}" data-dfd-mode="build">自由搭建体检</button>
+            <button type="button" class="view-seg-btn ${!isBuild ? "active" : ""}" data-dfd-mode="challenge">图面排错挑战</button>
+            <button type="button" class="view-seg-btn ${isBuild ? "active" : ""}" data-dfd-mode="build">自由搭建与拖拽</button>
           </div>
-          ${state.mode === "challenge" ? `
+          ${!isBuild ? `
             <select id="dfd-ch-sel" class="lab-select">
               ${DFD_CHALLENGES.map((c) => `<option value="${c.id}" ${c.id === state.challengeId ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
             </select>
             <span class="badge ${state.foundIds.size === faultCount ? "ok" : "warn"}">已找出 ${state.foundIds.size} / ${faultCount} 处错误</span>
           ` : `
-            <button type="button" class="btn ghost tiny" data-add-node="entity">+ 外部实体</button>
-            <button type="button" class="btn ghost tiny" data-add-node="process">+ 加工</button>
-            <button type="button" class="btn ghost tiny" data-add-node="store">+ 数据存储</button>
+            <select id="dfd-new-type" class="lab-select">
+              <option value="entity" ${state.newNodeType === "entity" ? "selected" : ""}>外部实体</option>
+              <option value="process" ${state.newNodeType === "process" ? "selected" : ""}>加工</option>
+              <option value="store" ${state.newNodeType === "store" ? "selected" : ""}>数据存储</option>
+            </select>
+            <input id="dfd-new-name" class="lab-txt-in" type="text" value="${escapeHtml(state.newNodeName)}" placeholder="输入名称后添加...">
+            <button type="button" id="dfd-add-btn" class="btn primary tiny">+ 添加节点</button>
             <button type="button" id="dfd-clear-edges" class="btn ghost tiny">清空连线</button>
           `}
         </div>
       </div>
-      <p class="muted-text" style="margin:4px 0 8px;font-size:0.7813rem;">
-        ${state.mode === "challenge" ? escapeHtml(ch.desc) : "先点选一个起点节点，再点选终点节点即可添加数据流连线；下方实时校验 DFD 规范性。"}
-      </p>
+      <p class="muted-text" style="margin:4px 0 6px;font-size:0.7813rem;">${isBuild ? "支持拖拽任意节点位置、输入节点/数据流名称并连线；下方实时进行 DFD 规范体检。" : escapeHtml(ch.desc)}</p>
       <div class="lab-svg-wrap">
-        <svg class="dfd-svg" viewBox="0 0 650 310" role="img" aria-label="数据流图实验画布">
+        <svg class="dfd-svg" viewBox="0 0 680 310" role="img" aria-label="数据流图实验画布">
           <defs><marker id="dfd-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,1 L9,5 L0,9 z" fill="var(--ink)"/></marker></defs>
-          ${edges.map((e) => buildDfdEdgeSvg(e, nMap, { foundFault: state.mode === "challenge" && state.foundIds.has(e.id) })).join("")}
-          ${nodes.map((n) => buildDfdNodeSvg(n, { foundFault: state.mode === "challenge" && state.foundIds.has(n.id), selected: state.connectFrom === n.id })).join("")}
+          ${edges.map((e) => buildDfdEdgeSvg(e, nMap, { foundFault: !isBuild && state.foundIds.has(e.id), selected: isBuild && state.selEdgeId === e.id })).join("")}
+          ${nodes.map((n) => buildDfdNodeSvg(n, { draggable: isBuild, foundFault: !isBuild && state.foundIds.has(n.id), selected: isBuild && state.selNodeId === n.id })).join("")}
         </svg>
       </div>
-      ${state.mode === "challenge"
+      ${buildDfdInspectorHtml(state, nodes, edges)}
+      ${!isBuild
         ? `<div class="lab-feedback ${state.lastMsg.startsWith("违规") ? "ok" : "warn"}">${escapeHtml(state.lastMsg || "点击图中可疑的加工框或数据流箭头进行排错。")}</div>`
         : `<div class="lab-feedback ${check.valid ? "ok" : "warn"}">${check.valid ? "✓ 当前数据流图符合加工守恒、边界连接与命名规范！" : check.issues.map((i) => escapeHtml(i.msg)).join("；")}</div>`}
     `;
-    bindEvents(ch);
+    bindDfdEvents(ch, isBuild);
   };
 
-  const bindEvents = (ch) => {
-    root.querySelectorAll("[data-dfd-mode]").forEach((b) => b.addEventListener("click", () => { state.mode = b.dataset.dfdMode; state.lastMsg = ""; state.connectFrom = ""; render(); }));
+  const bindDfdEvents = (ch, isBuild) => {
+    root.querySelectorAll("[data-dfd-mode]").forEach((b) => b.addEventListener("click", () => { state.mode = b.dataset.dfdMode; state.lastMsg = ""; state.connectMode = false; state.selNodeId = ""; state.selEdgeId = ""; render(); }));
     root.querySelector("#dfd-ch-sel")?.addEventListener("change", (e) => { state.challengeId = e.target.value; state.foundIds = new Set(); state.lastMsg = ""; render(); });
-    root.querySelectorAll("[data-dfd-node], [data-dfd-edge]").forEach((el) => el.addEventListener("click", () => {
-      const id = el.dataset.dfdNode || el.dataset.dfdEdge;
-      if (state.mode === "challenge") {
-        if (ch.faults[id]) { state.foundIds.add(id); state.lastMsg = ch.faults[id]; }
-        else { state.lastMsg = "该元素符合 DFD 规范，请继续查找其他违规之处。"; }
-        render();
-        return;
-      }
-      if (el.dataset.dfdEdge) { state.customEdges = state.customEdges.filter((x) => x.id !== id); render(); return; }
-      if (!state.connectFrom) { state.connectFrom = id; render(); return; }
-      if (state.connectFrom !== id) {
-        state.customEdges.push({ id: `ce_${Date.now()}`, from: state.connectFrom, to: id, label: `数据流${state.customEdges.length + 1}` });
-      }
-      state.connectFrom = "";
-      render();
-    }));
-    root.querySelectorAll("[data-add-node]").forEach((b) => b.addEventListener("click", () => {
-      const type = b.dataset.addNode;
+    root.querySelector("#dfd-new-type")?.addEventListener("change", (e) => { state.newNodeType = e.target.value; });
+    root.querySelector("#dfd-new-name")?.addEventListener("input", (e) => { state.newNodeName = e.target.value; });
+    root.querySelector("#dfd-add-btn")?.addEventListener("click", () => {
       const idx = state.nextSeq++;
-      const x = type === "entity" ? 95 : (type === "process" ? 310 : 535);
-      const y = 75 + ((idx % 3) * 85);
-      const label = type === "entity" ? `实体${idx}` : (type === "process" ? `${idx}.处理` : `存储${idx}`);
-      state.customNodes.push({ id: `cn_${idx}`, type, label, x, y });
+      const t = state.newNodeType;
+      const label = state.newNodeName.trim() || (t === "entity" ? `实体${idx}` : (t === "process" ? `${idx}.处理` : `存储${idx}`));
+      const x = t === "entity" ? 95 : (t === "process" ? 335 : 575);
+      const y = 65 + ((idx % 3) * 90);
+      const id = `cn_${idx}`;
+      state.customNodes.push({ id, type: t, label, x, y });
+      state.newNodeName = "";
+      state.selNodeId = id; state.selEdgeId = "";
+      render();
+    });
+    root.querySelector("#dfd-clear-edges")?.addEventListener("click", () => { state.customEdges = []; state.connectMode = false; state.selEdgeId = ""; render(); });
+    root.querySelector("#dfd-rename-node")?.addEventListener("input", (e) => {
+      const n = state.customNodes.find((x) => x.id === state.selNodeId);
+      if (n) { n.label = e.target.value; const t = root.querySelector(`g[data-dfd-node="${n.id}"] text`); if (t) t.textContent = e.target.value; }
+    });
+    root.querySelector("#dfd-flow-name")?.addEventListener("input", (e) => { state.pendingFlowName = e.target.value; });
+    root.querySelector("#dfd-connect-btn")?.addEventListener("click", () => { state.connectMode = !state.connectMode; render(); });
+    root.querySelector("#dfd-del-node")?.addEventListener("click", () => {
+      state.customNodes = state.customNodes.filter((n) => n.id !== state.selNodeId);
+      state.customEdges = state.customEdges.filter((e) => e.from !== state.selNodeId && e.to !== state.selNodeId);
+      state.selNodeId = ""; state.connectMode = false; render();
+    });
+    root.querySelector("#dfd-rename-edge")?.addEventListener("input", (e) => {
+      const edge = state.customEdges.find((x) => x.id === state.selEdgeId);
+      if (edge) { edge.label = e.target.value; render(); root.querySelector("#dfd-rename-edge")?.focus(); }
+    });
+    root.querySelector("#dfd-del-edge")?.addEventListener("click", () => { state.customEdges = state.customEdges.filter((x) => x.id !== state.selEdgeId); state.selEdgeId = ""; render(); });
+
+    const svg = root.querySelector(".dfd-svg");
+    let dragInfo = null;
+    root.querySelectorAll("g[data-dfd-node]").forEach((g) => g.addEventListener("pointerdown", (e) => {
+      const id = g.dataset.dfdNode;
+      if (!isBuild) {
+        state.lastMsg = ch.faults[id] || "该元素符合 DFD 规范，请继续查找其他违规之处。";
+        if (ch.faults[id]) state.foundIds.add(id);
+        return render();
+      }
+      if (state.connectMode && state.selNodeId && state.selNodeId !== id) {
+        state.customEdges.push({ id: `ce_${Date.now()}`, from: state.selNodeId, to: id, label: state.pendingFlowName.trim() || `数据流${state.customEdges.length + 1}` });
+        state.connectMode = false; state.selNodeId = id;
+        return render();
+      }
+      dragInfo = { id, startX: e.clientX, startY: e.clientY, moved: false };
+      g.setPointerCapture?.(e.pointerId);
+    }));
+
+    svg?.addEventListener("pointermove", (e) => {
+      if (!dragInfo) return;
+      if (Math.hypot(e.clientX - dragInfo.startX, e.clientY - dragInfo.startY) > 5) dragInfo.moved = true;
+      if (!dragInfo.moved) return;
+      const p = clientToSvgPoint(svg, e.clientX, e.clientY);
+      const n = state.customNodes.find((x) => x.id === dragInfo.id);
+      if (n) {
+        n.x = p.x; n.y = p.y;
+        const g = svg.querySelector(`g[data-dfd-node="${n.id}"]`);
+        if (g) g.setAttribute("transform", `translate(${n.x}, ${n.y})`);
+      }
+    });
+
+    svg?.addEventListener("pointerup", () => {
+      if (!dragInfo) return;
+      const { id, moved } = dragInfo;
+      dragInfo = null;
+      if (!moved) { state.selNodeId = id; state.selEdgeId = ""; }
+      render();
+    });
+
+    root.querySelectorAll("g[data-dfd-edge]").forEach((el) => el.addEventListener("click", () => {
+      const id = el.dataset.dfdEdge;
+      if (!isBuild) {
+        state.lastMsg = ch.faults[id] || "该数据流符合 DFD 规范，请继续查找其他违规之处。";
+        if (ch.faults[id]) state.foundIds.add(id);
+      } else {
+        state.selEdgeId = id; state.selNodeId = ""; state.connectMode = false;
+      }
       render();
     }));
-    root.querySelector("#dfd-clear-edges")?.addEventListener("click", () => { state.customEdges = []; state.connectFrom = ""; render(); });
   };
 
   render();
@@ -159,7 +248,7 @@ export const mountDecisionLab = (root) => {
   let caseDef = DECISION_CASES[0];
   let cols = structuredClone(caseDef.columns);
   let selectedIds = new Set();
-  let feedback = "勾选两条「动作相同且仅有 1 个条件为 T/F 互补」的规则列，点击「合并化简」。";
+  let feedback = "点击条件格可切换 T / F / -，点击动作格可切换 ✓ / ·；勾选两列点击「合并选中两列」即可练习化简。";
 
   const render = () => {
     const minimal = isDecisionTableMinimal(cols);
@@ -172,6 +261,7 @@ export const mountDecisionLab = (root) => {
           <span class="badge ${minimal ? "ok" : "warn"}">${minimal ? `已最简（${cols.length} 列）` : `当前 ${cols.length} 列，还可继续化简`}</span>
         </div>
         <div class="row-gap">
+          <button type="button" id="dec-add-col" class="btn ghost tiny">+ 添加规则列</button>
           <button type="button" id="dec-merge-btn" class="btn primary tiny" ${selectedIds.size !== 2 ? "disabled" : ""}>合并选中两列</button>
           <button type="button" id="dec-reset-btn" class="btn ghost tiny">重置初始表</button>
         </div>
@@ -188,13 +278,13 @@ export const mountDecisionLab = (root) => {
             ${caseDef.conditions.map((condName, ri) => `
               <tr>
                 <td><strong>${escapeHtml(condName)}</strong></td>
-                ${cols.map((c) => `<td style="text-align:center;"><span class="badge ${c.conds[ri] === "-" ? "ok" : ""}">${escapeHtml(c.conds[ri])}</span></td>`).join("")}
+                ${cols.map((c, ci) => `<td style="text-align:center;"><button type="button" class="dec-cell-btn ${c.conds[ri] === "-" ? "is-dash" : ""}" data-dec-cond="${ci}:${ri}">${escapeHtml(c.conds[ri])}</button></td>`).join("")}
               </tr>
             `).join("")}
             ${caseDef.actions.map((actName, ai) => `
               <tr>
                 <td>${escapeHtml(actName)}</td>
-                ${cols.map((c) => `<td style="text-align:center;">${c.acts[ai] ? "✓" : "·"}</td>`).join("")}
+                ${cols.map((c, ci) => `<td style="text-align:center;"><button type="button" class="dec-cell-btn" data-dec-act="${ci}:${ai}">${c.acts[ai] ? "✓" : "·"}</button></td>`).join("")}
               </tr>
             `).join("")}
           </tbody>
@@ -203,28 +293,39 @@ export const mountDecisionLab = (root) => {
       <div class="lab-feedback ${minimal ? "ok" : "warn"}" style="margin-top:10px;">${escapeHtml(feedback)}</div>
       ${renderDecisionTreeHtml(caseDef, cols)}
     `;
-    bindEvents();
+    bindDecisionEvents();
   };
 
-  const bindEvents = () => {
+  const bindDecisionEvents = () => {
     root.querySelector("#dec-case-sel")?.addEventListener("change", (e) => {
       caseDef = DECISION_CASES.find((c) => c.id === e.target.value) || DECISION_CASES[0];
-      cols = structuredClone(caseDef.columns);
-      selectedIds = new Set();
-      feedback = "已切换判定表，请尝试合并可化简规则列。";
-      render();
+      cols = structuredClone(caseDef.columns); selectedIds = new Set(); feedback = "已切换判定表，请尝试编辑单元格或合并化简。"; render();
     });
     root.querySelectorAll("[data-dec-col]").forEach((chk) => chk.addEventListener("change", () => {
-      const id = chk.dataset.decCol;
-      if (chk.checked) selectedIds.add(id); else selectedIds.delete(id);
+      if (chk.checked) selectedIds.add(chk.dataset.decCol); else selectedIds.delete(chk.dataset.decCol);
       render();
     }));
+    root.querySelectorAll("[data-dec-cond]").forEach((btn) => btn.addEventListener("click", () => {
+      const [ci, ri] = btn.dataset.decCond.split(":").map(Number);
+      const next = { T: "F", F: "-", "-": "T" };
+      cols[ci].conds[ri] = next[cols[ci].conds[ri]] || "T";
+      render();
+    }));
+    root.querySelectorAll("[data-dec-act]").forEach((btn) => btn.addEventListener("click", () => {
+      const [ci, ai] = btn.dataset.decAct.split(":").map(Number);
+      cols[ci].acts[ai] = !cols[ci].acts[ai];
+      render();
+    }));
+    root.querySelector("#dec-add-col")?.addEventListener("click", () => {
+      cols.push({ id: `R${cols.length + 1}`, conds: caseDef.conditions.map(() => "T"), acts: caseDef.actions.map(() => false) });
+      render();
+    });
     root.querySelector("#dec-merge-btn")?.addEventListener("click", () => {
       const [idA, idB] = [...selectedIds];
       const colA = cols.find((c) => c.id === idA);
       const colB = cols.find((c) => c.id === idB);
       const res = mergeDecisionCols(colA, colB);
-      if (!res.ok) { feedback = `不能合并：${res.reason}`; render(); return; }
+      if (!res.ok) { feedback = `不能合并：${res.reason}`; return render(); }
       const idxA = cols.indexOf(colA);
       cols = cols.filter((c) => c.id !== idA && c.id !== idB);
       cols.splice(idxA, 0, res.merged);
@@ -233,10 +334,7 @@ export const mountDecisionLab = (root) => {
       render();
     });
     root.querySelector("#dec-reset-btn")?.addEventListener("click", () => {
-      cols = structuredClone(caseDef.columns);
-      selectedIds.clear();
-      feedback = "已重置为完整 2^n 初始判定表。";
-      render();
+      cols = structuredClone(caseDef.columns); selectedIds.clear(); feedback = "已重置为完整 2^n 初始判定表。"; render();
     });
   };
 

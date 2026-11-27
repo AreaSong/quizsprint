@@ -1,7 +1,9 @@
 /* 软件工程 5 合 1 交互式实验台样式（兼容浅色/深色/护眼主题与移动端） */
-.se-lab-card {
-  width: min(980px, 95vw);
-  max-height: 92vh;
+.modal-card.se-lab-card {
+  width: min(1160px, 94vw);
+  max-width: 1160px;
+  max-height: 92dvh;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -9,15 +11,15 @@
 .se-lab-tabs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
 .se-lab-tabs .btn { flex: none; }
 .se-lab-stage {
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
 }
 .lab-toolbar {
   display: flex;
@@ -26,7 +28,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.lab-select {
+.lab-select, .lab-txt-in {
   padding: 4px 10px;
   border-radius: 7px;
   border: 1px solid var(--line-strong);
@@ -34,18 +36,23 @@
   color: var(--ink);
   font-size: 0.8125rem;
 }
-.lab-num-in {
-  width: 62px;
-  padding: 4px 7px;
+.lab-num-in, .pert-mini-in {
+  width: 58px;
+  padding: 4px 6px;
   border-radius: 6px;
   border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);
   font-size: 0.8125rem;
+  text-align: center;
 }
+.pert-mini-in { width: 48px; padding: 3px 4px; font-size: 0.7813rem; }
+.pert-mini-in.is-ok { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); font-weight: 700; }
+.pert-mini-in.is-bad { border-color: var(--bad); background: var(--bad-soft, rgba(220,38,38,.08)); color: var(--bad); font-weight: 700; }
+
 .lab-svg-wrap {
   overflow-x: auto;
-  padding: 8px;
+  padding: 10px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--surface-soft);
@@ -53,10 +60,11 @@
 .pert-svg, .dfd-svg, .axis-svg, .cfg-svg {
   display: block;
   width: 100%;
-  min-width: 560px;
   height: auto;
 }
-.axis-svg { max-height: 115px; }
+.pert-svg { max-height: 350px; min-width: 680px; }
+.dfd-svg { max-height: 330px; min-width: 580px; user-select: none; touch-action: none; }
+.axis-svg { max-height: 115px; min-width: 520px; }
 .cfg-svg { min-width: 280px; max-height: 240px; }
 
 /* PERT 节点与边 */
@@ -82,9 +90,27 @@
 .pert-dur { font-size: 12px; font-weight: 700; fill: var(--ink); }
 .pert-tf { font-size: 11px; fill: var(--muted); }
 
+.pert-tables-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+.pert-grid-box {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+.pert-grid-title { font-size: 0.7813rem; font-weight: 700; margin-bottom: 6px; color: var(--ink); }
+.pert-grid-table { width: 100%; border-collapse: collapse; font-size: 0.7813rem; }
+.pert-grid-table th, .pert-grid-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.pert-grid-table tr.is-sel { background: var(--accent-soft); }
+
 .lab-inspector {
   margin-top: 8px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: 9px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -104,6 +130,8 @@
 
 /* DFD 与判定表/判定树 */
 .dfd-node { cursor: pointer; }
+.dfd-node.is-draggable { cursor: grab; }
+.dfd-node.is-draggable:active { cursor: grabbing; }
 .dfd-node rect, .dfd-node path { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; }
 .dfd-node text { font-size: 12px; font-weight: 600; fill: var(--ink); }
 .dfd-node.is-sel rect, .dfd-node.is-sel path { stroke: var(--accent); stroke-width: 2.6; }
@@ -111,9 +139,16 @@
 .dfd-edge { cursor: pointer; }
 .dfd-edge-line { stroke: var(--ink); stroke-width: 1.5; }
 .dfd-edge text { font-size: 11px; fill: var(--muted); }
+.dfd-edge.is-sel .dfd-edge-line { stroke: var(--accent); stroke-width: 2.4; }
 .dfd-edge.is-fault .dfd-edge-line { stroke: var(--bad); stroke-width: 2.5; }
 
 .dec-col-chk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.dec-cell-btn {
+  min-width: 34px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface-soft); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer;
+}
+.dec-cell-btn:hover { border-color: var(--accent); }
+.dec-cell-btn.is-dash { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
 .dtree-wrap { margin-top: 10px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-soft); }
 .dtree-list { display: flex; flex-direction: column; gap: 6px; }
 .dtree-branch { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.8125rem; }
@@ -135,10 +170,10 @@
 .cfg-node rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
 .cfg-node.is-hit rect { stroke: var(--ok); stroke-width: 2; }
 .cfg-node text { font-size: 11px; font-weight: 600; fill: var(--ink); }
-
 .md-lab-wrap { margin: 8px 0; }
 
-@media (max-width: 720px) {
+@media (max-width: 820px) {
+  .pert-tables-grid { grid-template-columns: 1fr; }
   .wb-lab-grid { grid-template-columns: 1fr; }
   .wb-metrics-grid { grid-template-columns: repeat(3, 1fr); }
 }

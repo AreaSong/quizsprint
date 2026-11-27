@@ -2,7 +2,7 @@ import { escapeHtml } from "../api.js";
 import { generateRandomPertGraph, gradePertAttempt, PERT_PRESETS, solvePertNetwork } from "./pert-core.js";
 
 const buildLegendSvg = () => `
-  <g transform="translate(18, 12)">
+  <g transform="translate(16, 12)">
     <text x="58" y="14" font-size="11" fill="var(--muted)">事件号</text>
     <line x1="78" y1="18" x2="96" y2="38" stroke="var(--muted)" stroke-width="1"/>
     <text x="168" y="14" font-size="11" fill="var(--muted)">最早时刻 E</text>
@@ -41,19 +41,16 @@ const buildEdgesSvg = (graph, sol, state) => {
     const isSel = state.selectedType === "edge" && state.selectedId === e.id;
     const eSol = sol.edgeMap[e.id];
     const uEdge = state.userEdges[e.id] || {};
-    const uCrit = state.userCrit.has(e.id);
-    const critOn = isQuiz ? uCrit : eSol.critical;
+    const critOn = isQuiz ? state.userCrit.has(e.id) : eSol.critical;
     const grade = state.grade?.edgeResults?.[e.id];
     const tfText = isQuiz ? (uEdge.tf === "" || uEdge.tf == null ? "?" : uEdge.tf) : eSol.tf;
-    const strokeCls = grade
-      ? (grade.tfOk && grade.critOk ? "is-ok" : "is-bad")
-      : (critOn ? "is-crit" : "");
+    const strokeCls = grade ? (grade.tfOk && grade.critOk ? "is-ok" : "is-bad") : (critOn ? "is-crit" : "");
     return `
       <g class="pert-edge ${strokeCls} ${isSel ? "is-sel" : ""}" data-pert-edge="${e.id}">
         <line class="pert-edge-hit" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />
         <line class="pert-edge-line ${e.dummy ? "is-dummy" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#${critOn ? "pert-arr-crit" : "pert-arr"})" />
         <text class="pert-dur" x="${mx + nx}" y="${my + ny - 4}" text-anchor="middle">${e.duration}</text>
-        <text class="pert-tf ${grade && !grade.tfOk ? "is-bad-txt" : ""}" x="${mx - nx}" y="${my - ny + 10}" text-anchor="middle">(${escapeHtml(String(tfText))})</text>
+        <text class="pert-tf ${grade && !grade.tfOk ? "is-bad-txt" : ""}" data-svg-tf="${e.id}" x="${mx - nx}" y="${my - ny + 10}" text-anchor="middle">(${escapeHtml(String(tfText))})</text>
       </g>
     `;
   }).join("");
@@ -67,60 +64,74 @@ const buildNodesSvg = (graph, sol, state) => graph.nodes.map((n) => {
   const grade = state.grade?.nodeResults?.[n.id];
   const eVal = isQuiz ? (uNode.earliest === "" || uNode.earliest == null ? "?" : uNode.earliest) : nSol.earliest;
   const lVal = isQuiz ? (uNode.latest === "" || uNode.latest == null ? "?" : uNode.latest) : nSol.latest;
-  const cls = [
-    "pert-node",
-    isSel ? "is-sel" : "",
-    !isQuiz && nSol.critical ? "is-crit" : "",
-    grade ? (grade.eOk && grade.lOk ? "is-ok" : "is-bad") : ""
-  ].filter(Boolean).join(" ");
+  const cls = ["pert-node", isSel ? "is-sel" : "", !isQuiz && nSol.critical ? "is-crit" : "", grade ? (grade.eOk && grade.lOk ? "is-ok" : "is-bad") : ""].filter(Boolean).join(" ");
   return `
     <g class="${cls}" transform="translate(${n.x}, ${n.y})" data-pert-node="${n.id}">
       <circle r="25" />
       <line x1="0" y1="-25" x2="0" y2="25" />
       <line x1="0" y1="0" x2="25" y2="0" />
       <text class="pert-nid" x="-11" y="5" text-anchor="middle">${n.id}</text>
-      <text class="pert-val ${grade && !grade.eOk ? "is-bad-txt" : ""}" x="12" y="-6" text-anchor="middle">${escapeHtml(String(eVal))}</text>
-      <text class="pert-val ${grade && !grade.lOk ? "is-bad-txt" : ""}" x="12" y="15" text-anchor="middle">${escapeHtml(String(lVal))}</text>
+      <text class="pert-val ${grade && !grade.eOk ? "is-bad-txt" : ""}" data-svg-e="${n.id}" x="12" y="-6" text-anchor="middle">${escapeHtml(String(eVal))}</text>
+      <text class="pert-val ${grade && !grade.lOk ? "is-bad-txt" : ""}" data-svg-l="${n.id}" x="12" y="15" text-anchor="middle">${escapeHtml(String(lVal))}</text>
     </g>
   `;
 }).join("");
 
-const buildInspectorHtml = (graph, sol, state) => {
-  if (state.selectedType === "node") {
-    const id = state.selectedId;
-    const u = state.userNodes[id] || {};
-    const deriv = sol.nodeDerivations[id];
-    const gr = state.grade?.nodeResults?.[id];
+const buildQuickTablesHtml = (graph, sol, state) => {
+  const isQuiz = state.mode === "quiz";
+  const nodeRows = graph.nodes.map((n) => {
+    const u = state.userNodes[n.id] || {};
+    const gr = state.grade?.nodeResults?.[n.id];
+    const eCls = gr ? (gr.eOk ? "is-ok" : "is-bad") : "";
+    const lCls = gr ? (gr.lOk ? "is-ok" : "is-bad") : "";
+    const sel = state.selectedType === "node" && state.selectedId === n.id ? "is-sel" : "";
     return `
-      <div class="lab-inspector-row">
-        <strong>事件节点 ${id}</strong>
-        ${state.mode === "quiz" ? `
-          <label>最早时刻 E(${id}) <input type="number" class="lab-num-in" id="pert-in-e" value="${escapeHtml(u.earliest ?? "")}" placeholder="?"></label>
-          <label>最迟时刻 L(${id}) <input type="number" class="lab-num-in" id="pert-in-l" value="${escapeHtml(u.latest ?? "")}" placeholder="?"></label>
-        ` : `<span class="badge ok">E(${id})=${sol.nodeMap[id].earliest} · L(${id})=${sol.nodeMap[id].latest}</span>`}
-        ${(state.showDeriv || state.mode === "sandbox") ? `<span class="muted-text">${escapeHtml(deriv.early)}；${escapeHtml(deriv.late)}</span>` : ""}
-        ${gr ? `<span class="badge ${gr.eOk && gr.lOk ? "ok" : "bad"}">${gr.eOk && gr.lOk ? "节点全对" : `参考：E=${gr.expectedE}, L=${gr.expectedL}`}</span>` : ""}
-      </div>
+      <tr class="${sel}" data-pert-node="${n.id}">
+        <td><strong>${n.id}</strong></td>
+        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${eCls}" data-q-node="${n.id}" data-field="earliest" value="${escapeHtml(u.earliest ?? "")}" placeholder="?">` : sol.nodeMap[n.id].earliest}</td>
+        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${lCls}" data-q-node="${n.id}" data-field="latest" value="${escapeHtml(u.latest ?? "")}" placeholder="?">` : sol.nodeMap[n.id].latest}</td>
+      </tr>
     `;
-  }
-  const e = graph.edges.find((x) => x.id === state.selectedId) || graph.edges[0];
-  const u = state.userEdges[e.id] || {};
-  const gr = state.grade?.edgeResults?.[e.id];
-  const isCrit = state.userCrit.has(e.id);
+  }).join("");
+
+  const edgeRows = graph.edges.map((e) => {
+    const u = state.userEdges[e.id] || {};
+    const gr = state.grade?.edgeResults?.[e.id];
+    const tfCls = gr ? (gr.tfOk ? "is-ok" : "is-bad") : "";
+    const sel = state.selectedType === "edge" && state.selectedId === e.id ? "is-sel" : "";
+    const eSol = sol.edgeMap[e.id];
+    return `
+      <tr class="${sel}" data-pert-edge="${e.id}">
+        <td>${e.from}→${e.to}${e.dummy ? "<span class=\"muted-text\">(虚)</span>" : ""}</td>
+        <td>${isQuiz ? e.duration : `<input type="number" min="0" max="99" class="pert-mini-in" data-s-dur="${e.id}" value="${e.duration}" ${e.dummy ? "disabled" : ""}>`}</td>
+        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${tfCls}" data-q-edge="${e.id}" value="${escapeHtml(u.tf ?? "")}" placeholder="?">` : eSol.tf}</td>
+        <td>${isQuiz ? `<input type="checkbox" data-q-crit="${e.id}" ${state.userCrit.has(e.id) ? "checked" : ""}>` : (eSol.critical ? "✓" : "·")}</td>
+      </tr>
+    `;
+  }).join("");
+
   return `
-    <div class="lab-inspector-row">
-      <strong>活动 ${e.from} → ${e.to}${e.dummy ? "（虚活动）" : ""}</strong>
-      ${state.mode === "quiz" ? `
-        <label>机动时间 TF <input type="number" class="lab-num-in" id="pert-in-tf" value="${escapeHtml(u.tf ?? "")}" placeholder="?"></label>
-        <button type="button" id="pert-toggle-crit" class="btn tiny ${isCrit ? "soft-active" : "ghost"}">${isCrit ? "✓ 已标为关键活动" : "标为关键活动"}</button>
-      ` : `
-        <label>持续时间 D <input type="number" min="0" max="99" class="lab-num-in" id="pert-in-dur" value="${e.duration}" ${e.dummy ? "disabled" : ""}></label>
-        <span class="badge ${sol.edgeMap[e.id].critical ? "warn" : ""}">TF=${sol.edgeMap[e.id].tf}${sol.edgeMap[e.id].critical ? " · 关键活动" : ""}</span>
-      `}
-      ${(state.showDeriv || state.mode === "sandbox") ? `<span class="muted-text">${escapeHtml(sol.edgeDerivations[e.id])}</span>` : ""}
-      ${gr ? `<span class="badge ${gr.tfOk && gr.critOk ? "ok" : "bad"}">${gr.tfOk && gr.critOk ? "活动全对" : `参考：TF=${gr.expectedTf}${gr.expectedCrit ? " · 关键活动" : ""}`}</span>` : ""}
+    <div class="pert-tables-grid">
+      <div class="pert-grid-box">
+        <div class="pert-grid-title">事件节点速填表（支持 Tab 连续填写 E / L）</div>
+        <table class="pert-grid-table"><thead><tr><th>事件</th><th>最早 E</th><th>最迟 L</th></tr></thead><tbody>${nodeRows}</tbody></table>
+      </div>
+      <div class="pert-grid-box">
+        <div class="pert-grid-title">${isQuiz ? "活动速填表（机动时间 TF 与关键路径勾选）" : "活动沙盒表（直接修改工期 D 实时推演）"}</div>
+        <table class="pert-grid-table"><thead><tr><th>活动</th><th>工期 D</th><th>机动 TF</th><th>关键</th></tr></thead><tbody>${edgeRows}</tbody></table>
+      </div>
     </div>
   `;
+};
+
+const buildDerivBanner = (graph, sol, state) => {
+  if (!state.showDeriv && state.mode === "quiz") return "";
+  if (state.selectedType === "node") {
+    const d = sol.nodeDerivations[state.selectedId];
+    return `<div class="lab-inspector"><div class="lab-inspector-row"><strong>节点 ${state.selectedId} 推导：</strong><span class="muted-text">${escapeHtml(d.early)}；${escapeHtml(d.late)}</span></div></div>`;
+  }
+  const e = graph.edges.find((x) => x.id === state.selectedId) || graph.edges[0];
+  return `<div class="lab-inspector"><div class="lab-inspector-row"><strong>活动 ${e.from}→${e.to} 推导：</strong><span class="muted-text">${escapeHtml(sol.edgeDerivations[e.id])}</span></div></div>`;
 };
 
 /** 挂载工程网络图（PERT / CPM）交互实验台 */
@@ -138,17 +149,10 @@ export const mountPertLab = (root) => {
     showDeriv: false
   };
 
-  const resetInputs = () => {
-    state.userNodes = {};
-    state.userEdges = {};
-    state.userCrit = new Set();
-    state.grade = null;
-    state.showDeriv = false;
-  };
+  const resetInputs = () => { state.userNodes = {}; state.userEdges = {}; state.userCrit = new Set(); state.grade = null; state.showDeriv = false; };
 
   const render = () => {
     const sol = solvePertNetwork(graph);
-    const critNodes = sol.criticalNodes.join(" → ");
     root.innerHTML = `
       <div class="lab-toolbar">
         <div class="row-gap">
@@ -170,10 +174,10 @@ export const mountPertLab = (root) => {
             <button type="button" id="pert-deriv-btn" class="btn ghost tiny">${state.showDeriv ? "隐藏推导" : "逐步推导"}</button>
             <button type="button" id="pert-fill-btn" class="btn ghost tiny">填入参考答案</button>
             <button type="button" id="pert-clear-btn" class="btn ghost tiny">清空重做</button>
-          ` : `<span class="badge ok">当前总工期：${sol.totalDuration}</span><span class="badge warn">关键事件：${escapeHtml(critNodes)}</span>`}
+          ` : `<span class="badge ok">当前总工期：${sol.totalDuration}</span><span class="badge warn">关键事件：${escapeHtml(sol.criticalNodes.join(" → "))}</span>`}
         </div>
       </div>
-      <p class="muted-text" style="margin:4px 0 8px;font-size:0.7813rem;">${escapeHtml(graph.desc)} · 点击任意圆圈节点或连线即可填写/修改。</p>
+      <p class="muted-text" style="margin:4px 0 6px;font-size:0.7813rem;">${escapeHtml(graph.desc)} · 点击图上节点/边会定位到下方对应格子，也可直接在速填表里用 Tab 连续填写。</p>
       <div class="lab-svg-wrap">
         <svg class="pert-svg" viewBox="0 0 830 340" role="img" aria-label="工程网络图">
           <defs>
@@ -185,34 +189,49 @@ export const mountPertLab = (root) => {
           ${buildNodesSvg(graph, sol, state)}
         </svg>
       </div>
-      <div class="lab-inspector">${buildInspectorHtml(graph, sol, state)}</div>
-      ${state.grade ? `<div class="lab-feedback ${state.grade.allCorrect ? "ok" : "warn"}">批改结果：<strong>${state.grade.score} / ${state.grade.total}</strong> 项正确${state.grade.allCorrect ? "（全部正确！总工期 = " + sol.totalDuration + "）" : "（红字节点/连线为错漏项，点击可看参考公式）"}</div>` : ""}
+      ${buildDerivBanner(graph, sol, state)}
+      ${state.grade ? `<div class="lab-feedback ${state.grade.allCorrect ? "ok" : "warn"}">批改结果：<strong>${state.grade.score} / ${state.grade.total}</strong> 项正确${state.grade.allCorrect ? `（全部正确！总工期 = ${sol.totalDuration}）` : "（红框格为错漏项，开启「逐步推导」点击节点即可查看计算公式）"}</div>` : ""}
+      ${buildQuickTablesHtml(graph, sol, state)}
     `;
     bindEvents(sol);
   };
 
   const bindEvents = (sol) => {
     root.querySelector("#pert-preset-sel")?.addEventListener("change", (e) => {
-      const id = e.target.value;
-      if (PERT_PRESETS[id]) { state.presetId = id; graph = structuredClone(PERT_PRESETS[id]); state.selectedType = "node"; state.selectedId = "1"; resetInputs(); render(); }
+      if (PERT_PRESETS[e.target.value]) { state.presetId = e.target.value; graph = structuredClone(PERT_PRESETS[e.target.value]); state.selectedType = "node"; state.selectedId = "1"; resetInputs(); render(); }
     });
-    root.querySelector("#pert-rand-btn")?.addEventListener("click", () => {
-      state.presetId = "random"; graph = generateRandomPertGraph(); state.selectedType = "node"; state.selectedId = "1"; resetInputs(); render();
-    });
+    root.querySelector("#pert-rand-btn")?.addEventListener("click", () => { state.presetId = "random"; graph = generateRandomPertGraph(); state.selectedType = "node"; state.selectedId = "1"; resetInputs(); render(); });
     root.querySelectorAll("[data-pert-mode]").forEach((b) => b.addEventListener("click", () => { state.mode = b.dataset.pertMode; render(); }));
-    root.querySelectorAll("[data-pert-node]").forEach((g) => g.addEventListener("click", () => { state.selectedType = "node"; state.selectedId = g.dataset.pertNode; render(); }));
-    root.querySelectorAll("[data-pert-edge]").forEach((g) => g.addEventListener("click", () => { state.selectedType = "edge"; state.selectedId = g.dataset.pertEdge; render(); }));
-    root.querySelector("#pert-in-e")?.addEventListener("input", (e) => { state.userNodes[state.selectedId] = { ...(state.userNodes[state.selectedId] || {}), earliest: e.target.value }; state.grade = null; });
-    root.querySelector("#pert-in-l")?.addEventListener("input", (e) => { state.userNodes[state.selectedId] = { ...(state.userNodes[state.selectedId] || {}), latest: e.target.value }; state.grade = null; });
-    root.querySelector("#pert-in-tf")?.addEventListener("input", (e) => { state.userEdges[state.selectedId] = { tf: e.target.value }; state.grade = null; });
-    root.querySelector("#pert-toggle-crit")?.addEventListener("click", () => {
-      if (state.userCrit.has(state.selectedId)) state.userCrit.delete(state.selectedId); else state.userCrit.add(state.selectedId);
+    root.querySelectorAll("g[data-pert-node]").forEach((g) => g.addEventListener("click", () => {
+      state.selectedType = "node"; state.selectedId = g.dataset.pertNode; render();
+      root.querySelector(`[data-q-node="${state.selectedId}"][data-field="earliest"]`)?.focus();
+    }));
+    root.querySelectorAll("g[data-pert-edge]").forEach((g) => g.addEventListener("click", () => {
+      state.selectedType = "edge"; state.selectedId = g.dataset.pertEdge; render();
+      (root.querySelector(`[data-q-edge="${state.selectedId}"]`) || root.querySelector(`[data-s-dur="${state.selectedId}"]`))?.focus();
+    }));
+    root.querySelectorAll("[data-q-node]").forEach((inp) => inp.addEventListener("input", () => {
+      const id = inp.dataset.qNode;
+      state.userNodes[id] = { ...(state.userNodes[id] || {}), [inp.dataset.field]: inp.value };
+      state.grade = null;
+      const svgTxt = root.querySelector(`[data-svg-${inp.dataset.field === "earliest" ? "e" : "l"}="${id}"]`);
+      if (svgTxt) svgTxt.textContent = inp.value === "" ? "?" : inp.value;
+    }));
+    root.querySelectorAll("[data-q-edge]").forEach((inp) => inp.addEventListener("input", () => {
+      const id = inp.dataset.qEdge;
+      state.userEdges[id] = { tf: inp.value };
+      state.grade = null;
+      const svgTxt = root.querySelector(`[data-svg-tf="${id}"]`);
+      if (svgTxt) svgTxt.textContent = `(${inp.value === "" ? "?" : inp.value})`;
+    }));
+    root.querySelectorAll("[data-q-crit]").forEach((chk) => chk.addEventListener("change", () => {
+      if (chk.checked) state.userCrit.add(chk.dataset.qCrit); else state.userCrit.delete(chk.dataset.qCrit);
       state.grade = null; render();
-    });
-    root.querySelector("#pert-in-dur")?.addEventListener("change", (e) => {
-      const edge = graph.edges.find((x) => x.id === state.selectedId);
-      if (edge && !edge.dummy) { edge.duration = Math.max(0, Math.min(99, Math.trunc(Number(e.target.value) || 0))); render(); }
-    });
+    }));
+    root.querySelectorAll("[data-s-dur]").forEach((inp) => inp.addEventListener("change", () => {
+      const edge = graph.edges.find((x) => x.id === inp.dataset.sDur);
+      if (edge && !edge.dummy) { edge.duration = Math.max(0, Math.min(99, Math.trunc(Number(inp.value) || 0))); render(); }
+    }));
     root.querySelector("#pert-grade-btn")?.addEventListener("click", () => { state.grade = gradePertAttempt(sol, { nodes: state.userNodes, edges: state.userEdges, criticalEdges: [...state.userCrit] }); render(); });
     root.querySelector("#pert-deriv-btn")?.addEventListener("click", () => { state.showDeriv = !state.showDeriv; render(); });
     root.querySelector("#pert-clear-btn")?.addEventListener("click", () => { resetInputs(); render(); });
