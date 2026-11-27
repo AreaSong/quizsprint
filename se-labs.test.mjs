@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { createExamStore, scoreQuestionAnswer } from "./lib/exam-store.mjs";
+import { createStore } from "./lib/store.mjs";
+import {
+  buildSolutionPayload,
+  describeLabSpec,
+  gradeInteractiveLab,
+  parseLabSpec
+} from "./public/js/labs/lab-grader.js";
 import {
   generateRandomPertGraph,
   gradePertAttempt,
@@ -116,4 +127,90 @@ test("Markdown ::lab 白名单语法仅渲染受信任实验按钮并拦截非�
   const badHtml = renderRichMarkdown("::lab[evil|危险按钮]");
   assert.doesNotMatch(badHtml, /js-open-se-lab/);
   assert.equal(stripInlineImages("请点击 ::lab[dfd|DFD实验] 练习"), "请点击 [实验] 练习");
+});
+
+test("type=9 交互实验题五大引擎统一判分、防作弊等价校验与标准解生成", () => {
+  const specs = [
+    { kind: "pert", preset: "fig92" },
+    { kind: "dfd", mode: "challenge", challengeId: "dfd_err_1" },
+    { kind: "dfd", mode: "build" },
+    { kind: "decision", caseId: "shipping" },
+    { kind: "blackbox", caseId: "score_0_100" },
+    { kind: "whitebox", target: "trap" },
+    { kind: "whitebox", target: "full" }
+  ];
+  for (const spec of specs) {
+    const solPayload = buildSolutionPayload(spec);
+    const pass = gradeInteractiveLab(spec, [JSON.stringify(solPayload)]);
+    assert.equal(pass.correct, true, `${spec.kind} 标准解应判满分: ${pass.summary}`);
+    assert.equal(pass.ratio, 1);
+  }
+
+  // 判定表防作弊：仅删掉几列但未覆盖全部原始真值时必须判错
+  const cheatDec = gradeInteractiveLab(
+    { kind: "decision", caseId: "score" },
+    { columns: [DECISION_CASES[1].columns[0]] }
+  );
+  assert.equal(cheatDec.correct, false);
+  assert.equal(cheatDec.ratio, 0);
+
+  // 判定表含重复/重叠列时不得判满分
+  const solDec = buildSolutionPayload({ kind: "decision", caseId: "score" });
+  const dupDec = gradeInteractiveLab(
+    { kind: "decision", caseId: "score" },
+    { columns: [...solDec.columns, { ...solDec.columns[0], id: "DUP" }] }
+  );
+  assert.equal(dupDec.correct, false);
+  assert.equal(dupDec.ratio, 0.5);
+
+  // DFD 排错含误选时不能满分
+  const dfdBad = gradeInteractiveLab(
+    { kind: "dfd", challengeId: "dfd_err_1" },
+    { mode: "challenge", foundIds: ["e2", "e4", "p2", "e1"] }
+  );
+  assert.equal(dfdBad.correct, false);
+
+  // parseLabSpec & describeLabSpec 兼容 Question 对象
+  const qSample = { type: "9", options: [JSON.stringify({ kind: "pert", preset: "fig92" })] };
+  assert.equal(parseLabSpec(qSample)?.preset, "fig92");
+  assert.match(describeLabSpec(qSample), /PERT\/CPM/);
+});
+
+test("store 与 exam-store 对 type=9 保留实验规格并支持考场脱敏与自动判分", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qs-type9-"));
+  try {
+    const store = createStore(tmpDir);
+    const examStore = createExamStore(tmpDir);
+    const { bank } = store.createBank({ name: "交互实验测试库", category: "practice" });
+    const specJson = JSON.stringify({ kind: "blackbox", caseId: "pwd_6_12" });
+    const res = store.upsertQuestion(bank.id, {
+      title: "请为密码长度 [6, 12] 设计边界值测试用例",
+      type: "9",
+      options: [specJson],
+      answers: ["覆盖 5, 6, 7, 9, 11, 12, 13"]
+    });
+    assert.equal(res.status, 200);
+
+    const loaded = store.loadBankQuestions(bank.id);
+    assert.equal(loaded.length, 1);
+    assert.equal(loaded[0].type, "9");
+    assert.deepEqual(loaded[0].options, [specJson]);
+
+    // 考场脱敏应保留 options（实验配置）并剥离 answers
+    const sanitized = examStore.sanitizeQuestionsForExam(loaded);
+    assert.equal("answers" in sanitized[0], false);
+    assert.deepEqual(sanitized[0].options, [specJson]);
+
+    // scoreQuestionAnswer & submitExam 自动判分
+    const fullSol = buildSolutionPayload({ kind: "blackbox", caseId: "pwd_6_12" });
+    assert.deepEqual(scoreQuestionAnswer(loaded[0], [JSON.stringify(fullSol)]), { correct: true, ratio: 1 });
+
+    const { exam } = examStore.createExam({ title: "实验机考", bankId: bank.id, bankName: bank.name, selectedQuestionIds: [loaded[0].id], questionScores: { [loaded[0].id]: 20 } }, loaded);
+    const subOk = examStore.submitExam(exam.id, { studentName: "张三", answers: { [loaded[0].id]: [JSON.stringify(fullSol)] } });
+    assert.equal(subOk.submission.manualGraded, true);
+    assert.equal(subOk.submission.score, 20);
+    assert.equal(subOk.submission.correctCount, 1);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

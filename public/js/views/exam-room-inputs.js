@@ -1,4 +1,5 @@
 import { escapeHtml, LETTERS, parseMatchPair } from "../api.js";
+import { mountExamRoomInteractiveLab } from "../labs/practice-lab-host.js";
 
 const CHOICE_TYPES = new Set(["0", "1", "3", "5"]);
 
@@ -54,6 +55,7 @@ export const renderExamQuestionInputHtml = (q, savedList = []) => {
   if (t === "4" || t === "6") {
     return `<textarea class="er-fill er-essay" rows="4" placeholder="请输入作答步骤 / 代码 / 简答内容..." style="width:100%;margin-top:8px;"></textarea>`;
   }
+  if (t === "9") return `<div class="er-lab-slot embedded-lab-slot" style="margin-top:8px;"></div>`;
   return `<input class="er-fill" type="text" placeholder="请输入答案（多空用 | 分隔）" style="width:100%;margin-top:8px;">`;
 };
 
@@ -85,6 +87,7 @@ export const bindAndRestoreExamInputs = (container, questions, answers, persistD
     if (!card) continue;
     const saved = Array.isArray(answers[q.id]) ? answers[q.id] : [];
     const t = String(q.type || "0");
+    if (t === "9") { mountExamRoomInteractiveLab({ card, q, savedList: saved, onChange: (arr) => { answers[q.id] = arr; persistDraft(); } }); continue; }
     if (t === "7") { bindOrderCard(card, q, answers, persistDraft); continue; }
     if (t === "8" && (q.matchLefts || []).length) {
       const pairMap = Object.fromEntries(saved.map(parseMatchPair).filter((p) => p.left).map((p) => [p.left, p.right]));

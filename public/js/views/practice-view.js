@@ -1,6 +1,7 @@
 import { escapeHtml, fetchBankQuestionsSafe, getBankPracticeState, getGlobalSettings, LETTERS, printQuestionsDocument, saveBankPracticeState, saveGlobalSettings, showToast } from "../api.js";
 import { openConfirmDialog } from "../dialog.js";
 import { mountAiChatWidget } from "./ai-chat-widget.js";
+import { mountPracticeInteractiveLab } from "../labs/practice-lab-host.js";
 import { bindPaneResizers, bindSwipeNav, createNotesController } from "./practice-notes.js";
 import { bindDragQuestionEvents, initMatchState, initOrderItems, isMatchType, isOrderType, isSubjectiveType } from "./practice-drag.js";
 import { mountExamSetup } from "./practice-exam.js";
@@ -36,7 +37,7 @@ export const renderPracticeView = async (container, ctx) => {
   let lastModeBarKey = ""; let lastSheetKey = ""; let lastBodyKey = ""; let lastNotesListVer = -1;
   let listVersion = 0; let sheetVersion = 0; let justAnsweredQid = null;
   const resetRenderCache = () => { shellMounted = false; lastRenderedQid = null; lastRenderedAsideTab = ""; lastModeBarKey = ""; lastSheetKey = ""; lastBodyKey = ""; };
-  const optionCache = new Map(); const orderDraftMap = new Map(); const matchDraftMap = new Map();
+  const optionCache = new Map(); const orderDraftMap = new Map(); const matchDraftMap = new Map(); const labDraftMap = new Map();
   const getOrderItems = (q) => { if (!orderDraftMap.has(q.id)) orderDraftMap.set(q.id, initOrderItems(q)); return orderDraftMap.get(q.id); };
   const getMatchState = (q) => { if (!matchDraftMap.has(q.id)) matchDraftMap.set(q.id, initMatchState(q)); return matchDraftMap.get(q.id); };
 
@@ -330,7 +331,7 @@ export const renderPracticeView = async (container, ctx) => {
     container.querySelector("#btn-eval-bad")?.addEventListener("click", () => markSubj(false, "已加入错题本"));
     container.querySelector("#btn-copy-ans")?.addEventListener("click", () => navigator.clipboard?.writeText((q.answers || []).join("\n")).then(() => showToast("已复制参考答案", "ok")).catch(() => {}));
     container.querySelector("#btn-redo-q")?.addEventListener("click", () => {
-      delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear(); orderDraftMap.delete(q.id); matchDraftMap.delete(q.id);
+      delete drillRecords[q.id]; delete bankState.records[q.id]; multiDraft.clear(); orderDraftMap.delete(q.id); matchDraftMap.delete(q.id); labDraftMap.delete(q.id);
       sheetVersion += 1; saveBankPracticeState(bank.id, bankState); renderMain();
     });
     container.querySelector("#btn-ai-explain")?.addEventListener("click", () => {
@@ -358,6 +359,7 @@ export const renderPracticeView = async (container, ctx) => {
         if (correct && settings.autoNext && !examSession && currentIndex < list.length - 1) { stopAutoNext(); autoNextTimer = setTimeout(goNext, 420); }
       }));
     }
+    mountPracticeInteractiveLab({ container, q, record: activeRecordsMap()[q.id], showAnswerNow, examSession, draftMap: labDraftMap, onDraft: (sel, ok) => recordAnswer(q, sel, ok), onSubmit: (sel, ok) => { justAnsweredQid = q.id; recordAnswer(q, sel, ok); renderMain(); } });
     if (showAnswerNow) return;
     bindDragQuestionEvents({
       container, q, getOrderItems: () => getOrderItems(q), setOrderItems: (arr) => orderDraftMap.set(q.id, arr),

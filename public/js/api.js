@@ -37,7 +37,8 @@ export const TYPE_LABELS = {
   "5": "不定项选择题",
   "6": "实操题",
   "7": "排序题",
-  "8": "配对题"
+  "8": "配对题",
+  "9": "交互实验题"
 };
 
 export const parseMatchPair = (raw) => {
@@ -394,7 +395,7 @@ export const printQuestionsDocument = (title, questions, withAnswers = true) => 
     <div style="margin-bottom:14px;page-break-inside:avoid;">
       <div style="font-weight:600;white-space:pre-wrap;">${idx + 1}. ${renderPrintMdImages(escapeHtml(q.title))}</div>
       ${(q.images || []).map((src) => `<img src="${escapeHtml(src)}" style="max-width:260px;max-height:160px;margin:6px 6px 4px 0;background:#fff;padding:4px;border:1px solid #ddd;border-radius:4px;">`).join("")}
-      ${(q.options || []).map((o, i) => `<div style="margin-left:16px;">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
+      ${String(q.type) === "9" ? "" : (q.options || []).map((o, i) => `<div style="margin-left:16px;">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
       ${withAnswers ? `<div style="color:#16a34a;margin-top:4px;white-space:pre-wrap;">答案：${escapeHtml((q.answers || []).join(" | "))}</div>` : ""}
       ${withAnswers && (q.answerImages || []).length ? `<div style="margin-top:6px;"><div style="font-size:12px;color:#666;">参考答案配图：</div>${q.answerImages.map((src) => `<img src="${escapeHtml(src)}" style="max-width:300px;max-height:200px;margin:4px 6px 4px 0;background:#fff;padding:4px;border:1px solid #ddd;border-radius:4px;">`).join("")}</div>` : ""}
       ${withAnswers && q.analysis ? `<div style="color:#555;font-size:13px;white-space:pre-wrap;margin-top:4px;">解析：${renderPrintMdImages(escapeHtml(q.analysis))}</div>` : ""}

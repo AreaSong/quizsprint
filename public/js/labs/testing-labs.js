@@ -1,4 +1,5 @@
 import { escapeHtml } from "../api.js";
+import { resolveBlackboxCase } from "./lab-grader.js";
 import { BLACKBOX_CASES, evaluateBlackboxInputs, evaluateWhiteboxCases, WHITEBOX_SPEC } from "./se-lab-core.js";
 
 const buildAxisSvg = (caseDef, report) => {
@@ -32,51 +33,74 @@ const buildAxisSvg = (caseDef, report) => {
 };
 
 /** 挂载黑盒测试（等价类划分 + 边界值分析）实验台 */
-export const mountBlackboxLab = (root) => {
-  let caseDef = BLACKBOX_CASES[0];
-  let inputStr = `${caseDef.min}, ${caseDef.max}`;
+export const mountBlackboxLab = (root, opts = {}) => {
+  const embedded = Boolean(opts.embedded);
+  const readOnly = Boolean(opts.readOnly);
+  let caseDef = embedded && opts.spec ? resolveBlackboxCase(opts.spec) : BLACKBOX_CASES[0];
+  let inputStr = typeof opts.initialPayload?.inputStr === "string"
+    ? opts.initialPayload.inputStr
+    : (Array.isArray(opts.initialPayload?.values) ? opts.initialPayload.values.join(", ") : (embedded ? "" : `${caseDef.min}, ${caseDef.max}`));
+
+  const getPayload = () => {
+    const values = inputStr.split(/[\s,，;；]+/).filter(Boolean);
+    return { inputStr, values };
+  };
+  const notify = () => opts.onChange?.(getPayload());
 
   const render = () => {
     const rawList = inputStr.split(/[\s,，;；]+/).filter(Boolean);
     const report = evaluateBlackboxInputs(caseDef, rawList);
+    const showHints = !embedded || readOnly;
     root.innerHTML = `
       <div class="lab-toolbar">
         <div class="row-gap">
-          <select id="bb-case-sel" class="lab-select">
-            ${BLACKBOX_CASES.map((c) => `<option value="${c.id}" ${c.id === caseDef.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
-          </select>
+          ${embedded ? "" : `
+            <select id="bb-case-sel" class="lab-select">
+              ${BLACKBOX_CASES.map((c) => `<option value="${c.id}" ${c.id === caseDef.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          `}
           <span class="badge ${report.eqPct === 100 ? "ok" : "warn"}">等价类 ${report.eqPct}%</span>
           <span class="badge ${report.boundaryPct === 100 ? "ok" : "warn"}">边界点 ${report.hitBoundaries.length}/6 (${report.boundaryPct}%)</span>
         </div>
-        <button type="button" id="bb-fill-btn" class="btn ghost tiny">填入完整边界用例</button>
+        ${embedded ? "" : '<button type="button" id="bb-fill-btn" class="btn ghost tiny">填入完整边界用例</button>'}
       </div>
-      <p class="muted-text" style="margin:4px 0 8px;font-size:0.7813rem;">${escapeHtml(caseDef.hint)}</p>
+      <p class="muted-text" style="margin:4px 0 8px;font-size:0.7813rem;">${escapeHtml(embedded && !readOnly ? `输入范围 [${caseDef.min}, ${caseDef.max}]${caseDef.unit || ""}，请设计覆盖全部有效/无效等价类及边界值的测试数据（逗号或空格分隔）。` : (caseDef.hint || ""))}</p>
       <div class="row-gap" style="margin-bottom:10px;">
-        <input id="bb-input" type="text" value="${escapeHtml(inputStr)}" placeholder="输入测试数值，用逗号或空格分隔..." style="flex:1;min-width:220px;">
+        <input id="bb-input" type="text" value="${escapeHtml(inputStr)}" placeholder="输入测试数值，用逗号或空格分隔..." style="flex:1;min-width:220px;" ${readOnly ? "readonly" : ""}>
       </div>
       <div class="lab-svg-wrap">${buildAxisSvg(caseDef, report)}</div>
       <div class="row-gap" style="margin-top:8px;">
         ${report.eqClasses.map((c) => `<span class="badge ${c.hit ? "ok" : ""}">${c.hit ? "✓" : "○"} ${escapeHtml(c.label)}</span>`).join("")}
       </div>
       <div class="lab-feedback ${report.missingBoundaries.length ? "warn" : "ok"}" style="margin-top:8px;">
-        ${report.missingBoundaries.length ? `还缺少关键边界点：${report.missingBoundaries.join("、")}` : "✓ 已覆盖全部有效/无效等价类与 6 个关键边界点！"}
+        ${report.missingBoundaries.length
+          ? (showHints ? `还缺少关键边界点：${report.missingBoundaries.join("、")}` : `已输入 ${report.values.length} 个数值（还差 ${report.missingBoundaries.length} 个边界点待补充）`)
+          : "✓ 已覆盖全部有效/无效等价类与 6 个关键边界点！"}
       </div>
     `;
     root.querySelector("#bb-case-sel")?.addEventListener("change", (e) => {
       caseDef = BLACKBOX_CASES.find((c) => c.id === e.target.value) || BLACKBOX_CASES[0];
       inputStr = `${caseDef.min}, ${caseDef.max}`;
-      render();
+      notify(); render();
     });
-    root.querySelector("#bb-input")?.addEventListener("input", (e) => { inputStr = e.target.value; render(); });
-    root.querySelector("#bb-fill-btn")?.addEventListener("click", () => {
-      const m = caseDef.min;
-      const x = caseDef.max;
-      inputStr = `${m - 1}, ${m}, ${m + 1}, ${Math.round((m + x) / 2)}, ${x - 1}, ${x}, ${x + 1}`;
-      render();
-    });
+    if (!readOnly) {
+      root.querySelector("#bb-input")?.addEventListener("input", (e) => {
+        const pos = e.target.selectionStart;
+        inputStr = e.target.value;
+        notify(); render();
+        const nextIn = root.querySelector("#bb-input");
+        if (nextIn) { nextIn.focus(); if (pos != null) nextIn.setSelectionRange(pos, pos); }
+      });
+      root.querySelector("#bb-fill-btn")?.addEventListener("click", () => {
+        const m = caseDef.min; const x = caseDef.max;
+        inputStr = `${m - 1}, ${m}, ${m + 1}, ${Math.round((m + x) / 2)}, ${x - 1}, ${x}, ${x + 1}`;
+        notify(); render();
+      });
+    }
   };
 
   render();
+  return { getPayload };
 };
 
 const METRIC_LABELS = [
@@ -119,17 +143,29 @@ const buildCfgSvg = (evalRes) => {
 };
 
 /** 挂载白盒测试（6 种逻辑覆盖 + 控制流图高亮）实验台 */
-export const mountWhiteboxLab = (root) => {
-  let cases = structuredClone(WHITEBOX_SPEC.trapCases);
+export const mountWhiteboxLab = (root, opts = {}) => {
+  const embedded = Boolean(opts.embedded);
+  const readOnly = Boolean(opts.readOnly);
+  const initCases = opts.initialPayload?.cases;
+  let cases = Array.isArray(initCases) ? structuredClone(initCases) : (embedded ? [{ A: 2, B: 0, X: 2 }] : structuredClone(WHITEBOX_SPEC.trapCases));
+  const getPayload = () => ({ cases: structuredClone(cases) });
+  const notify = () => opts.onChange?.(getPayload());
+  const disAttr = readOnly ? "disabled" : "";
 
   const render = () => {
     const evalRes = evaluateWhiteboxCases(cases);
+    const targetBadge = embedded
+      ? `<span class="badge">${opts.spec?.target === "trap" ? "目标：条件覆盖 100% 且判定覆盖 &lt; 100%" : "目标：6 项逻辑覆盖均达 100%"}</span>`
+      : "";
     root.innerHTML = `
       <div class="lab-toolbar">
         <div class="row-gap">
-          <button type="button" id="wb-trap-btn" class="btn soft-active tiny">经典陷阱：条件100% ≠ 判定100%</button>
-          <button type="button" id="wb-full-btn" class="btn ghost tiny">填入全覆盖用例</button>
-          <button type="button" id="wb-add-btn" class="btn ghost tiny">+ 添加用例</button>
+          ${targetBadge}
+          ${embedded ? "" : `
+            <button type="button" id="wb-trap-btn" class="btn soft-active tiny">经典陷阱：条件100% ≠ 判定100%</button>
+            <button type="button" id="wb-full-btn" class="btn ghost tiny">填入全覆盖用例</button>
+          `}
+          ${readOnly ? "" : '<button type="button" id="wb-add-btn" class="btn ghost tiny">+ 添加用例</button>'}
         </div>
       </div>
       <div class="wb-lab-grid">
@@ -139,11 +175,11 @@ export const mountWhiteboxLab = (root) => {
             ${cases.map((c, idx) => `
               <div class="row-gap wb-case-row">
                 <span class="badge">#${idx + 1}</span>
-                <label>A <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="A" value="${c.A}"></label>
-                <label>B <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="B" value="${c.B}"></label>
-                <label>X <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="X" value="${c.X}"></label>
+                <label>A <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="A" value="${c.A}" ${disAttr}></label>
+                <label>B <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="B" value="${c.B}" ${disAttr}></label>
+                <label>X <input type="number" class="lab-num-in" data-wb-idx="${idx}" data-wb-key="X" value="${c.X}" ${disAttr}></label>
                 <span class="muted-text" style="font-size:0.75rem;">路径 ${evalRes.traces[idx]?.pathKey || "-"} · 终值 X=${evalRes.traces[idx]?.outX ?? "-"}</span>
-                <button type="button" class="btn ghost tiny" data-wb-del="${idx}">删</button>
+                ${readOnly ? "" : `<button type="button" class="btn ghost tiny" data-wb-del="${idx}">删</button>`}
               </div>
             `).join("")}
           </div>
@@ -158,15 +194,18 @@ export const mountWhiteboxLab = (root) => {
         `).join("")}
       </div>
     `;
-    root.querySelector("#wb-trap-btn")?.addEventListener("click", () => { cases = structuredClone(WHITEBOX_SPEC.trapCases); render(); });
-    root.querySelector("#wb-full-btn")?.addEventListener("click", () => { cases = structuredClone(WHITEBOX_SPEC.fullCases); render(); });
-    root.querySelector("#wb-add-btn")?.addEventListener("click", () => { cases.push({ A: 2, B: 0, X: 4 }); render(); });
-    root.querySelectorAll("[data-wb-del]").forEach((b) => b.addEventListener("click", () => { cases.splice(Number(b.dataset.wbDel), 1); render(); }));
-    root.querySelectorAll("[data-wb-idx]").forEach((inp) => inp.addEventListener("change", () => {
-      cases[Number(inp.dataset.wbIdx)][inp.dataset.wbKey] = Number(inp.value);
-      render();
-    }));
+    root.querySelector("#wb-trap-btn")?.addEventListener("click", () => { cases = structuredClone(WHITEBOX_SPEC.trapCases); notify(); render(); });
+    root.querySelector("#wb-full-btn")?.addEventListener("click", () => { cases = structuredClone(WHITEBOX_SPEC.fullCases); notify(); render(); });
+    if (!readOnly) {
+      root.querySelector("#wb-add-btn")?.addEventListener("click", () => { cases.push({ A: 2, B: 0, X: 4 }); notify(); render(); });
+      root.querySelectorAll("[data-wb-del]").forEach((b) => b.addEventListener("click", () => { cases.splice(Number(b.dataset.wbDel), 1); notify(); render(); }));
+      root.querySelectorAll("[data-wb-idx]").forEach((inp) => inp.addEventListener("change", () => {
+        cases[Number(inp.dataset.wbIdx)][inp.dataset.wbKey] = Number(inp.value);
+        notify(); render();
+      }));
+    }
   };
 
   render();
+  return { getPayload };
 };

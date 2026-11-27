@@ -2,6 +2,7 @@ import { CLEAN_TOOLS, parseExamTextDetailed, SAMPLE_TEXT } from "../../exam-pars
 import { aiRequest, apiRequest, buildBankOptionsHtml, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { describeLabSpec } from "../labs/lab-grader.js";
 
 const CLEAN_EXTRA_ITEMS = [
   ["mergeTrailingAnswers", "文末答案回填"],
@@ -99,7 +100,9 @@ const buildPreviewHtml = ({ questions, errors }) => {
         <span class="muted-text" style="font-size:0.75rem;">#${idx + 1}</span>
       </div>
       <div style="font-weight:600;margin:6px 0;">${escapeHtml(q.title)}</div>
-      ${(q.options || []).map((o, i) => `<div class="muted-text">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
+      ${String(q.type) === "9"
+        ? `<div class="muted-text">🧪 交互实验：${escapeHtml(describeLabSpec(q))}</div>`
+        : (q.options || []).map((o, i) => `<div class="muted-text">${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
       <div style="margin-top:6px;color:var(--ok);font-weight:600;">答案：${escapeHtml((q.answers || []).join(" | "))}</div>
       ${q.analysis ? `<div class="muted-text" style="margin-top:4px;">解析：${escapeHtml(q.analysis)}</div>` : ""}
     </div>

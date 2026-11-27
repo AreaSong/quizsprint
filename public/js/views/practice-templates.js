@@ -44,6 +44,7 @@ export const isAnswerCorrect = (q, userSelected) => {
 };
 
 export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems, matchState }) => {
+  if (String(q.type) === "9") return '<div id="interactive-lab-slot" class="embedded-lab-slot"></div>';
   if (isOrderType(q)) return buildOrderQuestionHtml({ q, items: orderItems || [], record, showAnswerNow });
   if (isMatchType(q)) return buildMatchQuestionHtml({ q, state: matchState, record, showAnswerNow });
   const isChoice = ["0", "1", "3", "5"].includes(String(q.type));
@@ -113,7 +114,7 @@ const renderAnswerContentHtml = (q) => {
       return `<div><strong>${escapeHtml(p.left)}</strong> <span class="muted-text">→</span> <span style="color:var(--ok);font-weight:600;">${escapeHtml(p.right)}</span></div>`;
     }).join("")}</div></div>`;
   }
-  if (isSubjectiveType(q)) {
+  if (isSubjectiveType(q) || String(q.type) === "9") {
     return `
       <div style="margin-top:8px;">
         <div class="row-gap" style="justify-content:space-between;margin-bottom:4px;">
@@ -130,6 +131,7 @@ const renderAnswerContentHtml = (q) => {
 export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, examSession }) => {
   if (!showAnswerNow) return "";
   const isSubj = isSubjectiveType(q);
+  const isRichHeader = isSubj || isOrderType(q) || isMatchType(q) || String(q.type) === "9";
   const inWrong = !examSession && (bankState?.wrongIds || []).includes(q.id);
   const selfEvalHtml = isSubj && !examSession ? `
     <div class="flashcard-bar">
@@ -150,7 +152,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
     <div class="answer-box">
       <div class="row-gap" style="justify-content:space-between;">
         <div class="row-gap">
-          ${!isSubj && !isOrderType(q) && !isMatchType(q) ? renderAnswerContentHtml(q) : `<span style="font-weight:600;color:var(--ink);">答案与解析</span>`}
+          ${!isRichHeader ? renderAnswerContentHtml(q) : `<span style="font-weight:600;color:var(--ink);">答案与解析</span>`}
           ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
         </div>
         <div class="row-gap">
@@ -160,7 +162,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
           <button type="button" id="btn-ai-explain" class="btn ghost tiny">${iconSvg("sparkles", 13)}<span>AI 解析</span></button>
         </div>
       </div>
-      ${isSubj || isOrderType(q) || isMatchType(q) ? renderAnswerContentHtml(q) : ""}
+      ${isRichHeader ? renderAnswerContentHtml(q) : ""}
       ${ansImgsHtml}
       ${q.analysis ? `<div style="margin-top:10px;"><strong>解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(q.analysis)}</div></div>` : ""}
       ${selfEvalHtml}

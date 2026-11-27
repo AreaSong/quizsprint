@@ -16,12 +16,13 @@ const ANS_HINTS = {
   "5": "多个选项用 | 分隔，或填字母组合",
   "6": "支持多行与 Markdown 代码块（```）、表格（| col |），不拆 | 符号",
   "7": "每行一步，按【正确顺序】依次录入（刷题时自动打乱供拖动）",
-  "8": "每行一组配对，格式：左侧项目 => 右侧对应项（刷题时自动打乱右侧）"
+  "8": "每行一组配对，格式：左侧项目 => 右侧对应项（刷题时自动打乱右侧）",
+  "9": "填写参考解析/答案说明（支持多行与 Markdown），并在上方填写实验规格 JSON"
 };
 
 const buildEditorShellHtml = (item, imageCount, ansImgCount) => {
   const t = item?.type || "0";
-  const ansVal = (t === "4" || t === "6") ? (item?.answers || []).join("\n\n") : (t === "7" || t === "8" ? (item?.answers || []).join("\n") : (item?.answers || []).join(" | "));
+  const ansVal = (t === "4" || t === "6" || t === "9") ? (item?.answers || []).join("\n\n") : (t === "7" || t === "8" ? (item?.answers || []).join("\n") : (item?.answers || []).join(" | "));
   return `
   <div class="modal-card modal-shell" style="max-width:640px;">
     <div class="modal-head"><h3>${item ? "编辑试题" : "单题录入"}</h3><button id="ed-close" type="button" class="btn ghost tiny" data-modal-close>关闭</button></div>
@@ -40,7 +41,7 @@ const buildEditorShellHtml = (item, imageCount, ansImgCount) => {
           </div>
           <div id="ed-img-list" class="row-gap"></div>
         </div>
-        <label id="ed-opt-wrap"><span>选项（每行一个；填空/简答/实操/拖动题留空）</span><textarea id="ed-options" rows="3">${escapeHtml((item?.options || []).join("\n"))}</textarea></label>
+        <label id="ed-opt-wrap"><span id="ed-opt-label">选项（每行一个；填空/简答/实操/拖动题留空）</span><textarea id="ed-options" rows="3">${escapeHtml((item?.options || []).join("\n"))}</textarea></label>
         <label>
           <span id="ed-ans-label">答案</span>
           <textarea id="ed-answers" rows="4" required placeholder="输入标准答案...">${escapeHtml(ansVal)}</textarea>
@@ -67,7 +68,7 @@ const buildEditorShellHtml = (item, imageCount, ansImgCount) => {
 };
 
 const parseAnswersForType = (typeVal, rawAns) => {
-  if (typeVal === "4" || typeVal === "6") return rawAns.trim() ? [rawAns.trim()] : [];
+  if (typeVal === "4" || typeVal === "6" || typeVal === "9") return rawAns.trim() ? [rawAns.trim()] : [];
   if (typeVal === "7" || typeVal === "8") return rawAns.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   return rawAns.split("|").map((s) => s.trim()).filter(Boolean);
 };
@@ -118,6 +119,9 @@ export const openQuestionEditorModal = (modal, { bankId, item, onSaved }) => {
   const syncTypeHint = () => {
     const t = modal.querySelector("#ed-type").value;
     modal.querySelector("#ed-ans-hint").textContent = ANS_HINTS[t] || "";
+    modal.querySelector("#ed-opt-label").textContent = t === "9"
+      ? '交互实验配置 JSON（如 {"kind":"pert","preset":"fig92"}）'
+      : "选项（每行一个；填空/简答/实操/拖动题留空）";
     modal.querySelector("#ed-opt-wrap").hidden = ["2", "3", "4", "6", "7", "8"].includes(t);
   };
   createEditorImageUploader(modal, images, answerImages);
@@ -130,12 +134,23 @@ export const openQuestionEditorModal = (modal, { bankId, item, onSaved }) => {
   modal.querySelector("#ed-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const typeVal = modal.querySelector("#ed-type").value;
-    const isChoiceType = !["2", "3", "4", "6", "7", "8"].includes(typeVal);
+    const rawOptText = modal.querySelector("#ed-options").value.trim();
+    let options = [];
+    if (typeVal === "9") {
+      try {
+        const parsed = JSON.parse(rawOptText);
+        if (!parsed || typeof parsed !== "object" || !parsed.kind) throw new Error("missing kind");
+        options = [JSON.stringify(parsed)];
+      } catch {
+        return showToast("交互实验配置必须是包含 kind 的合法 JSON 对象", "bad");
+      }
+    } else if (!["2", "3", "4", "6", "7", "8"].includes(typeVal)) {
+      options = rawOptText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    }
     const payload = {
       type: typeVal, chapter: modal.querySelector("#ed-chapter").value.trim(),
       difficulty: modal.querySelector("#ed-diff").value, title: modal.querySelector("#ed-title").value.trim(),
-      images, answerImages,
-      options: isChoiceType ? modal.querySelector("#ed-options").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [],
+      images, answerImages, options,
       answers: parseAnswersForType(typeVal, modal.querySelector("#ed-answers").value),
       analysis: modal.querySelector("#ed-analysis").value.trim()
     };

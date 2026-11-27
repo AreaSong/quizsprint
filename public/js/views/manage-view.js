@@ -9,6 +9,7 @@ import {
 } from "../api.js";
 import { openConfirmDialog, openFormDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { describeLabSpec } from "../labs/lab-grader.js";
 import { renderRichMarkdown, stripInlineImages } from "../markdown.js";
 import { openQuestionEditorModal } from "./question-editor-modal.js";
 
@@ -100,7 +101,9 @@ const buildQuestionRowsHtml = (pageItems, selectedIds, isAdmin) => {
             ${inlineMatches.length ? `<div class="md-content" style="margin-bottom:6px;">${renderRichMarkdown(q.title)}</div>` : ""}
             ${(q.images || []).map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:220px;max-height:140px;margin:4px 6px 4px 0;">`).join("")}
             ${(q.answerImages || []).map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="参考答案配图" style="max-width:220px;max-height:140px;margin:4px 6px 4px 0;border-color:var(--ok);">`).join("")}
-            ${(q.options || []).map((o, i) => `<div>${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
+            ${q.type === "9"
+              ? `<div><strong>实验规格：</strong>${escapeHtml(describeLabSpec(q))}</div>`
+              : (q.options || []).map((o, i) => `<div>${LETTERS[i] || i + 1}. ${escapeHtml(o)}</div>`).join("")}
             ${q.analysis ? `<div style="margin-top:4px;"><strong>解析：</strong>${escapeHtml(q.analysis)}</div>` : ""}
           </div>
         </details>

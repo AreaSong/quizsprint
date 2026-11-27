@@ -1,6 +1,7 @@
 import { aiRequest, apiRequest, buildBankOptionsHtml, escapeHtml, LETTERS, showToast, TYPE_LABELS } from "../api.js";
 import { openConfirmDialog } from "../dialog.js";
 import { iconSvg } from "../icons.js";
+import { describeLabSpec } from "../labs/lab-grader.js";
 import { renderRichMarkdown, stripInlineImages } from "../markdown.js";
 import { openQuestionEditorModal } from "./question-editor-modal.js";
 
@@ -17,16 +18,18 @@ const renderSearchItemHtml = (item, q, idx, isAdmin = false) => {
   const ansSet = new Set(ansList);
   const ansText = ansList.join(" / ");
   const previewText = ansText.split(/\r?\n/)[0].replace(/[#`*]/g, "").trim();
-  const isRich = item.type === "4" || item.type === "6";
-  const optsHtml = (item.options || []).map((opt, oi) => {
-    const isCorrect = ansSet.has(String(opt).trim()) || ansSet.has(LETTERS[oi]);
-    return `
-      <div class="search-opt ${isCorrect ? "is-correct" : ""}">
-        <span>${LETTERS[oi] || oi + 1}. ${highlightText(opt, q)}</span>
-        ${isCorrect ? `<span>${iconSvg("check", 14)}</span>` : ""}
-      </div>
-    `;
-  }).join("");
+  const isRich = item.type === "4" || item.type === "6" || item.type === "9";
+  const optsHtml = item.type === "9"
+    ? `<div class="search-opt"><span>🧪 交互实验：${escapeHtml(describeLabSpec(item))}</span></div>`
+    : (item.options || []).map((opt, oi) => {
+      const isCorrect = ansSet.has(String(opt).trim()) || ansSet.has(LETTERS[oi]);
+      return `
+        <div class="search-opt ${isCorrect ? "is-correct" : ""}">
+          <span>${LETTERS[oi] || oi + 1}. ${highlightText(opt, q)}</span>
+          ${isCorrect ? `<span>${iconSvg("check", 14)}</span>` : ""}
+        </div>
+      `;
+    }).join("");
 
   const hasInlineImg = /!\[[^\]]*\]\(\/uploads\/[a-zA-Z0-9._-]+\)/.test(item.title || "");
   return `

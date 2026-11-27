@@ -1,4 +1,5 @@
 import { escapeHtml } from "../api.js";
+import { resolvePertGraph } from "./lab-grader.js";
 import { generateRandomPertGraph, gradePertAttempt, PERT_PRESETS, solvePertNetwork } from "./pert-core.js";
 
 const buildLegendSvg = () => `
@@ -77,8 +78,9 @@ const buildNodesSvg = (graph, sol, state) => graph.nodes.map((n) => {
   `;
 }).join("");
 
-const buildQuickTablesHtml = (graph, sol, state) => {
+const buildQuickTablesHtml = (graph, sol, state, readOnly = false) => {
   const isQuiz = state.mode === "quiz";
+  const disAttr = readOnly ? "disabled" : "";
   const nodeRows = graph.nodes.map((n) => {
     const u = state.userNodes[n.id] || {};
     const gr = state.grade?.nodeResults?.[n.id];
@@ -88,8 +90,8 @@ const buildQuickTablesHtml = (graph, sol, state) => {
     return `
       <tr class="${sel}" data-pert-node="${n.id}">
         <td><strong>${n.id}</strong></td>
-        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${eCls}" data-q-node="${n.id}" data-field="earliest" value="${escapeHtml(u.earliest ?? "")}" placeholder="?">` : sol.nodeMap[n.id].earliest}</td>
-        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${lCls}" data-q-node="${n.id}" data-field="latest" value="${escapeHtml(u.latest ?? "")}" placeholder="?">` : sol.nodeMap[n.id].latest}</td>
+        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${eCls}" data-q-node="${n.id}" data-field="earliest" value="${escapeHtml(u.earliest ?? "")}" placeholder="?" ${disAttr}>` : sol.nodeMap[n.id].earliest}</td>
+        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${lCls}" data-q-node="${n.id}" data-field="latest" value="${escapeHtml(u.latest ?? "")}" placeholder="?" ${disAttr}>` : sol.nodeMap[n.id].latest}</td>
       </tr>
     `;
   }).join("");
@@ -104,8 +106,8 @@ const buildQuickTablesHtml = (graph, sol, state) => {
       <tr class="${sel}" data-pert-edge="${e.id}">
         <td>${e.from}→${e.to}${e.dummy ? "<span class=\"muted-text\">(虚)</span>" : ""}</td>
         <td>${isQuiz ? e.duration : `<input type="number" min="0" max="99" class="pert-mini-in" data-s-dur="${e.id}" value="${e.duration}" ${e.dummy ? "disabled" : ""}>`}</td>
-        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${tfCls}" data-q-edge="${e.id}" value="${escapeHtml(u.tf ?? "")}" placeholder="?">` : eSol.tf}</td>
-        <td>${isQuiz ? `<input type="checkbox" data-q-crit="${e.id}" ${state.userCrit.has(e.id) ? "checked" : ""}>` : (eSol.critical ? "✓" : "·")}</td>
+        <td>${isQuiz ? `<input type="number" class="pert-mini-in ${tfCls}" data-q-edge="${e.id}" value="${escapeHtml(u.tf ?? "")}" placeholder="?" ${disAttr}>` : eSol.tf}</td>
+        <td>${isQuiz ? `<input type="checkbox" data-q-crit="${e.id}" ${state.userCrit.has(e.id) ? "checked" : ""} ${disAttr}>` : (eSol.critical ? "✓" : "·")}</td>
       </tr>
     `;
   }).join("");
@@ -135,20 +137,30 @@ const buildDerivBanner = (graph, sol, state) => {
 };
 
 /** 挂载工程网络图（PERT / CPM）交互实验台 */
-export const mountPertLab = (root) => {
-  let graph = structuredClone(PERT_PRESETS.fig92);
+export const mountPertLab = (root, opts = {}) => {
+  const embedded = Boolean(opts.embedded);
+  const readOnly = Boolean(opts.readOnly);
+  const initGraph = embedded && opts.spec ? resolvePertGraph(opts.spec) : PERT_PRESETS.fig92;
+  let graph = structuredClone(initGraph);
+  const initP = opts.initialPayload || {};
   const state = {
-    presetId: "fig92",
+    presetId: opts.spec?.preset || "fig92",
     mode: "quiz",
     selectedType: "node",
     selectedId: "1",
-    userNodes: { 1: { earliest: "0", latest: "" } },
-    userEdges: {},
-    userCrit: new Set(),
-    grade: null,
+    userNodes: structuredClone(initP.nodes || (embedded ? {} : { 1: { earliest: "0", latest: "" } })),
+    userEdges: structuredClone(initP.edges || {}),
+    userCrit: new Set(Array.isArray(initP.criticalEdges) ? initP.criticalEdges : []),
+    grade: opts.gradeResult?.detail || null,
     showDeriv: false
   };
 
+  const getPayload = () => ({
+    nodes: structuredClone(state.userNodes),
+    edges: structuredClone(state.userEdges),
+    criticalEdges: [...state.userCrit]
+  });
+  const notify = () => opts.onChange?.(getPayload());
   const resetInputs = () => { state.userNodes = {}; state.userEdges = {}; state.userCrit = new Set(); state.grade = null; state.showDeriv = false; };
 
   const render = () => {
@@ -156,28 +168,30 @@ export const mountPertLab = (root) => {
     root.innerHTML = `
       <div class="lab-toolbar">
         <div class="row-gap">
-          <select id="pert-preset-sel" class="lab-select">
-            <option value="fig92" ${state.presetId === "fig92" ? "selected" : ""}>教材图 9.2 原图（11节点）</option>
-            <option value="simple6" ${state.presetId === "simple6" ? "selected" : ""}>入门 6 节点图</option>
-            <option value="dual8" ${state.presetId === "dual8" ? "selected" : ""}>双关键路径 8 节点图</option>
-            ${state.presetId === "random" ? '<option value="random" selected>随机 7 节点练习图</option>' : ""}
-          </select>
-          <button type="button" id="pert-rand-btn" class="btn ghost tiny">随机出新图</button>
-          <div class="view-seg">
-            <button type="button" class="view-seg-btn ${state.mode === "quiz" ? "active" : ""}" data-pert-mode="quiz">手动填数批改</button>
-            <button type="button" class="view-seg-btn ${state.mode === "sandbox" ? "active" : ""}" data-pert-mode="sandbox">沙盒改工期</button>
-          </div>
+          ${embedded ? `<span class="muted-text" style="font-size:0.7813rem;">填写事件 E/L、活动机动 TF 并勾选关键路径（支持 Tab 连续输入）</span>` : `
+            <select id="pert-preset-sel" class="lab-select">
+              <option value="fig92" ${state.presetId === "fig92" ? "selected" : ""}>教材图 9.2 原图（11节点）</option>
+              <option value="simple6" ${state.presetId === "simple6" ? "selected" : ""}>入门 6 节点图</option>
+              <option value="dual8" ${state.presetId === "dual8" ? "selected" : ""}>双关键路径 8 节点图</option>
+              ${state.presetId === "random" ? '<option value="random" selected>随机 7 节点练习图</option>' : ""}
+            </select>
+            <button type="button" id="pert-rand-btn" class="btn ghost tiny">随机出新图</button>
+            <div class="view-seg">
+              <button type="button" class="view-seg-btn ${state.mode === "quiz" ? "active" : ""}" data-pert-mode="quiz">手动填数批改</button>
+              <button type="button" class="view-seg-btn ${state.mode === "sandbox" ? "active" : ""}" data-pert-mode="sandbox">沙盒改工期</button>
+            </div>
+          `}
         </div>
         <div class="row-gap">
           ${state.mode === "quiz" ? `
-            <button type="button" id="pert-grade-btn" class="btn primary tiny">自动批改</button>
-            <button type="button" id="pert-deriv-btn" class="btn ghost tiny">${state.showDeriv ? "隐藏推导" : "逐步推导"}</button>
-            <button type="button" id="pert-fill-btn" class="btn ghost tiny">填入参考答案</button>
-            <button type="button" id="pert-clear-btn" class="btn ghost tiny">清空重做</button>
+            ${embedded ? "" : '<button type="button" id="pert-grade-btn" class="btn primary tiny">自动批改</button>'}
+            ${(!embedded || readOnly) ? `<button type="button" id="pert-deriv-btn" class="btn ghost tiny">${state.showDeriv ? "隐藏推导" : "逐步推导"}</button>` : ""}
+            ${embedded ? "" : '<button type="button" id="pert-fill-btn" class="btn ghost tiny">填入参考答案</button>'}
+            ${readOnly ? "" : '<button type="button" id="pert-clear-btn" class="btn ghost tiny">清空重做</button>'}
           ` : `<span class="badge ok">当前总工期：${sol.totalDuration}</span><span class="badge warn">关键事件：${escapeHtml(sol.criticalNodes.join(" → "))}</span>`}
         </div>
       </div>
-      <p class="muted-text" style="margin:4px 0 6px;font-size:0.7813rem;">${escapeHtml(graph.desc)} · 点击图上节点/边会定位到下方对应格子，也可直接在速填表里用 Tab 连续填写。</p>
+      <p class="muted-text" style="margin:4px 0 6px;font-size:0.7813rem;">${escapeHtml(graph.desc || "")} · 点击图上节点/边会定位到下方对应格子，也可直接在速填表里用 Tab 连续填写。</p>
       <div class="lab-svg-wrap">
         <svg class="pert-svg" viewBox="0 0 830 340" role="img" aria-label="工程网络图">
           <defs>
@@ -190,8 +204,8 @@ export const mountPertLab = (root) => {
         </svg>
       </div>
       ${buildDerivBanner(graph, sol, state)}
-      ${state.grade ? `<div class="lab-feedback ${state.grade.allCorrect ? "ok" : "warn"}">批改结果：<strong>${state.grade.score} / ${state.grade.total}</strong> 项正确${state.grade.allCorrect ? `（全部正确！总工期 = ${sol.totalDuration}）` : "（红框格为错漏项，开启「逐步推导」点击节点即可查看计算公式）"}</div>` : ""}
-      ${buildQuickTablesHtml(graph, sol, state)}
+      ${state.grade ? `<div class="lab-feedback ${state.grade.allCorrect ? "ok" : "warn"}">批改结果：<strong>${state.grade.score} / ${state.grade.total}</strong> 项正确${state.grade.allCorrect ? `（全部正确！总工期 = ${sol.totalDuration}）` : "（红框格为错漏项，点击节点并开启「逐步推导」可查看公式）"}</div>` : ""}
+      ${buildQuickTablesHtml(graph, sol, state, readOnly)}
     `;
     bindEvents(sol);
   };
@@ -204,45 +218,51 @@ export const mountPertLab = (root) => {
     root.querySelectorAll("[data-pert-mode]").forEach((b) => b.addEventListener("click", () => { state.mode = b.dataset.pertMode; render(); }));
     root.querySelectorAll("g[data-pert-node]").forEach((g) => g.addEventListener("click", () => {
       state.selectedType = "node"; state.selectedId = g.dataset.pertNode; render();
-      root.querySelector(`[data-q-node="${state.selectedId}"][data-field="earliest"]`)?.focus();
+      if (!readOnly) root.querySelector(`[data-q-node="${state.selectedId}"][data-field="earliest"]`)?.focus();
     }));
     root.querySelectorAll("g[data-pert-edge]").forEach((g) => g.addEventListener("click", () => {
       state.selectedType = "edge"; state.selectedId = g.dataset.pertEdge; render();
-      (root.querySelector(`[data-q-edge="${state.selectedId}"]`) || root.querySelector(`[data-s-dur="${state.selectedId}"]`))?.focus();
+      if (!readOnly) (root.querySelector(`[data-q-edge="${state.selectedId}"]`) || root.querySelector(`[data-s-dur="${state.selectedId}"]`))?.focus();
     }));
-    root.querySelectorAll("[data-q-node]").forEach((inp) => inp.addEventListener("input", () => {
-      const id = inp.dataset.qNode;
-      state.userNodes[id] = { ...(state.userNodes[id] || {}), [inp.dataset.field]: inp.value };
-      state.grade = null;
-      const svgTxt = root.querySelector(`[data-svg-${inp.dataset.field === "earliest" ? "e" : "l"}="${id}"]`);
-      if (svgTxt) svgTxt.textContent = inp.value === "" ? "?" : inp.value;
-    }));
-    root.querySelectorAll("[data-q-edge]").forEach((inp) => inp.addEventListener("input", () => {
-      const id = inp.dataset.qEdge;
-      state.userEdges[id] = { tf: inp.value };
-      state.grade = null;
-      const svgTxt = root.querySelector(`[data-svg-tf="${id}"]`);
-      if (svgTxt) svgTxt.textContent = `(${inp.value === "" ? "?" : inp.value})`;
-    }));
-    root.querySelectorAll("[data-q-crit]").forEach((chk) => chk.addEventListener("change", () => {
-      if (chk.checked) state.userCrit.add(chk.dataset.qCrit); else state.userCrit.delete(chk.dataset.qCrit);
-      state.grade = null; render();
-    }));
-    root.querySelectorAll("[data-s-dur]").forEach((inp) => inp.addEventListener("change", () => {
-      const edge = graph.edges.find((x) => x.id === inp.dataset.sDur);
-      if (edge && !edge.dummy) { edge.duration = Math.max(0, Math.min(99, Math.trunc(Number(inp.value) || 0))); render(); }
-    }));
-    root.querySelector("#pert-grade-btn")?.addEventListener("click", () => { state.grade = gradePertAttempt(sol, { nodes: state.userNodes, edges: state.userEdges, criticalEdges: [...state.userCrit] }); render(); });
+    if (!readOnly) {
+      root.querySelectorAll("[data-q-node]").forEach((inp) => inp.addEventListener("input", () => {
+        const id = inp.dataset.qNode;
+        state.userNodes[id] = { ...(state.userNodes[id] || {}), [inp.dataset.field]: inp.value };
+        state.grade = null;
+        const svgTxt = root.querySelector(`[data-svg-${inp.dataset.field === "earliest" ? "e" : "l"}="${id}"]`);
+        if (svgTxt) svgTxt.textContent = inp.value === "" ? "?" : inp.value;
+        notify();
+      }));
+      root.querySelectorAll("[data-q-edge]").forEach((inp) => inp.addEventListener("input", () => {
+        const id = inp.dataset.qEdge;
+        state.userEdges[id] = { tf: inp.value };
+        state.grade = null;
+        const svgTxt = root.querySelector(`[data-svg-tf="${id}"]`);
+        if (svgTxt) svgTxt.textContent = `(${inp.value === "" ? "?" : inp.value})`;
+        notify();
+      }));
+      root.querySelectorAll("[data-q-crit]").forEach((chk) => chk.addEventListener("change", () => {
+        if (chk.checked) state.userCrit.add(chk.dataset.qCrit); else state.userCrit.delete(chk.dataset.qCrit);
+        state.grade = null; notify(); render();
+      }));
+      root.querySelectorAll("[data-s-dur]").forEach((inp) => inp.addEventListener("change", () => {
+        const edge = graph.edges.find((x) => x.id === inp.dataset.sDur);
+        if (edge && !edge.dummy) { edge.duration = Math.max(0, Math.min(99, Math.trunc(Number(inp.value) || 0))); render(); }
+      }));
+      root.querySelector("#pert-clear-btn")?.addEventListener("click", () => { resetInputs(); notify(); render(); });
+    }
+    root.querySelector("#pert-grade-btn")?.addEventListener("click", () => { state.grade = gradePertAttempt(sol, getPayload()); render(); });
     root.querySelector("#pert-deriv-btn")?.addEventListener("click", () => { state.showDeriv = !state.showDeriv; render(); });
-    root.querySelector("#pert-clear-btn")?.addEventListener("click", () => { resetInputs(); render(); });
     root.querySelector("#pert-fill-btn")?.addEventListener("click", () => {
       for (const [id, n] of Object.entries(sol.nodeMap)) state.userNodes[id] = { earliest: String(n.earliest), latest: String(n.latest) };
       for (const [id, e] of Object.entries(sol.edgeMap)) state.userEdges[id] = { tf: String(e.tf) };
       state.userCrit = new Set(sol.criticalEdges);
-      state.grade = gradePertAttempt(sol, { nodes: state.userNodes, edges: state.userEdges, criticalEdges: [...state.userCrit] });
+      state.grade = gradePertAttempt(sol, getPayload());
+      notify();
       render();
     });
   };
 
   render();
+  return { getPayload };
 };

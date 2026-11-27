@@ -16,6 +16,12 @@ export const exportSubmissionsCsv = (examTitle, subs) => {
   a.click();
 };
 
+const formatDetailAnswer = (d) => (
+  String(d.type) === "9"
+    ? (d.selected?.length ? `已提交交互实验作答（得分率 ${Math.round(Number(d.ratio || 0) * 100)}%）` : "未作答")
+    : ((d.selected || []).join(" | ") || "未作答")
+);
+
 const renderGradeDetail = (modal, { exam, sub, onBack, onSaved }) => {
   modal.innerHTML = `
     <div class="modal-card modal-shell" style="max-width:720px;">
@@ -36,7 +42,7 @@ const renderGradeDetail = (modal, { exam, sub, onBack, onSaved }) => {
                   得分 <input type="number" class="gr-score-inp" data-qid="${escapeHtml(d.questionId)}" min="0" max="${d.maxScore || 100}" step="0.5" value="${d.earnedScore ?? 0}" style="width:72px;"> / ${d.maxScore ?? "-"}
                 </label>
               </div>
-              <div class="muted-text" style="margin-top:4px;">考生作答：${escapeHtml((d.selected || []).join(" | ") || "未作答")}</div>
+              <div class="muted-text" style="margin-top:4px;">考生作答：${escapeHtml(formatDetailAnswer(d))}</div>
               <div style="color:var(--ok);font-size:0.8125rem;margin-top:2px;">参考答案：${escapeHtml((d.expected || []).join(" | "))}</div>
             </div>
           `).join("")}
@@ -159,7 +165,7 @@ const renderMySubmissionDetail = (modal, sub, onBack) => {
               <strong>${idx + 1}. ${escapeHtml(d.title)}</strong>
               <span><span class="badge">${d.earnedScore ?? 0} / ${d.maxScore ?? "-"} 分</span> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : (d.needManual ? "待阅卷" : "错误")}</span></span>
             </div>
-            <div class="muted-text" style="margin-top:4px;">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")}${d.answerHidden ? " · 暂不公开参考答案" : ` · 参考答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
+            <div class="muted-text" style="margin-top:4px;">你的答案：${escapeHtml(formatDetailAnswer(d))}${d.answerHidden ? " · 暂不公开参考答案" : ` · 参考答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
           </div>
         `).join("")}
       </div>

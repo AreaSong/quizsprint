@@ -327,7 +327,7 @@ const startExamSession = (container, exam, student, restoredDraft = null, onBack
                   <span><span class="badge">${d.earnedScore ?? 0} / ${d.maxScore ?? fallbackScore} 分</span> <span class="badge ${d.correct ? "ok" : "bad"}">${d.correct ? "正确" : (d.needManual ? "待阅卷" : "错误")}</span></span>
                 </div>
                 ${(d.images || []).length ? `<div class="row-gap" style="margin:6px 0;">${d.images.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:220px;max-height:140px;">`).join("")}</div>` : ""}
-                <div class="muted-text">你的答案：${escapeHtml((d.selected || []).join(" | ") || "未答")}${d.answerHidden ? " · 管理员设置交卷后暂不公开参考答案" : ` · 正确答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
+                <div class="muted-text">你的答案：${escapeHtml(String(d.type) === "9" ? (d.selected?.length ? `已提交交互实验作答（得分率 ${Math.round(Number(d.ratio || 0) * 100)}%）` : "未答") : ((d.selected || []).join(" | ") || "未答"))}${d.answerHidden ? " · 管理员设置交卷后暂不公开参考答案" : ` · 正确答案：${escapeHtml((d.expected || []).join(" | "))}`}</div>
               </div>
             `).join("")}
           </div>
