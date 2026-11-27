@@ -11,7 +11,7 @@ import {
 } from "./api.js";
 import { applyAppearance, cycleTheme, initAppearanceControl } from "./appearance.js";
 import { initGlobalModalDismiss, openFormDialog } from "./dialog.js";
-import { applySiteInfo, exportMyProgressJson, maybeOpenSetupWizard, triggerImportMyProgress } from "./site-shell.js";
+import { applySiteInfo, ensureForceChangePasswordModal, exportMyProgressJson, maybeOpenSetupWizard, triggerImportMyProgress } from "./site-shell.js";
 import { initSystemAndDisclaimerModals } from "./system-modal.js";
 import { renderBanksView } from "./views/banks-view.js";
 import { renderExamsView } from "./views/exams-view.js";
@@ -278,6 +278,10 @@ const renderCurrentView = () => {
   else if (appState.route === "import") renderImportView(appMain, ctx);
   else if (appState.route === "users") renderUsersView(appMain, ctx);
   else if (appState.route === "system") renderSystemView(appMain, ctx);
+  ensureForceChangePasswordModal(getCloudUser(), {
+    onChanged: async () => { await refreshAuth(); renderCurrentView(); },
+    onLogout: doLogout
+  });
 };
 
 const doLogout = async () => {

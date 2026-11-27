@@ -79,7 +79,7 @@ const buildUsersRowsHtml = (filtered, me) => {
     const isMe = Boolean(me && (u.id === me.id || u.username === me.username));
     return `
       <tr data-uid="${escapeHtml(u.id)}">
-        <td data-label="用户名"><code>${escapeHtml(u.username)}</code> ${isMe ? '<span class="badge">当前账号</span>' : ""} ${u.disabled ? '<span class="badge bad">已冻结</span>' : ""}</td>
+        <td data-label="用户名"><code>${escapeHtml(u.username)}</code> ${isMe ? '<span class="badge">当前账号</span>' : ""} ${u.mustChangePassword ? '<span class="badge warn">待改密</span>' : ""} ${u.disabled ? '<span class="badge bad">已冻结</span>' : ""}</td>
         <td data-label="昵称">${escapeHtml(u.nickname)}</td>
         <td data-label="角色"><span class="badge ${u.role === "admin" ? "warn" : ""}">${u.role === "admin" ? "管理员" : "学员"}</span></td>
         <td data-label="最近登录">${buildLastLoginHtml(u.lastLogin)}</td>
@@ -198,7 +198,8 @@ export const renderUsersView = async (container, ctx) => {
         { name: "username", label: "用户名", required: true, placeholder: "2-24位中英文、数字或下划线" },
         { name: "nickname", label: "昵称（可选）", placeholder: "排行榜展示昵称" },
         { name: "password", label: "初始密码（至少 4 位）", type: "password", required: true },
-        { name: "role", label: "账号角色", type: "select", value: "student", options: [{ value: "student", label: "学员" }, { value: "admin", label: "管理员" }] }
+        { name: "role", label: "账号角色", type: "select", value: "student", options: [{ value: "student", label: "学员" }, { value: "admin", label: "管理员" }] },
+        { name: "mustChangePassword", label: "首次登录要求修改初始密码", type: "checkbox", value: true }
       ],
       submitText: "创建账号"
     });

@@ -36,6 +36,10 @@ const buildBatchFormHtml = () => `
             </select>
           </label>
         </div>
+        <label class="row-gap" style="flex-direction:row;cursor:pointer;font-weight:500;">
+          <input id="bu-must-change" type="checkbox" checked>
+          <span>新账号首次登录时要求修改初始密码</span>
+        </label>
       </div>
       <div class="modal-foot">
         <button type="button" class="btn ghost" data-modal-close>取消</button>
@@ -158,7 +162,8 @@ const bindBatchModalEvents = (backdrop, close, onCreated) => {
           endNum: endEl.value.trim(),
           passwordMode: modeEl.value,
           fixedPassword: backdrop.querySelector("#bu-fixed-pwd").value,
-          role: backdrop.querySelector("#bu-role").value
+          role: backdrop.querySelector("#bu-role").value,
+          mustChangePassword: Boolean(backdrop.querySelector("#bu-must-change")?.checked)
         })
       });
       showToast(`批量生成完成：新增 ${res.createdCount} 个`, "ok");

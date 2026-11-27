@@ -138,7 +138,7 @@ export const openFormDialog = ({ title = "输入信息", description = "", field
 let modalDismissInited = false;
 
 const closeBackdrop = (backdrop) => {
-  if (!backdrop) return;
+  if (!backdrop || backdrop.dataset.lockDismiss === "1") return;
   if (typeof backdrop._closeModal === "function") {
     backdrop._closeModal();
     return;

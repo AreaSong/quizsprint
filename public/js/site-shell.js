@@ -164,3 +164,59 @@ export const triggerImportMyProgress = (onDone) => {
   };
   input.click();
 };
+
+const buildForceChangePwdHtml = (user) => `
+  <div class="modal-card modal-shell" style="max-width:440px;">
+    <div class="modal-head">
+      <h3>首次登录请修改初始密码</h3>
+      <span class="badge warn">必须完成</span>
+    </div>
+    <form id="fcp-form" class="stack-form">
+      <div class="modal-body stack-form">
+        <p class="muted-text" style="margin:0;line-height:1.6;">账号 <strong>${escapeHtml(user.username)}</strong> 当前仍在使用管理员分配的初始密码，请立即修改为您的个人密码后继续使用。</p>
+        <label><span>当前初始密码</span><input id="fcp-old" type="password" required autocomplete="current-password" placeholder="请输入管理员分配的初始密码"></label>
+        <label><span>新密码（至少 4 位，不能与初始密码相同）</span><input id="fcp-new" type="password" required autocomplete="new-password" placeholder="请输入新的个人密码"></label>
+        <label><span>确认新密码</span><input id="fcp-confirm" type="password" required autocomplete="new-password" placeholder="再次输入新密码"></label>
+      </div>
+      <div class="modal-foot" style="justify-content:space-between;">
+        <button type="button" id="fcp-logout" class="btn ghost tiny">退出登录</button>
+        <button type="submit" id="fcp-submit" class="btn primary">确认修改并继续</button>
+      </div>
+    </form>
+  </div>
+`;
+
+/** 管理员新建账号首次登录时强制弹出不可跳过的改密弹窗 */
+export const ensureForceChangePasswordModal = (user, { onChanged, onLogout } = {}) => {
+  const modal = document.getElementById("site-modal");
+  if (!modal || !user?.mustChangePassword) return false;
+  if (!modal.hidden && modal.querySelector("#fcp-form")) return true;
+  modal.dataset.lockDismiss = "1";
+  modal.hidden = false;
+  modal.innerHTML = buildForceChangePwdHtml(user);
+
+  const cleanup = () => { delete modal.dataset.lockDismiss; modal.hidden = true; modal.innerHTML = ""; };
+  modal.querySelector("#fcp-logout").addEventListener("click", async () => { cleanup(); await onLogout?.(); });
+  modal.querySelector("#fcp-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const oldPassword = modal.querySelector("#fcp-old").value;
+    const newPassword = modal.querySelector("#fcp-new").value;
+    const confirmPwd = modal.querySelector("#fcp-confirm").value;
+    if (newPassword.length < 4) return showToast("新密码至少需要 4 位", "bad");
+    if (newPassword !== confirmPwd) return showToast("两次输入的新密码不一致", "bad");
+    if (newPassword === oldPassword) return showToast("新密码不能与初始密码相同", "bad");
+    const submitBtn = modal.querySelector("#fcp-submit");
+    submitBtn.disabled = true;
+    try {
+      await apiRequest("/api/user/password", { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) });
+      cleanup();
+      showToast("密码修改成功，欢迎使用！", "ok");
+      await onChanged?.();
+    } catch (err) {
+      submitBtn.disabled = false;
+      showToast(err.message, "bad");
+    }
+  });
+  modal.querySelector("#fcp-old").focus();
+  return true;
+};

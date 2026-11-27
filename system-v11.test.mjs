@@ -394,7 +394,20 @@ test("v1.1 连续编号批量创建用户账号与考试时间通知信息看板
     });
     assert.equal(r4.status, 200);
     assert.deepEqual(r4.payload.accounts.map((a) => a.username), ["20240715B0101", "20240715B0102", "20240715B0103"]);
-    assert.equal((await call("POST", "/api/user/login", { username: "20240715B0101", password: "20240715B0101" })).status, 200);
+    const firstLogin = await call("POST", "/api/user/login", { username: "20240715B0101", password: "20240715B0101" });
+    assert.equal(firstLogin.status, 200);
+    assert.equal(firstLogin.payload.user.mustChangePassword, true);
+    const firstCookie = String(firstLogin.headers["Set-Cookie"] || "").split(";")[0];
+    assert.equal((await call("GET", "/api/user/me", {}, { cookie: firstCookie })).payload.user.mustChangePassword, true);
+    assert.equal((await call("POST", "/api/user/password", { oldPassword: "20240715B0101", newPassword: "20240715B0101" }, { cookie: firstCookie })).status, 400);
+    const changed = await call("POST", "/api/user/password", { oldPassword: "20240715B0101", newPassword: "newpass123" }, { cookie: firstCookie });
+    assert.equal(changed.status, 200);
+    const newCookie = String(changed.headers["Set-Cookie"] || "").split(";")[0];
+    assert.equal((await call("GET", "/api/user/me", {}, { cookie: newCookie })).payload.user.mustChangePassword, false);
+
+    const singleAdminCreate = await call("POST", "/api/admin/users", { username: "20240715B0199", password: "init123" });
+    assert.equal(singleAdminCreate.status, 200);
+    assert.equal(singleAdminCreate.payload.user.mustChangePassword, true);
 
     const r5 = await call("POST", "/api/admin/users/batch", {
       startNum: "202407150101",
