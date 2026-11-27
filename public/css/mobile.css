@@ -140,18 +140,33 @@
   .sheet-grid { grid-template-columns: repeat(6, 1fr); gap: 6px; max-height: 44dvh; }
   .sheet-cell { height: 32px; }
 
-  /* 题库中心：考试安排卡片、练习模式与分类栏支持手机单行左右滑动 */
+  /* 题库中心：考试卡片、科目条、科目概览、工作台与列表工具栏移动端深度适配 */
   .exam-notice-board { padding: 7px 10px; gap: 6px; }
   .exam-notice-grid {
     display: flex; flex-wrap: nowrap; gap: 7px;
     overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
   }
   .exam-notice-grid::-webkit-scrollbar { display: none; }
-  .exam-notice-card { flex: 0 0 248px; }
-  .exam-notice-sub { flex-wrap: wrap; row-gap: 2px; }
+  .exam-notice-card { flex: 0 0 276px; max-width: 84vw; }
+  .exam-notice-sub { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .exam-notice-time { white-space: normal; word-break: break-word; }
+  .exam-notice-note { max-width: 100%; }
   .exam-notice-edit-btn { min-height: 24px !important; padding: 2px 8px !important; }
-  .bank-workbench { padding: 11px 12px; gap: 9px; }
+
+  .subject-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 10px; }
+  .subject-bar-left { display: contents; }
+  .subject-term-sel { order: 1; }
+  #btn-new-subject { order: 2; margin-left: auto; }
+  .subject-pills { order: 3; flex: 1 1 100%; width: 100%; }
+
+  .subject-overview { flex-direction: column; align-items: stretch; gap: 8px; padding: 9px 11px; }
+  .subject-overview > .row-gap:last-child { width: 100%; justify-content: space-between; gap: 6px; }
+  .subject-ov-prog { flex: 1; min-width: 90px; }
+
+  .bank-workbench { padding: 10px 11px; gap: 8px; }
+  .wb-sub { -webkit-line-clamp: 1; }
   .wb-stats-row { padding: 6px 8px; gap: 8px; }
+  .wb-primary-cta { height: 32px; }
   .mode-tiles {
     display: flex !important; flex-wrap: nowrap; gap: 7px; margin-top: 2px; padding-bottom: 2px;
     overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none;
@@ -167,8 +182,11 @@
   }
   .cat-filter-row::-webkit-scrollbar { display: none; }
   .cat-filter-row .btn { flex: 0 0 auto; }
-  .section-head > .row-gap { width: 100%; flex-wrap: wrap; }
-  .banks-filter-input { flex: 1 1 180px; min-width: 0; width: auto; }
+  .section-head { gap: 7px; }
+  .section-head > .row-gap:first-child { flex-direction: column; align-items: stretch; gap: 6px; width: 100%; }
+  .section-head > .row-gap:last-child { width: 100%; gap: 5px; flex-wrap: wrap; }
+  .banks-filter-input { flex: 1 1 100%; min-width: 0; width: 100%; }
+  .section-head .view-seg, .section-head .btn.tiny { flex: none; }
 
   /* 学习统计页（#stats）：紧凑 KPI 与趋势图、首屏展示更多排行榜 */
   .kpi-grid { gap: 8px; }
