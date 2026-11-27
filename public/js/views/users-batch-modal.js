@@ -1,20 +1,23 @@
 import { apiRequest, escapeHtml, showToast } from "../api.js";
 
+const NAME_RE = /^[a-zA-Z0-9_\u4e00-\u9fa5]{2,24}$/;
+const SEQ_RE = /^(.*?)(\d+)$/;
+
 const buildBatchFormHtml = () => `
   <div class="modal-card modal-shell" style="max-width:520px;">
     <div class="modal-head">
-      <h3>连续编号批量生成账号</h3>
+      <h3>批量生成账号（支持学号 / 连续编号）</h3>
       <button type="button" class="btn ghost tiny" data-modal-close>取消</button>
     </div>
     <form id="bu-form" class="stack-form">
       <div class="modal-body stack-form">
         <div class="row-gap">
-          <label style="flex:1;min-width:120px;"><span>用户名前缀（可选）</span><input id="bu-prefix" placeholder="留空如 100，或填 stu" maxlength="16"></label>
-          <label style="flex:1;min-width:120px;"><span>昵称前缀（可选）</span><input id="bu-nick-prefix" placeholder="如：学员（留空同用户名）" maxlength="16"></label>
+          <label style="flex:1;min-width:140px;"><span>起始学号 / 编号</span><input id="bu-start" value="100" required placeholder="如 20240715B0101 或 100"></label>
+          <label style="flex:1;min-width:140px;"><span>结束学号 / 编号（单次 ≤ 300）</span><input id="bu-end" value="199" required placeholder="如 20240715B0140 或 199"></label>
         </div>
         <div class="row-gap">
-          <label style="flex:1;min-width:120px;"><span>起始编号（支持前导零）</span><input id="bu-start" value="100" required placeholder="如 100 或 001"></label>
-          <label style="flex:1;min-width:120px;"><span>结束编号（单次 ≤ 300）</span><input id="bu-end" value="199" required placeholder="如 199"></label>
+          <label style="flex:1;min-width:120px;"><span>统一前缀（可选）</span><input id="bu-prefix" placeholder="若起止已含学号前缀请留空" maxlength="16"></label>
+          <label style="flex:1;min-width:120px;"><span>昵称前缀（可选）</span><input id="bu-nick-prefix" placeholder="如：学员（留空同账号）" maxlength="16"></label>
         </div>
         <div id="bu-preview" class="muted-text" style="font-size:0.7813rem;padding:8px 10px;border-radius:8px;background:var(--surface-soft);border:1px solid var(--line);"></div>
         <div class="row-gap">
@@ -43,15 +46,24 @@ const buildBatchFormHtml = () => `
 `;
 
 const formatPreview = (prefix, startStr, endStr) => {
-  if (!/^\d{1,8}$/.test(startStr) || !/^\d{1,8}$/.test(endStr)) return { err: "请输入非负整数起止编号" };
-  const start = Number(startStr);
-  const end = Number(endStr);
-  if (start > end) return { err: "起始编号不能大于结束编号" };
-  const count = end - start + 1;
+  const sMatch = startStr.match(SEQ_RE);
+  const eMatch = endStr.match(SEQ_RE);
+  if (!sMatch || !eMatch) return { err: "起止学号/编号必须以连续数字结尾（如 20240715B0101 或 100）" };
+  const [, sHead, sDigits] = sMatch;
+  const [, eHead, eDigits] = eMatch;
+  if (sHead !== eHead) return { err: "起止学号/编号的前缀部分不一致，请仅让末尾数字递增" };
+  const start = BigInt(sDigits);
+  const end = BigInt(eDigits);
+  if (start > end) return { err: "起始学号/编号不能大于结束学号/编号" };
+  const count = Number(end - start + 1n);
   if (count > 300) return { err: `共 ${count} 个，超出单次最多 300 个限制` };
-  const pad = startStr.length > 1 && startStr.startsWith("0") ? startStr.length : 0;
-  const fmt = (n) => `${prefix}${pad ? String(n).padStart(pad, "0") : String(n)}`;
-  const samples = count <= 4 ? Array.from({ length: count }, (_, idx) => fmt(start + idx)) : [fmt(start), fmt(start + 1), fmt(start + 2), "…", fmt(end)];
+  const pad = sDigits.length > 1 && sDigits.startsWith("0") ? sDigits.length : 0;
+  const fullPrefix = `${prefix}${sHead}`;
+  const fmt = (n) => `${fullPrefix}${pad ? String(n).padStart(pad, "0") : String(n)}`;
+  if (!NAME_RE.test(fmt(start)) || !NAME_RE.test(fmt(end))) {
+    return { err: "生成的用户名需为 2-24 位中英文、数字或下划线" };
+  }
+  const samples = count <= 4 ? Array.from({ length: count }, (_, idx) => fmt(start + BigInt(idx))) : [fmt(start), fmt(start + 1n), fmt(start + 2n), "…", fmt(end)];
   return { count, text: `预计生成 ${count} 个账号：${samples.join("、")}` };
 };
 

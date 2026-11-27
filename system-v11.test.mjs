@@ -385,6 +385,25 @@ test("v1.1 连续编号批量创建用户账号与考试时间通知信息看板
     assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "100", endNum: "400", fixedPassword: "pass123" })).status, 400);
     assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "200", endNum: "100", fixedPassword: "pass123" })).status, 400);
     assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "100", endNum: "105", passwordMode: "same" })).status, 400);
+    assert.equal((await call("POST", "/api/admin/users/batch", { startNum: "20240715A0101", endNum: "20240715B0105", fixedPassword: "pass123" })).status, 400);
+
+    const r4 = await call("POST", "/api/admin/users/batch", {
+      startNum: "20240715B0101",
+      endNum: "20240715B0103",
+      passwordMode: "same"
+    });
+    assert.equal(r4.status, 200);
+    assert.deepEqual(r4.payload.accounts.map((a) => a.username), ["20240715B0101", "20240715B0102", "20240715B0103"]);
+    assert.equal((await call("POST", "/api/user/login", { username: "20240715B0101", password: "20240715B0101" })).status, 200);
+
+    const r5 = await call("POST", "/api/admin/users/batch", {
+      startNum: "202407150101",
+      endNum: "202407150102",
+      passwordMode: "fixed",
+      fixedPassword: "pass123"
+    });
+    assert.equal(r5.status, 200);
+    assert.deepEqual(r5.payload.accounts.map((a) => a.username), ["202407150101", "202407150102"]);
 
     const siteRes = await call("PUT", "/api/admin/site", {
       examNotices: [
