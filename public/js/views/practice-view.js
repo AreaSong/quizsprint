@@ -438,13 +438,13 @@ export const renderPracticeView = async (container, ctx) => {
     const rec = activeRecords[q.id];
     const isJustAns = justAnsweredQid === q.id; justAnsweredQid = null;
     const inWrong = !examSession && (bankState.wrongIds || []).includes(q.id);
-    const bodyKey = [q.id, listVersion, showAnswerNow, inWrong, settings.shuffleOptions, Boolean(examSession), Boolean(examSession?.submitted), Boolean(rec), rec?.correct, (rec?.selected || []).join("\0"), isJustAns].join("|");
+    const bodyKey = [q.id, listVersion, showAnswerNow, Boolean(settings.reciteMode), inWrong, settings.shuffleOptions, Boolean(examSession), Boolean(examSession?.submitted), Boolean(rec), rec?.correct, (rec?.selected || []).join("\0"), isJustAns].join("|");
     if (!forceBody && wasMounted && bodyKey === lastBodyKey) return false;
     lastBodyKey = bodyKey;
     const qBodyEl = container.querySelector("#p-q-body");
     const prevQScroll = !qChanged && wasMounted ? qBodyEl.scrollTop : 0;
     qBodyEl.classList.toggle("is-just-answered", isJustAns);
-    qBodyEl.innerHTML = buildQuestionBodyHtml({ q, opts, record: rec, multiDraft, showAnswerNow, bankState, examSession, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null });
+    qBodyEl.innerHTML = buildQuestionBodyHtml({ q, opts, record: rec, multiDraft, showAnswerNow, bankState, examSession, reciteMode: settings.reciteMode, bankCategory: bank.category, orderItems: isOrderType(q) ? getOrderItems(q) : [], matchState: isMatchType(q) ? getMatchState(q) : null });
     qBodyEl.scrollTop = qChanged ? 0 : prevQScroll; if (qChanged) container.scrollTop = 0;
     if (isJustAns && window.innerWidth <= 960) requestAnimationFrame(() => qBodyEl.querySelector(".answer-box")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     return true;

@@ -115,25 +115,19 @@ const renderAnswerContentHtml = (q) => {
     }).join("")}</div></div>`;
   }
   if (isSubjectiveType(q) || String(q.type) === "9") {
-    return `
-      <div style="margin-top:8px;">
-        <div class="row-gap" style="justify-content:space-between;margin-bottom:4px;">
-          <strong style="color:var(--ok);">参考答案：</strong>
-          <button type="button" id="btn-copy-ans" class="btn ghost tiny">${iconSvg("copy", 12)}<span>复制答案</span></button>
-        </div>
-        <div class="md-content">${renderRichMarkdown(ansList.join("\n\n"))}</div>
-      </div>
-    `;
+    return `<div class="md-content recite-ans-body">${renderRichMarkdown(ansList.join("\n\n"))}</div>`;
   }
   return `<strong style="color:var(--ok);">正确答案：${escapeHtml(ansList.join(" | "))}</strong>`;
 };
 
-export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, examSession }) => {
+export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, examSession, reciteMode = false, bankCategory = "" }) => {
   if (!showAnswerNow) return "";
   const isSubj = isSubjectiveType(q);
-  const isRichHeader = isSubj || isOrderType(q) || isMatchType(q) || String(q.type) === "9";
+  const isRichAns = isSubj || String(q.type) === "9";
+  const isRichHeader = isRichAns || isOrderType(q) || isMatchType(q);
+  const isReciteClean = Boolean(reciteMode && !examSession);
   const inWrong = !examSession && (bankState?.wrongIds || []).includes(q.id);
-  const selfEvalHtml = isSubj && !examSession ? `
+  const selfEvalHtml = isSubj && !examSession && !isReciteClean ? `
     <div class="flashcard-bar">
       <span class="muted-text" style="font-size:0.7813rem;">掌握程度自评：</span>
       <button type="button" id="btn-eval-master" class="btn ok tiny">✓ 秒会 · 斩题</button>
@@ -141,6 +135,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
       <button type="button" id="btn-eval-bad" class="btn ghost-danger tiny">✕ 不会 · 入错题本</button>
     </div>
   ` : "";
+  const richLabel = isRichAns ? (bankCategory === "notes" ? "重点内容" : "参考答案") : "答案与解析";
   const ansImgsHtml = (q.answerImages || []).length ? `
     <div class="answer-img-wrap">
       <div class="muted-text" style="font-size:0.75rem;font-weight:600;margin-bottom:6px;">参考答案配图（流程图 / 运行结果）</div>
@@ -149,13 +144,14 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
   ` : "";
 
   return `
-    <div class="answer-box">
+    <div class="answer-box${isReciteClean ? " is-recite-clean" : ""}">
       <div class="row-gap" style="justify-content:space-between;">
         <div class="row-gap">
-          ${!isRichHeader ? renderAnswerContentHtml(q) : `<span style="font-weight:600;color:var(--ink);">答案与解析</span>`}
+          ${!isRichHeader ? renderAnswerContentHtml(q) : `<strong style="color:var(--ok);">${richLabel}</strong>`}
           ${record ? `<span class="badge ${record.correct ? "ok" : "bad"}">${record.correct ? "回答正确" : "回答错误"}</span>` : ""}
         </div>
         <div class="row-gap">
+          ${isRichAns ? `<button type="button" id="btn-copy-ans" class="btn ghost tiny">${iconSvg("copy", 12)}<span>复制</span></button>` : ""}
           ${inWrong ? '<button type="button" id="btn-rm-wrong" class="btn ghost tiny">移出错题本</button>' : ""}
           ${record && !examSession ? `<button type="button" id="btn-redo-q" class="btn ghost tiny">${iconSvg("rotate", 13)}<span>重做</span></button>` : ""}
           ${examSession ? "" : `<button type="button" id="btn-jump-note" class="btn ghost tiny">${iconSvg("note", 13)}<span>记笔记</span></button>`}
@@ -164,7 +160,7 @@ export const buildAnswerPanelHtml = ({ q, record, showAnswerNow, bankState, exam
       </div>
       ${isRichHeader ? renderAnswerContentHtml(q) : ""}
       ${ansImgsHtml}
-      ${q.analysis ? `<div style="margin-top:10px;"><strong>解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(q.analysis)}</div></div>` : ""}
+      ${q.analysis ? `<div class="recite-analysis-sep"><strong class="recite-analysis-label">解析：</strong><div class="md-content" style="margin-top:4px;">${renderRichMarkdown(q.analysis)}</div></div>` : ""}
       ${selfEvalHtml}
     </div>
   `;
@@ -432,11 +428,11 @@ export const buildQuestionHeadHtml = ({ q, currentIndex, total, examSession, sco
   </div>
 `;
 
-export const buildQuestionBodyHtml = ({ q, opts, record, multiDraft, showAnswerNow, bankState, examSession, orderItems, matchState }) => `
+export const buildQuestionBodyHtml = ({ q, opts, record, multiDraft, showAnswerNow, bankState, examSession, orderItems, matchState, reciteMode = false, bankCategory = "" }) => `
   <div class="q-title md-content">${renderRichMarkdown(q.title)}</div>
   ${(q.images || []).length ? `<div class="row-gap" style="margin-bottom:12px;">${q.images.map((src) => `<img class="q-img" src="${escapeHtml(src)}" alt="试题配图" style="max-width:100%;max-height:300px;">`).join("")}</div>` : ""}
   ${buildInteractionHtml({ q, opts, record, multiDraft, showAnswerNow, examSession, orderItems, matchState })}
-  ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession })}
+  ${buildAnswerPanelHtml({ q, record, showAnswerNow, bankState, examSession, reciteMode, bankCategory })}
 `;
 
 export const buildPracticeLoginHtml = () => `

@@ -161,3 +161,13 @@ body.is-resizing, body.is-resizing * { cursor: col-resize !important; user-selec
   line-height: 1;
   vertical-align: middle;
 }
+
+/* 背题模式纯净答案卡片 & 更新日志精确时间戳 */
+.answer-box.is-recite-clean { padding: 14px 16px; }
+.recite-ans-body { margin-top: 10px; padding-left: 12px; border-left: 3px solid var(--ok); font-size: 0.9375rem; line-height: 1.75; }
+.recite-analysis-sep { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 0.8125rem; }
+.recite-analysis-label { color: var(--muted); font-weight: 600; }
+.cl-chip { display: inline-flex; align-items: center; gap: 6px; }
+.cl-chip-time { font-size: 0.6875rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cl-float-pop-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cl-float-pop-time { font-size: 0.7188rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }

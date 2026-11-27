@@ -14,7 +14,7 @@ import { createStore } from "./lib/store.mjs";
 import { checkRemoteUpdate, getSystemStatus, pullRemoteUpdate } from "./lib/system-updater.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
 import { CLEAN_TOOLS, parseExamTextDetailed } from "./public/exam-parse.js";
-import { buildInteractionHtml, isAnswerCorrect, isMultiChoice } from "./public/js/views/practice-templates.js";
+import { buildAnswerPanelHtml, buildInteractionHtml, isAnswerCorrect, isMultiChoice } from "./public/js/views/practice-templates.js";
 
 test("parseExamTextDetailed 支持括号答案、选项内标正确答案与解析提取", () => {
   const raw = `单选题
@@ -163,6 +163,32 @@ test("不定项选择与简答题前端模板及计分逻辑正常", () => {
     examSession: null
   });
   assert.ok(selfEssayHtml.includes("我的思路"));
+
+  const recitePanel = buildAnswerPanelHtml({
+    q: { id: "q4", type: "4", options: [], answers: ["统一战线、武装斗争、党的建设"], analysis: "课本重点" },
+    record: null,
+    showAnswerNow: true,
+    bankState: {},
+    examSession: null,
+    reciteMode: true,
+    bankCategory: "notes"
+  });
+  assert.ok(recitePanel.includes("is-recite-clean"));
+  assert.ok(recitePanel.includes("重点内容"));
+  assert.equal(recitePanel.includes("掌握程度自评"), false);
+  assert.equal(recitePanel.includes("答案与解析"), false);
+
+  const normalSelfEvalPanel = buildAnswerPanelHtml({
+    q: { id: "q4", type: "4", options: [], answers: ["统一战线、武装斗争、党的建设"] },
+    record: { selected: ["（已查看参考答案）"], correct: true },
+    showAnswerNow: true,
+    bankState: {},
+    examSession: null,
+    reciteMode: false,
+    bankCategory: "theory"
+  });
+  assert.ok(normalSelfEvalPanel.includes("掌握程度自评"));
+  assert.ok(normalSelfEvalPanel.includes("参考答案"));
 });
 
 test("油猴兼容接口：本机归档、模糊搜题、探测与公网写保护正常", async () => {

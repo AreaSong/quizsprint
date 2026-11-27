@@ -24,12 +24,17 @@ const parseChangelogSections = (rawText) => {
       lastItem.details.push(line.slice(4).trim());
     } else if (line.startsWith("- ")) {
       const body = line.slice(2).trim();
-      const boldMatch = body.match(/^\*\*([^*]+)\*\*\s*(?:[：:]\s*(.*))?$/);
-      const rawTitle = boldMatch ? boldMatch[1].trim() : (body.length > 22 ? `${body.slice(0, 22)}…` : body);
+      const timeMatch = body.match(/\[(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?)\]/);
+      const time = timeMatch ? timeMatch[1].replace("T", " ") : "";
+      const cleanBody = timeMatch
+        ? body.replace(timeMatch[0], "").replace(/\s{2,}/g, " ").replace(/^\*\*\s+/, "**").replace(/\s+\*\*/g, "**").trim()
+        : body;
+      const boldMatch = cleanBody.match(/^\*\*([^*]+)\*\*\s*(?:[：:]\s*(.*))?$/);
+      const rawTitle = boldMatch ? boldMatch[1].trim() : (cleanBody.length > 22 ? `${cleanBody.slice(0, 22)}…` : cleanBody);
       const title = rawTitle.replace(/`/g, "");
-      const firstDetail = boldMatch ? (boldMatch[2] || "").trim() : (body.length > 22 ? body : "");
+      const firstDetail = boldMatch ? (boldMatch[2] || "").trim() : (cleanBody.length > 22 ? cleanBody : "");
       const idx = items.length;
-      lastItem = { idx, title, details: firstDetail ? [firstDetail] : [] };
+      lastItem = { idx, title, time, details: firstDetail ? [firstDetail] : [] };
       items.push(lastItem);
       ensureGroup().items.push(lastItem);
     }
@@ -56,7 +61,7 @@ const renderChangelogHtml = (info) => {
                 <div>
                   <div class="cl-group-title">${escapeHtml(g.title)}</div>
                   <div class="cl-chip-row">
-                    ${g.items.map((it) => `<button type="button" class="cl-chip" data-cl-idx="${it.idx}">${escapeHtml(it.title)}</button>`).join("")}
+                    ${g.items.map((it) => `<button type="button" class="cl-chip" data-cl-idx="${it.idx}"><span>${escapeHtml(it.title)}</span>${it.time ? `<span class="cl-chip-time">${escapeHtml(it.time.slice(5))}</span>` : ""}</button>`).join("")}
                   </div>
                 </div>
               `).join("")}
@@ -154,7 +159,7 @@ const bindChangelogPopover = (modal, items) => {
     const detailHtml = item.details.length
       ? `<ul class="cl-float-pop-list">${item.details.map((d) => `<li>${formatInlineMarkdown(d)}</li>`).join("")}</ul>`
       : '<div class="muted-text">已完成对应功能迭代。</div>';
-    pop.innerHTML = `<div class="cl-float-pop-title">${escapeHtml(item.title)}</div>${detailHtml}`;
+    pop.innerHTML = `<div class="cl-float-pop-title"><span>${escapeHtml(item.title)}</span>${item.time ? `<span class="cl-float-pop-time">${escapeHtml(item.time)}</span>` : ""}</div>${detailHtml}`;
     pop.style.visibility = "hidden";
     pop.hidden = false;
     const rect = chip.getBoundingClientRect();
