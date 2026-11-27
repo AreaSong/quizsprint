@@ -81,13 +81,13 @@ export const buildInteractionHtml = ({ q, opts, record, multiDraft, showAnswerNo
   const recitePrefill = Boolean(showAnswerNow && !examSession && !val);
   const prefillStyle = recitePrefill ? "border-color:var(--ok);background:var(--ok-soft,rgba(22,163,74,.06));" : "";
   if (isSubjectiveType(q)) {
-    const essayVal = recitePrefill ? (q.answers || []).join("\n\n") : val;
+    if (showAnswerNow && !examSession && (!val || val === "（已查看参考答案）")) return "";
     const ph = q.type === "6"
       ? "先在心中过一遍实现步骤 / 伪代码 / 算法矩阵（也可以在这里默写关键词），再点下方翻看参考答案..."
       : "在此输入你的简答作答思路（提交后可对照参考答案自评）...";
     return `
       <div class="stack-form">
-        <textarea id="essay-input" rows="5" placeholder="${ph}" style="${prefillStyle}" ${showAnswerNow && !examSession ? "readonly" : ""}>${escapeHtml(essayVal)}</textarea>
+        <textarea id="essay-input" rows="5" placeholder="${ph}" ${showAnswerNow && !examSession ? "readonly" : ""}>${escapeHtml(val)}</textarea>
         ${!showAnswerNow ? `<div><button type="button" id="btn-confirm-essay" class="btn primary">翻看参考答案 (Space)</button></div>` : ""}
       </div>
     `;

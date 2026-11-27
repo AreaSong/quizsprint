@@ -143,6 +143,26 @@ test("不定项选择与简答题前端模板及计分逻辑正常", () => {
     examSession: null
   });
   assert.ok(essayHtml.includes("essay-input"));
+
+  const reciteEssayHtml = buildInteractionHtml({
+    q: { id: "q4", type: "4", options: [], answers: ["#### 核心要点"] },
+    opts: [],
+    record: null,
+    multiDraft: new Set(),
+    showAnswerNow: true,
+    examSession: null
+  });
+  assert.equal(reciteEssayHtml, "");
+
+  const selfEssayHtml = buildInteractionHtml({
+    q: { id: "q4", type: "4", options: [], answers: ["#### 核心要点"] },
+    opts: [],
+    record: { selected: ["我的思路"] },
+    multiDraft: new Set(),
+    showAnswerNow: true,
+    examSession: null
+  });
+  assert.ok(selfEssayHtml.includes("我的思路"));
 });
 
 test("油猴兼容接口：本机归档、模糊搜题、探测与公网写保护正常", async () => {
