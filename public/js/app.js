@@ -12,7 +12,7 @@ import {
 import { applyAppearance, cycleTheme, initAppearanceControl } from "./appearance.js";
 import { initGlobalModalDismiss, openFormDialog } from "./dialog.js";
 import { applySiteInfo, ensureForceChangePasswordModal, exportMyProgressJson, maybeOpenSetupWizard, triggerImportMyProgress } from "./site-shell.js";
-import { initSystemAndDisclaimerModals } from "./system-modal.js";
+import { createAdminUpdateWatcher, initSystemAndDisclaimerModals } from "./system-modal.js";
 import { renderBanksView } from "./views/banks-view.js";
 import { renderExamsView } from "./views/exams-view.js";
 import { renderImportView } from "./views/import-view.js";
@@ -62,6 +62,7 @@ let userRegisterMode = false;
 let requireAdminPrompt = false;
 let userDropdownOpen = false;
 let focusBackTarget = "banks";
+const updateWatcher = createAdminUpdateWatcher();
 
 const syncBankSelection = () => {
   if (!appState.banks.length) {
@@ -183,6 +184,7 @@ const refreshAuth = async () => {
     setCloudSession(null, null);
   }
   renderUserMenu();
+  updateWatcher.sync(appState.isAdmin);
 };
 
 const openAccountModal = (requireAdmin = false) => {
@@ -260,7 +262,8 @@ const renderCurrentView = () => {
     onSiteUpdated: (cfg) => { if (appState.siteInfo) { appState.siteInfo.siteConfig = cfg; applySiteInfo(appState.siteInfo); } },
     onRequireLogin: () => openAccountModal(true),
     onRequireUserLogin: () => openAccountModal(false),
-    onToggleTheme: cycleTheme
+    onToggleTheme: cycleTheme,
+    onUpdateProbeChanged: (probe) => updateWatcher.setProbe(probe)
   };
 
   if (appState.siteInfo?.siteConfig?.allowGuestBrowse === false && !ctx.isLoggedIn) {

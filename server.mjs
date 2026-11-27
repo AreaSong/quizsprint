@@ -30,6 +30,7 @@ import { handleLegacyRoutes } from "./lib/legacy-routes.mjs";
 import { recordLoginEvent } from "./lib/login-log.mjs";
 import { getSiteConfig } from "./lib/site-store.mjs";
 import { createStore } from "./lib/store.mjs";
+import { startUpdateProbeScheduler } from "./lib/system-updater.mjs";
 import { createUserStore } from "./lib/user-store.mjs";
 import { APP_VERSION, DB_SCHEMA_VERSION } from "./lib/version.mjs";
 
@@ -442,8 +443,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 const stopAutoBackup = startAutoBackupScheduler(DATA_DIR, UPLOADS_DIR);
+const stopUpdateProbe = startUpdateProbeScheduler(__dirname);
 registerGracefulShutdown(server, () => {
   stopAutoBackup();
+  stopUpdateProbe();
   closeAllDbs();
 });
 

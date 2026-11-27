@@ -27,7 +27,17 @@ const buildCurlExample = (key) =>
   -H "X-API-Key: ${key || ""}" \\
   -d '{"title":"示例题目","type":"0","options":["A1","B1"],"answers":["A1"]}'`;
 
+const formatProbeStatus = (probe) => {
+  if (!probe) return "";
+  if (!probe.enabled) return "自动更新探测已关闭（可通过 AUTO_UPDATE_CHECK_MINUTES 开启）";
+  const timeText = probe.checkedAt ? probe.checkedAt.slice(11, 19) : "尚未完成首轮探测";
+  const errText = probe.error ? ` · 上次探测异常：${probe.error}` : "";
+  return `后台每 ${probe.intervalMinutes || 3} 分钟自动探测 · 上次探测 ${timeText}${errText}`;
+};
+
 const buildUpdateCardHtml = (st, checkResult, outputText) => {
+  const probe = st.updateProbe || checkResult?.updateProbe;
+  const behind = Number(checkResult?.behindCount || 0);
   const commitsHtml = checkResult?.commits?.length
     ? `<div class="commit-list">${checkResult.commits.map((c) => `
         <div class="row-gap" style="justify-content:space-between;">
@@ -40,7 +50,10 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
     <section class="panel sys-card">
       <div class="row-gap" style="justify-content:space-between;">
         <h3 style="margin:0;font-size:1rem;">在线更新与服务管理</h3>
-        <span class="badge ${st.dirty ? "bad" : "ok"}">${st.isGitRepo ? (st.dirty ? `未提交修改 (${st.dirtyFiles.length})` : "工作区干净") : "静态模式"}</span>
+        <div class="row-gap" style="gap:6px;">
+          ${behind > 0 ? `<span class="badge warn">发现 ${behind} 个新提交</span>` : ""}
+          <span class="badge ${st.dirty ? "bad" : "ok"}">${st.isGitRepo ? (st.dirty ? `未提交修改 (${st.dirtyFiles.length})` : "工作区干净") : "静态模式"}</span>
+        </div>
       </div>
       <div class="sys-meta-box">
         <div class="row-gap" style="margin-bottom:4px;">
@@ -53,12 +66,13 @@ const buildUpdateCardHtml = (st, checkResult, outputText) => {
           <div class="muted-text">提交时间：${escapeHtml(st.commitDate.slice(0, 19).replace("T", " "))}</div>
         ` : ""}
         <div class="muted-text" style="margin-top:4px;">Node.js ${escapeHtml(st.nodeVersion || "-")} · 已运行 ${formatUptime(st.uptimeSeconds)}</div>
+        ${probe ? `<div class="muted-text" style="margin-top:4px;font-size:0.75rem;">${escapeHtml(formatProbeStatus(probe))}</div>` : ""}
       </div>
-      ${checkResult ? `<div><div style="font-weight:600;font-size:0.8125rem;margin-bottom:6px;">${checkResult.behindCount > 0 ? `发现 ${checkResult.behindCount} 个待拉取补丁：` : "更新检查结果："}</div>${commitsHtml}</div>` : ""}
+      ${checkResult ? `<div><div style="font-weight:600;font-size:0.8125rem;margin-bottom:6px;">${behind > 0 ? `发现 ${behind} 个待拉取补丁：` : "更新检查结果："}</div>${commitsHtml}</div>` : ""}
       <div id="sys-output" class="muted-text" style="font-size:0.75rem;white-space:pre-wrap;" ${outputText ? "" : "hidden"}>${escapeHtml(outputText)}</div>
       <div class="row-gap" style="justify-content:flex-end;">
-        <button type="button" id="sys-check-btn" class="btn ghost tiny">检查更新</button>
-        <button type="button" id="sys-pull-btn" class="btn primary tiny" ${!st.isGitRepo || st.dirty ? "disabled" : ""}>更新并重启</button>
+        <button type="button" id="sys-check-btn" class="btn ghost tiny">立即探测</button>
+        <button type="button" id="sys-pull-btn" class="btn primary tiny" ${!st.isGitRepo || st.dirty ? "disabled" : ""}>${behind > 0 ? `更新并重启 (${behind})` : "更新并重启"}</button>
         <button type="button" id="sys-restart-btn" class="btn ghost-danger tiny">重启服务</button>
       </div>
     </section>
@@ -171,6 +185,14 @@ export const renderSystemView = async (container, ctx) => {
       apiRequest("/api/admin/audit-logs?limit=50", reqOpts)
     ]);
     statusData = st;
+    if (st.updateProbe?.checkedAt) {
+      checkResult = {
+        behindCount: st.updateProbe.behindCount || 0,
+        commits: st.updateProbe.commits || [],
+        msg: st.updateProbe.error ? `自动探测失败：${st.updateProbe.error}` : undefined
+      };
+      ctx.onUpdateProbeChanged?.(st.updateProbe);
+    }
     dbStats = db;
     apiKey = keyRes.apiKey || "";
     siteConfig = siteRes.siteConfig || {};
@@ -215,8 +237,13 @@ export const renderSystemView = async (container, ctx) => {
       catch (err) { showToast(err.message, "bad"); }
     });
     container.querySelector("#sys-check-btn").addEventListener("click", async () => {
-      try { showToast("正在连接远端仓库检查更新..."); checkResult = await apiRequest("/api/admin/system/check-update", { method: "POST" }); statusData = checkResult; renderPage(); }
-      catch (err) { showToast(err.message, "bad"); }
+      try {
+        showToast("正在连接远端仓库检查更新...");
+        checkResult = await apiRequest("/api/admin/system/check-update", { method: "POST" });
+        statusData = checkResult;
+        ctx.onUpdateProbeChanged?.(checkResult.updateProbe || { behindCount: checkResult.behindCount, commits: checkResult.commits });
+        renderPage();
+      } catch (err) { showToast(err.message, "bad"); }
     });
     container.querySelector("#sys-pull-btn").addEventListener("click", async () => {
       const ok = await openConfirmDialog({ title: "更新并重启服务", message: "确认拉取远端最新代码（git pull --ff-only）吗？若有新提交，系统将自动重启服务并刷新页面。", confirmText: "立即更新" });
@@ -226,6 +253,7 @@ export const renderSystemView = async (container, ctx) => {
         const res = await apiRequest("/api/admin/system/update", { method: "POST", body: JSON.stringify({ autoRestart: true }) });
         statusData = res.status;
         checkResult = null;
+        if (res.updated) ctx.onUpdateProbeChanged?.({ behindCount: 0, commits: [] });
         outputText = `${res.updated ? `已更新：${res.beforeCommit} -> ${res.afterCommit}` : "已是最新提交"}${res.depsInstalled ? "\n已自动更新 npm 依赖" : ""}\n${res.output}`;
         renderPage();
         if (res.restarting) {
