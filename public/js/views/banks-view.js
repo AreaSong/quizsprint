@@ -89,25 +89,29 @@ export const renderBanksView = (container, ctx) => {
       <div class="view-frame banks-view-frame">
         ${renderExamNoticeBoardHtml(siteInfo?.siteConfig?.examNotices || [], isAdmin)}
         ${renderSubjectBarHtml({ terms, activeTerm, termSubjects, activeSubjectId, banks, isAdmin })}
-        ${renderSubjectOverviewHtml(curSubject, scopeBanks, isAdmin)}
-        ${renderWorkbenchHtml(curBank)}
-        <section class="banks-section view-frame">
-          <div class="section-head">
-            <div class="row-gap">
-              <h3 class="section-title">${curSubject ? `${escapeHtml(curSubject.name)} · 模块列表` : "科目与题库列表"} <span id="banks-count-lbl" class="section-count"></span></h3>
-              <div class="cat-filter-row">${catBtns}</div>
-            </div>
-            <div class="row-gap">
-              <input id="banks-kw" class="banks-filter-input" type="search" value="${escapeHtml(keyword)}" placeholder="搜索题库或科目...">
-              <div class="view-seg" role="group" aria-label="查看方式">
-                <button type="button" class="view-seg-btn ${viewMode === "list" ? "active" : ""}" data-view-mode="list">${iconSvg("list", 14)}<span>横条</span></button>
-                <button type="button" class="view-seg-btn ${viewMode === "grid" ? "active" : ""}" data-view-mode="grid">${iconSvg("grid", 14)}<span>卡片</span></button>
+        <div class="banks-split">
+          <section class="banks-main-col view-frame">
+            ${renderSubjectOverviewHtml(curSubject, scopeBanks, isAdmin)}
+            <div class="section-head">
+              <div class="row-gap">
+                <h3 class="section-title">${curSubject ? `${escapeHtml(curSubject.name)} · 模块列表` : "科目与题库列表"} <span id="banks-count-lbl" class="section-count"></span></h3>
+                <div class="cat-filter-row">${catBtns}</div>
               </div>
-              ${isAdmin ? '<button type="button" id="btn-new-bank" class="btn primary tiny">+ 新建题库</button><button type="button" id="btn-merge-bank" class="btn ghost tiny">合并</button><button type="button" id="btn-go-import" class="btn ghost tiny">导题</button>' : ""}
+              <div class="row-gap">
+                <input id="banks-kw" class="banks-filter-input" type="search" value="${escapeHtml(keyword)}" placeholder="搜索题库或科目...">
+                <div class="view-seg" role="group" aria-label="查看方式">
+                  <button type="button" class="view-seg-btn ${viewMode === "list" ? "active" : ""}" data-view-mode="list">${iconSvg("list", 14)}<span>横条</span></button>
+                  <button type="button" class="view-seg-btn ${viewMode === "grid" ? "active" : ""}" data-view-mode="grid">${iconSvg("grid", 14)}<span>卡片</span></button>
+                </div>
+                ${isAdmin ? '<button type="button" id="btn-new-bank" class="btn primary tiny">+ 新建题库</button><button type="button" id="btn-merge-bank" class="btn ghost tiny">合并</button><button type="button" id="btn-go-import" class="btn ghost tiny">导题</button>' : ""}
+              </div>
             </div>
-          </div>
-          <div id="banks-scroll-body" class="view-scroll banks-scroll-body"></div>
-        </section>
+            <div id="banks-scroll-body" class="view-scroll banks-scroll-body"></div>
+          </section>
+          <aside id="banks-workbench-slot" class="banks-side-col">
+            ${renderWorkbenchHtml(curBank)}
+          </aside>
+        </div>
       </div>
     `;
     renderListArea();
@@ -167,7 +171,8 @@ export const renderBanksView = (container, ctx) => {
       container.querySelectorAll("button[data-view-mode]").forEach((b) => b.classList.toggle("active", b.dataset.viewMode === viewMode));
       return renderListArea();
     }
-    if (e.target.closest("#wb-start-btn") && currentActiveId) { onSelectBank(currentActiveId); return onNavigate("practice", { mode: "order" }); }
+    const startBtn = e.target.closest("#wb-start-btn");
+    if (startBtn && currentActiveId) { onSelectBank(currentActiveId); return onNavigate("practice", { mode: startBtn.dataset.startMode || "order" }); }
     const wbTile = e.target.closest("[data-wb-mode]");
     if (wbTile && currentActiveId) { onSelectBank(currentActiveId); return onNavigate("practice", { mode: wbTile.dataset.wbMode }); }
     const defSubId = activeSubjectId && activeSubjectId !== "__none__" ? activeSubjectId : "";
@@ -195,7 +200,21 @@ export const renderBanksView = (container, ctx) => {
     const actionEl = e.target.closest("[data-action]");
     if (actionEl) { const bid = actionEl.closest("[data-bank-id]")?.dataset.bankId; closeMenus(); if (bid) handleBankAction(actionEl.dataset.action, bid, actionEl); return; }
     const selectEl = e.target.closest("[data-select-bank]");
-    if (selectEl) { currentActiveId = selectEl.dataset.selectBank; onSelectBank(currentActiveId); closeMenus(); return render(); }
+    if (selectEl) {
+      currentActiveId = selectEl.dataset.selectBank;
+      onSelectBank(currentActiveId);
+      closeMenus();
+      const wbSlot = container.querySelector("#banks-workbench-slot");
+      const listWrap = container.querySelector("#banks-scroll-body");
+      if (wbSlot && listWrap) {
+        const prevTop = listWrap.scrollTop;
+        wbSlot.innerHTML = renderWorkbenchHtml(banks.find((b) => b.id === currentActiveId) || null);
+        renderListArea();
+        listWrap.scrollTop = prevTop;
+        return;
+      }
+      return render();
+    }
     if (!e.target.closest(".card-more-wrap")) closeMenus();
   }, { signal });
 

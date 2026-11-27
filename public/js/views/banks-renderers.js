@@ -38,23 +38,29 @@ export const renderExamNoticeBoardHtml = (examNotices = [], isAdmin = false) => 
   if (!Array.isArray(examNotices) || !examNotices.length) return "";
   return `
     <section class="exam-notice-board">
-      <div class="exam-notice-lead">${iconSvg("clock", 14)}<span>考试安排</span></div>
-      <div class="exam-notice-list">
+      <div class="exam-notice-head">
+        <div class="exam-notice-lead">${iconSvg("clock", 14)}<span>考试安排</span><span class="badge">${examNotices.length} 场</span></div>
+        ${isAdmin ? '<button type="button" id="btn-edit-exam-notices" class="btn ghost tiny exam-notice-edit-btn">编辑</button>' : ""}
+      </div>
+      <div class="exam-notice-grid">
         ${examNotices.map((n) => {
           const dateMatch = String(n.timeText || "").match(/\b(\d{4}-\d{2}-\d{2})\b/);
           const cd = formatExamCountdown(dateMatch?.[1] || "");
+          const subParts = [n.timeText, n.duration].filter(Boolean);
           return `
-            <div class="exam-notice-chip">
-              <strong>${escapeHtml(n.title || "考试通知")}</strong>
-              ${n.timeText ? `<span class="exam-notice-time">${escapeHtml(n.timeText)}</span>` : ""}
-              ${n.duration ? `<span class="tag-pill">${escapeHtml(n.duration)}</span>` : ""}
-              ${cd ? `<span class="badge ${cd.cls}">${escapeHtml(cd.text)}</span>` : ""}
-              ${n.note ? `<span class="muted-text exam-notice-note" title="${escapeHtml(n.note)}">${escapeHtml(n.note)}</span>` : ""}
+            <div class="exam-notice-card" ${n.note ? `title="${escapeHtml(n.note)}"` : ""}>
+              <div class="exam-notice-top">
+                <strong class="exam-notice-title">${escapeHtml(n.title || "考试通知")}</strong>
+                ${cd ? `<span class="badge ${cd.cls}">${escapeHtml(cd.text)}</span>` : ""}
+              </div>
+              <div class="exam-notice-sub">
+                ${subParts.length ? `<span class="exam-notice-time">${escapeHtml(subParts.join(" · "))}</span>` : ""}
+                ${n.note ? `<span class="muted-text exam-notice-note">${escapeHtml(n.note)}</span>` : ""}
+              </div>
             </div>
           `;
         }).join("")}
       </div>
-      ${isAdmin ? '<button type="button" id="btn-edit-exam-notices" class="btn ghost tiny exam-notice-edit-btn">编辑</button>' : ""}
     </section>
   `;
 };
@@ -96,34 +102,38 @@ export const renderWorkbenchHtml = (bank) => {
   if (!bank) return "";
   const st = getBankStats(bank);
   const offset = RING_CIRCUMFERENCE * (1 - st.pct / 100);
-  const desc = isMeaningfulDesc(bank.description) ? escapeHtml(bank.description) : "当前选中练习题库，支持顺序、分章、背题与限时模考";
+  const isNotes = (bank.category || "theory") === "notes";
+  const startMode = isNotes ? "recite" : "order";
+  const startLabel = isNotes ? (st.done > 0 ? "继续背题" : "开始背题") : (st.done > 0 ? "继续刷题" : "开始刷题");
+  const desc = isMeaningfulDesc(bank.description) ? escapeHtml(bank.description) : "支持顺序、分章、背题与限时模考";
   return `
     <section class="bank-workbench">
-      <div class="wb-head">
-        <div class="wb-title-wrap">
-          <span class="bank-cover">${iconSvg("book", 19)}</span>
-          <div style="min-width:0;">
-            <h2 class="wb-title">${bank.locked ? iconSvg("lock", 14) : ""}<span>${escapeHtml(bank.name)}</span>${renderBankTagsHtml(bank, false)}</h2>
-            <div class="wb-sub" title="${desc}">${desc}</div>
-          </div>
-        </div>
-        <div class="wb-head-right">
-          <div class="wb-kpis">
-            <div class="wb-kpi"><strong>${st.total}</strong><span>总题量</span></div>
-            <div class="wb-kpi"><strong>${st.done}</strong><span>已练习</span></div>
-            <div class="wb-kpi ${st.wrong ? "is-bad" : ""}"><strong>${st.wrong}</strong><span>错题</span></div>
-            <div class="wb-kpi ${st.fav ? "is-warn" : ""}"><strong>${st.fav}</strong><span>收藏</span></div>
-          </div>
-          <div class="wb-ring-wrap">
-            <svg class="wb-ring" viewBox="0 0 40 40" aria-hidden="true">
-              <circle class="wb-ring-bg" cx="20" cy="20" r="16"></circle>
-              <circle class="wb-ring-val" cx="20" cy="20" r="16" stroke-dasharray="${RING_CIRCUMFERENCE.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"></circle>
-            </svg>
-            <div class="wb-ring-text"><strong>${st.pct}%</strong><span>进度</span></div>
-          </div>
-          <button type="button" id="wb-start-btn" class="btn primary tiny">${iconSvg("play", 13)}<span>${st.done > 0 ? "继续刷题" : "开始刷题"}</span></button>
+      <div class="wb-top">
+        <span class="bank-cover">${iconSvg(isNotes ? "eye" : "book", 18)}</span>
+        <div style="min-width:0;flex:1;">
+          <h2 class="wb-title">${bank.locked ? iconSvg("lock", 13) : ""}<span>${escapeHtml(bank.name)}</span></h2>
+          <div class="row-gap" style="margin-top:5px;gap:5px;">${renderBankTagsHtml(bank, false)}</div>
         </div>
       </div>
+      <div class="wb-sub" title="${desc}">${desc}</div>
+      <div class="wb-stats-row">
+        <div class="wb-ring-wrap">
+          <svg class="wb-ring" viewBox="0 0 40 40" aria-hidden="true">
+            <circle class="wb-ring-bg" cx="20" cy="20" r="16"></circle>
+            <circle class="wb-ring-val" cx="20" cy="20" r="16" stroke-dasharray="${RING_CIRCUMFERENCE.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"></circle>
+          </svg>
+          <div class="wb-ring-text"><strong>${st.pct}%</strong><span>进度</span></div>
+        </div>
+        <div class="wb-kpis">
+          <div class="wb-kpi"><strong>${st.total}</strong><span>总题</span></div>
+          <div class="wb-kpi"><strong>${st.done}</strong><span>已练</span></div>
+          <div class="wb-kpi ${st.wrong ? "is-bad" : ""}"><strong>${st.wrong}</strong><span>错题</span></div>
+          <div class="wb-kpi ${st.fav ? "is-warn" : ""}"><strong>${st.fav}</strong><span>收藏</span></div>
+        </div>
+      </div>
+      <button type="button" id="wb-start-btn" class="btn primary wb-primary-cta" data-start-mode="${startMode}">
+        ${iconSvg(isNotes ? "eye" : "play", 14)}<span>${startLabel}</span>
+      </button>
       ${renderModeTilesHtml(st)}
     </section>
   `;

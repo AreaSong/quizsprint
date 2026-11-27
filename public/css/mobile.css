@@ -140,24 +140,20 @@
   .sheet-grid { grid-template-columns: repeat(6, 1fr); gap: 6px; max-height: 44dvh; }
   .sheet-cell { height: 32px; }
 
-  /* 题库中心：考试安排、练习模式与分类栏支持手机单行左右滑动 */
-  .exam-notice-board { flex-wrap: wrap; padding: 7px 10px; gap: 6px; }
-  .exam-notice-list {
-    order: 3; flex: 1 1 100%; flex-wrap: nowrap;
+  /* 题库中心：考试安排卡片、练习模式与分类栏支持手机单行左右滑动 */
+  .exam-notice-board { padding: 7px 10px; gap: 6px; }
+  .exam-notice-grid {
+    display: flex; flex-wrap: nowrap; gap: 7px;
     overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
   }
-  .exam-notice-list::-webkit-scrollbar { display: none; }
-  .exam-notice-chip { flex: 0 0 auto; }
-  .exam-notice-edit-btn { margin-left: auto; min-height: 24px !important; padding: 2px 8px !important; }
-  .exam-notice-note { max-width: 180px; }
-
-  .wb-head { gap: 8px; }
-  .wb-sub { max-width: 100%; }
-  .wb-head-right { width: 100%; justify-content: space-between; gap: 8px; }
-  .wb-kpis { width: 100%; justify-content: space-around; padding: 4px 6px; }
-  .wb-kpi { flex: 1; justify-content: center; padding: 0 4px; }
+  .exam-notice-grid::-webkit-scrollbar { display: none; }
+  .exam-notice-card { flex: 0 0 248px; }
+  .exam-notice-sub { flex-wrap: wrap; row-gap: 2px; }
+  .exam-notice-edit-btn { min-height: 24px !important; padding: 2px 8px !important; }
+  .bank-workbench { padding: 11px 12px; gap: 9px; }
+  .wb-stats-row { padding: 6px 8px; gap: 8px; }
   .mode-tiles {
-    display: flex !important; flex-wrap: nowrap; gap: 7px; margin-top: 9px; padding-bottom: 2px;
+    display: flex !important; flex-wrap: nowrap; gap: 7px; margin-top: 2px; padding-bottom: 2px;
     overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none;
   }
   .mode-tiles::-webkit-scrollbar { display: none; }
@@ -171,8 +167,8 @@
   }
   .cat-filter-row::-webkit-scrollbar { display: none; }
   .cat-filter-row .btn { flex: 0 0 auto; }
-  .section-head > .row-gap { width: 100%; }
-  .banks-filter-input { flex: 1; min-width: 0; width: auto; }
+  .section-head > .row-gap { width: 100%; flex-wrap: wrap; }
+  .banks-filter-input { flex: 1 1 180px; min-width: 0; width: auto; }
 
   /* 学习统计页（#stats）：紧凑 KPI 与趋势图、首屏展示更多排行榜 */
   .kpi-grid { gap: 8px; }
