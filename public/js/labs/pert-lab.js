@@ -36,7 +36,7 @@ const buildEdgesSvg = (graph, sol, state) => {
     const y2 = b.y - (dy / len) * (r + 5);
     const mx = (x1 + x2) / 2;
     const my = (y1 + y2) / 2;
-    const offset = Math.abs(dy) < 6 ? 18 : 16;
+    const offset = Math.abs(dy) < 6 ? 18 : 20;
     const nx = (-dy / len) * offset;
     const ny = (dx / len) * offset;
     const isQuiz = state.mode === "quiz";
@@ -79,7 +79,7 @@ const buildNodesSvg = (graph, sol, state) => graph.nodes.map((n) => {
   `;
 }).join("");
 
-const buildQuickTablesHtml = (graph, sol, state, readOnly = false) => {
+const buildQuickTablesHtml = (graph, sol, state, readOnly = false, tabbed = false) => {
   const isQuiz = state.mode === "quiz";
   const disAttr = readOnly ? "disabled" : "";
   const nodeRows = graph.nodes.map((n) => {
@@ -113,18 +113,29 @@ const buildQuickTablesHtml = (graph, sol, state, readOnly = false) => {
     `;
   }).join("");
 
-  return `
-    <div class="pert-tables-grid">
-      <div class="pert-grid-box">
-        <div class="pert-grid-title">事件节点速填表（支持 Tab 连续填写 E / L）</div>
-        <table class="pert-grid-table"><thead><tr><th>事件</th><th>最早 E</th><th>最迟 L</th></tr></thead><tbody>${nodeRows}</tbody></table>
-      </div>
-      <div class="pert-grid-box">
-        <div class="pert-grid-title">${isQuiz ? "活动速填表（机动时间 TF 与关键路径勾选）" : "活动沙盒表（直接修改工期 D 实时推演）"}</div>
-        <table class="pert-grid-table"><thead><tr><th>活动</th><th>工期 D</th><th>机动 TF</th><th>关键</th></tr></thead><tbody>${edgeRows}</tbody></table>
-      </div>
+  const nodeBox = `
+    <div class="pert-grid-box">
+      ${tabbed ? "" : '<div class="pert-grid-title">事件节点速填表（支持 Tab 连续填写 E / L）</div>'}
+      <table class="pert-grid-table"><thead><tr><th>事件</th><th>最早 E</th><th>最迟 L</th></tr></thead><tbody>${nodeRows}</tbody></table>
     </div>
   `;
+  const edgeBox = `
+    <div class="pert-grid-box">
+      ${tabbed ? "" : `<div class="pert-grid-title">${isQuiz ? "活动速填表（机动时间 TF 与关键路径勾选）" : "活动沙盒表（直接修改工期 D 实时推演）"}</div>`}
+      <table class="pert-grid-table"><thead><tr><th>活动</th><th>工期 D</th><th>机动 TF</th><th>关键</th></tr></thead><tbody>${edgeRows}</tbody></table>
+    </div>
+  `;
+  if (tabbed) {
+    const isNodes = state.sideTab !== "edges";
+    return `
+      <div class="view-seg" style="align-self:flex-start;">
+        <button type="button" class="view-seg-btn ${isNodes ? "active" : ""}" data-pert-stab="nodes">事件节点 E/L (${graph.nodes.length})</button>
+        <button type="button" class="view-seg-btn ${!isNodes ? "active" : ""}" data-pert-stab="edges">活动机动 TF (${graph.edges.length})</button>
+      </div>
+      ${isNodes ? nodeBox : edgeBox}
+    `;
+  }
+  return `<div class="pert-tables-grid">${nodeBox}${edgeBox}</div>`;
 };
 
 const buildDerivBanner = (graph, sol, state) => {
@@ -187,6 +198,7 @@ export const mountPertLab = (root, opts = {}) => {
   const state = {
     presetId: opts.spec?.preset || "fig92",
     mode: "quiz",
+    sideTab: "nodes",
     selectedType: "node",
     selectedId: "1",
     floatOpen: false,
@@ -210,7 +222,7 @@ export const mountPertLab = (root, opts = {}) => {
     const sideHtml = `
       ${buildDerivBanner(graph, sol, state)}
       ${state.grade ? `<div class="lab-feedback ${state.grade.allCorrect ? "ok" : "warn"}">批改结果：<strong>${state.grade.score} / ${state.grade.total}</strong> 项正确${state.grade.allCorrect ? `（全部正确！总工期 = ${sol.totalDuration}）` : "（红框格为错漏项，点击节点并开启「逐步推导」可查看公式）"}</div>` : ""}
-      ${buildQuickTablesHtml(graph, sol, state, readOnly)}
+      ${buildQuickTablesHtml(graph, sol, state, readOnly, Boolean(studioSide))}
     `;
     root.innerHTML = `
       <div class="lab-toolbar">
@@ -288,12 +300,13 @@ export const mountPertLab = (root, opts = {}) => {
     });
     root.querySelector("#pert-rand-btn")?.addEventListener("click", () => { state.presetId = "random"; graph = generateRandomPertGraph(); state.selectedType = "node"; state.selectedId = "1"; resetInputs(); render(); });
     root.querySelectorAll("[data-pert-mode]").forEach((b) => b.addEventListener("click", () => { state.mode = b.dataset.pertMode; state.floatOpen = false; render(); }));
+    sideRoot.querySelectorAll("[data-pert-stab]").forEach((b) => b.addEventListener("click", () => { state.sideTab = b.dataset.pertStab; render(); }));
     root.querySelectorAll("g[data-pert-node]").forEach((g) => g.addEventListener("click", () => {
-      state.selectedType = "node"; state.selectedId = g.dataset.pertNode; state.floatOpen = !readOnly && state.mode === "quiz";
+      state.selectedType = "node"; state.sideTab = "nodes"; state.selectedId = g.dataset.pertNode; state.floatOpen = !readOnly && state.mode === "quiz";
       render(!readOnly ? "#pert-fl-e" : "");
     }));
     root.querySelectorAll("g[data-pert-edge]").forEach((g) => g.addEventListener("click", () => {
-      state.selectedType = "edge"; state.selectedId = g.dataset.pertEdge; state.floatOpen = !readOnly && state.mode === "quiz";
+      state.selectedType = "edge"; state.sideTab = "edges"; state.selectedId = g.dataset.pertEdge; state.floatOpen = !readOnly && state.mode === "quiz";
       render(!readOnly ? "#pert-fl-tf" : "");
     }));
     root.querySelector("#pert-fl-close")?.addEventListener("click", () => { state.floatOpen = false; render(); });
