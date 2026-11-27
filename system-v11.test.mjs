@@ -79,10 +79,27 @@ test("v1.1 版本与 Schema 版本、滑动窗口限流、首装向导、站点�
     const addCu = await call("POST", "/api/admin/content-updates", { category: "导题", title: "新增计算机组成原理 120 题" });
     assert.equal(addCu.status, 200);
     assert.equal(addCu.payload.entry.category, "导题");
+    assert.match(addCu.payload.entry.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     const infoCu = await call("GET", "/api/site/info");
     assert.equal(infoCu.payload.contentUpdates[0].title, "新增计算机组成原理 120 题");
     assert.equal((await call("DELETE", `/api/admin/content-updates/${addCu.payload.entry.id}`)).status, 200);
     assert.equal((await call("GET", "/api/site/info")).payload.contentUpdates.length, 0);
+
+    const u1 = (await call("POST", "/api/admin/content-updates", { category: "题库", title: "第一次更新" })).payload.entry;
+    const u2 = (await call("POST", "/api/admin/content-updates", { category: "题目", title: "第二次更新" })).payload.entry;
+    const u3 = (await call("POST", "/api/admin/content-updates", { category: "考试", title: "第三次更新" })).payload.entry;
+    const userA = userStore.register({ username: "readerA", password: "pass1234" }).user;
+    const userB = userStore.register({ username: "readerB", password: "pass1234" }).user;
+    const cookieA = buildUserCookie(createUserToken(userA), false).split(";")[0];
+    const cookieB = buildUserCookie(createUserToken(userB), false).split(";")[0];
+    await call("POST", "/api/user/updates/read", { ids: [u1.id, u2.id] }, { cookie: cookieA, admin: false });
+    const infoA = await call("GET", "/api/site/info", {}, { cookie: cookieA, admin: false });
+    const unreadA = infoA.payload.contentUpdates.filter((x) => !infoA.payload.seenUpdateIds.includes(x.id));
+    assert.deepEqual(unreadA.map((x) => x.id), [u3.id]);
+    const infoB = await call("GET", "/api/site/info", {}, { cookie: cookieB, admin: false });
+    const unreadB = infoB.payload.contentUpdates.filter((x) => !infoB.payload.seenUpdateIds.includes(x.id));
+    assert.equal(unreadB.length, 3);
+    for (const id of [u1.id, u2.id, u3.id]) await call("DELETE", `/api/admin/content-updates/${id}`);
 
     const setupOk = await call("POST", "/api/setup", { username: "rootadmin", password: "secret123", siteName: "我的云端题库" });
     assert.equal(setupOk.status, 200);

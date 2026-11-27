@@ -423,3 +423,22 @@ body.immersive-mode .practice-nav-footer {
 .search-ai-card { padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); margin-bottom: 10px; }
 .search-ai-card .ai-msg-bubble { max-width: none; background: transparent; border: 0; padding: 8px 0 0; }
 @media (max-width: 720px) { .search-ans-preview { max-width: 120px; } }
+
+/* 更新日志紧凑标题胶囊与独立浮出详情卡片 */
+.cl-hint-bar { font-size: 0.75rem; color: var(--muted); margin: 4px 0 8px; }
+.cl-ver-list { display: flex; flex-direction: column; gap: 8px; }
+.cl-ver-block { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.cl-ver-sum { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; cursor: pointer; list-style: none; font-weight: 700; color: var(--accent-fg); user-select: none; }
+.cl-ver-sum::-webkit-details-marker { display: none; }
+.cl-ver-sum:hover { background: var(--surface-soft); }
+.cl-ver-chevron { font-size: 0.75rem; color: var(--muted); transition: transform .15s ease; }
+.cl-ver-block[open] .cl-ver-chevron { transform: rotate(90deg); }
+.cl-ver-body { padding: 4px 12px 12px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 8px; }
+.cl-group-title { font-size: 0.75rem; font-weight: 700; color: var(--muted); margin: 4px 0 4px; }
+.cl-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cl-chip { appearance: none; border: 1px solid var(--line); background: var(--surface-soft); color: var(--ink); font: inherit; font-size: 0.7813rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; cursor: pointer; line-height: 1.35; text-align: left; transition: border-color .14s ease, background .14s ease, color .14s ease; }
+.cl-chip:hover, .cl-chip:focus-visible, .cl-chip.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent-fg); outline: none; }
+.cl-float-pop { position: fixed; z-index: 1200; width: min(390px, calc(100vw - 24px)); max-height: min(320px, 60vh); overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); box-shadow: 0 14px 34px rgba(15, 23, 42, .22); font-size: 0.8125rem; line-height: 1.6; color: var(--ink); animation: clPopIn .14s ease; }
+.cl-float-pop-title { font-weight: 700; color: var(--accent-fg); margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+.cl-float-pop-list { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; color: var(--ink); }
+@keyframes clPopIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }

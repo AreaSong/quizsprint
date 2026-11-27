@@ -11,8 +11,9 @@ import {
 } from "./api.js";
 import { applyAppearance, cycleTheme, initAppearanceControl } from "./appearance.js";
 import { initGlobalModalDismiss, openFormDialog } from "./dialog.js";
-import { applySiteInfo, ensureForceChangePasswordModal, exportMyProgressJson, maybeOpenSetupWizard, triggerImportMyProgress } from "./site-shell.js";
+import { applySiteInfo, ensureForceChangePasswordModal, exportMyProgressJson, maybeOpenSetupWizard, openChangelogModal, triggerImportMyProgress } from "./site-shell.js";
 import { createAdminUpdateWatcher, initSystemAndDisclaimerModals } from "./system-modal.js";
+import { maybeShowUnreadUpdatesModal } from "./update-notice.js";
 import { renderBanksView } from "./views/banks-view.js";
 import { renderExamsView } from "./views/exams-view.js";
 import { renderImportView } from "./views/import-view.js";
@@ -283,10 +284,14 @@ const renderCurrentView = () => {
   else if (appState.route === "users") renderUsersView(appMain, ctx);
   else if (appState.route === "system") renderSystemView(appMain, ctx);
   ensureForceChangePasswordModal(getCloudUser(), {
-    onChanged: async () => { await refreshAuth(); renderCurrentView(); },
+    onChanged: async () => { await Promise.all([refreshAuth(), refreshSiteInfo()]); renderCurrentView(); checkUnreadUpdates(); },
     onLogout: doLogout
   });
 };
+
+const checkUnreadUpdates = () => maybeShowUnreadUpdatesModal(appState.siteInfo, getCloudUser(), {
+  onOpenChangelog: () => openChangelogModal(appState.siteInfo, appState.isAdmin)
+});
 
 const doLogout = async () => {
   userDropdownOpen = false;
@@ -407,11 +412,12 @@ document.getElementById("user-form").addEventListener("submit", async (e) => {
         } else throw loginErr;
       }
     }
-    await refreshAuth();
+    await Promise.all([refreshAuth(), refreshSiteInfo()]);
     await refreshBanks(true);
     userModal.hidden = true;
     showToast(appState.isAdmin ? "管理员登录成功" : "登录成功，已启用云端同步", "ok");
     renderCurrentView();
+    checkUnreadUpdates();
     prefetchActiveBank();
   } catch (err) { showToast(err.message, "bad"); }
 });
@@ -437,6 +443,7 @@ const bootstrap = async () => {
     await refreshBanks(true);
     renderCurrentView();
   });
+  checkUnreadUpdates();
 };
 
 bootstrap().catch((err) => {

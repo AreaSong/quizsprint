@@ -1,21 +1,72 @@
 import { apiRequest, escapeHtml, showToast } from "./api.js";
+import { formatUpdateDateTime } from "./update-notice.js";
 
-const formatInlineMarkdown = (raw) => escapeHtml(raw)
-  .replace(/`([^`]+)`/g, '<code style="padding:1px 5px;border-radius:4px;background:var(--surface-soft);border:1px solid var(--line);font-size:0.75rem;">$1</code>')
-  .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-  .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--accent-fg);text-decoration:underline;">$1</a>');
+const parseChangelogSections = (rawText) => {
+  const lines = String(rawText || "").trim().split(/\r?\n/);
+  const versions = [];
+  const items = [];
+  let curVer = null;
+  let curGroup = null;
+  let lastItem = null;
+  const ensureGroup = (title = "更新内容") => {
+    if (!curVer) { curVer = { version: "最新更新", groups: [] }; versions.push(curVer); }
+    if (!curGroup) { curGroup = { title, items: [] }; curVer.groups.push(curGroup); }
+    return curGroup;
+  };
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      curVer = { version: line.slice(3).trim(), groups: [] };
+      versions.push(curVer); curGroup = null; lastItem = null;
+    } else if (line.startsWith("### ") && curVer) {
+      curGroup = { title: line.slice(4).trim(), items: [] };
+      curVer.groups.push(curGroup); lastItem = null;
+    } else if (line.startsWith("  - ") && lastItem) {
+      lastItem.details.push(line.slice(4).trim());
+    } else if (line.startsWith("- ")) {
+      const body = line.slice(2).trim();
+      const boldMatch = body.match(/^\*\*([^*]+)\*\*\s*(?:[：:]\s*(.*))?$/);
+      const rawTitle = boldMatch ? boldMatch[1].trim() : (body.length > 22 ? `${body.slice(0, 22)}…` : body);
+      const title = rawTitle.replace(/`/g, "");
+      const firstDetail = boldMatch ? (boldMatch[2] || "").trim() : (body.length > 22 ? body : "");
+      const idx = items.length;
+      lastItem = { idx, title, details: firstDetail ? [firstDetail] : [] };
+      items.push(lastItem);
+      ensureGroup().items.push(lastItem);
+    }
+  }
+  return { versions, items };
+};
 
 const renderChangelogHtml = (info) => {
-  const lines = String(info?.changelog || "暂无更新日志。").trim().split(/\r?\n/);
-  return lines.map((line) => {
-    if (line.startsWith("# ")) return `<h3 style="margin:6px 0 6px;font-size:1rem;">${formatInlineMarkdown(line.slice(2))}</h3>`;
-    if (line.startsWith("## ")) return `<h4 style="margin:14px 0 6px;color:var(--accent-fg);">${formatInlineMarkdown(line.slice(3))}</h4>`;
-    if (line.startsWith("### ")) return `<div style="font-weight:700;margin:8px 0 4px;">${formatInlineMarkdown(line.slice(4))}</div>`;
-    if (line.startsWith("> ")) return `<div class="muted-text" style="padding:4px 10px;margin:4px 0 8px;border-left:3px solid var(--accent-fg);">${formatInlineMarkdown(line.slice(2))}</div>`;
-    if (line.startsWith("  - ")) return `<div style="padding-left:22px;margin:2px 0;">◦ ${formatInlineMarkdown(line.slice(4))}</div>`;
-    if (line.startsWith("- ")) return `<div style="padding-left:10px;margin:3px 0;">• ${formatInlineMarkdown(line.slice(2))}</div>`;
-    return line.trim() ? `<div class="muted-text" style="margin:2px 0;">${formatInlineMarkdown(line)}</div>` : "";
-  }).join("");
+  const { versions, items } = parseChangelogSections(info?.changelog || "");
+  if (!versions.length) return { html: '<div class="muted-text">暂无更新日志。</div>', items: [] };
+  const html = `
+    <div class="cl-hint-bar">默认仅显示更新标题，鼠标悬停、聚焦或点击任意标签浮出查看完整详情</div>
+    <div class="cl-ver-list">
+      ${versions.map((ver, vIdx) => {
+        const count = ver.groups.reduce((s, g) => s + g.items.length, 0);
+        return `
+          <details class="cl-ver-block" ${vIdx === 0 ? "open" : ""}>
+            <summary class="cl-ver-sum">
+              <span>${escapeHtml(ver.version)}</span>
+              <span class="row-gap" style="gap:6px;"><span class="badge">${count} 项</span><span class="cl-ver-chevron">▸</span></span>
+            </summary>
+            <div class="cl-ver-body">
+              ${ver.groups.map((g) => `
+                <div>
+                  <div class="cl-group-title">${escapeHtml(g.title)}</div>
+                  <div class="cl-chip-row">
+                    ${g.items.map((it) => `<button type="button" class="cl-chip" data-cl-idx="${it.idx}">${escapeHtml(it.title)}</button>`).join("")}
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </details>
+        `;
+      }).join("")}
+    </div>
+  `;
+  return { html, items };
 };
 
 const renderContentUpdatesHtml = (updates = [], isAdmin = false) => `
@@ -38,7 +89,7 @@ const renderContentUpdatesHtml = (updates = [], isAdmin = false) => `
         <div class="row-gap" style="justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);">
           <div style="min-width:0;flex:1;">
             <span class="badge">${escapeHtml(u.category || "更新")}</span>
-            <span class="muted-text" style="font-size:0.7188rem;margin:0 4px;">${escapeHtml(u.date || "")}</span>
+            <span class="muted-text" style="font-size:0.7188rem;margin:0 4px;font-variant-numeric:tabular-nums;">${escapeHtml(formatUpdateDateTime(u))}</span>
             <span>${escapeHtml(u.title || "")}</span>
             ${u.detail ? `<span class="muted-text" style="font-size:0.7188rem;"> · ${escapeHtml(u.detail)}</span>` : ""}
           </div>
@@ -77,11 +128,67 @@ const bindChangelogAdminEvents = (modal, info, isAdmin) => {
   }));
 };
 
+const formatInlineMarkdown = (raw) => escapeHtml(raw)
+  .replace(/`([^`]+)`/g, '<code style="padding:1px 5px;border-radius:4px;background:var(--surface-soft);border:1px solid var(--line);font-size:0.75rem;">$1</code>')
+  .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+const bindChangelogPopover = (modal, items) => {
+  const pop = modal.querySelector("#cl-float-pop");
+  if (!pop || !items.length) return;
+  let activeChip = null;
+  let hideTimer = 0;
+  const clearHide = () => { if (hideTimer) { clearTimeout(hideTimer); hideTimer = 0; } };
+  const hidePop = () => {
+    clearHide();
+    pop.hidden = true;
+    activeChip?.classList.remove("is-active");
+    activeChip = null;
+  };
+  const showPop = (chip) => {
+    clearHide();
+    const item = items[Number(chip.dataset.clIdx)];
+    if (!item) return;
+    if (activeChip && activeChip !== chip) activeChip.classList.remove("is-active");
+    activeChip = chip;
+    chip.classList.add("is-active");
+    const detailHtml = item.details.length
+      ? `<ul class="cl-float-pop-list">${item.details.map((d) => `<li>${formatInlineMarkdown(d)}</li>`).join("")}</ul>`
+      : '<div class="muted-text">已完成对应功能迭代。</div>';
+    pop.innerHTML = `<div class="cl-float-pop-title">${escapeHtml(item.title)}</div>${detailHtml}`;
+    pop.style.visibility = "hidden";
+    pop.hidden = false;
+    const rect = chip.getBoundingClientRect();
+    const pw = pop.offsetWidth || 340;
+    const ph = pop.offsetHeight || 120;
+    const left = Math.min(window.innerWidth - pw - 12, Math.max(12, rect.left));
+    const top = rect.bottom + 8 + ph <= window.innerHeight - 12 ? rect.bottom + 8 : Math.max(12, rect.top - ph - 8);
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+    pop.style.visibility = "";
+  };
+  const scheduleHide = () => { clearHide(); hideTimer = setTimeout(hidePop, 140); };
+  modal.querySelectorAll(".cl-chip").forEach((chip) => {
+    chip.addEventListener("mouseenter", () => showPop(chip));
+    chip.addEventListener("focus", () => showPop(chip));
+    chip.addEventListener("mouseleave", scheduleHide);
+    chip.addEventListener("blur", scheduleHide);
+    chip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (activeChip === chip && !pop.hidden) hidePop(); else showPop(chip);
+    });
+  });
+  pop.addEventListener("mouseenter", clearHide);
+  pop.addEventListener("mouseleave", scheduleHide);
+  modal.querySelector(".modal-body")?.addEventListener("scroll", hidePop, { passive: true });
+  modal.querySelector(".modal-card")?.addEventListener("click", (e) => { if (!e.target.closest(".cl-chip")) hidePop(); });
+};
+
 export const openChangelogModal = (info, isAdmin = latestIsAdmin) => {
   const modal = document.getElementById("site-modal");
   if (!modal) return;
   delete modal.dataset.lockDismiss;
   modal.hidden = false;
+  const parsedLog = renderChangelogHtml(info);
   modal.innerHTML = `
     <div class="modal-card modal-shell" style="max-width:640px;">
       <div class="modal-head">
@@ -93,11 +200,13 @@ export const openChangelogModal = (info, isAdmin = latestIsAdmin) => {
           <span class="badge ok">应用版本 v${escapeHtml(info?.version || "1.2.0")}</span>
         </div>
         ${renderContentUpdatesHtml(info?.contentUpdates || [], isAdmin)}
-        ${renderChangelogHtml(info)}
+        ${parsedLog.html}
       </div>
     </div>
+    <div id="cl-float-pop" class="cl-float-pop" role="tooltip" hidden></div>
   `;
   modal.querySelector("#cl-close").addEventListener("click", () => { modal.hidden = true; });
+  bindChangelogPopover(modal, parsedLog.items);
   if (isAdmin) bindChangelogAdminEvents(modal, info, isAdmin);
 };
 
