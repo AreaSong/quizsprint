@@ -19,8 +19,8 @@ const prettifyMath = (expr) => String(expr || "")
 
 const UPLOAD_IMG_LINE_RE = /^!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)$/;
 const UPLOAD_IMG_INLINE_RE = /!\[([^\]]*)\]\((\/uploads\/[a-zA-Z0-9._-]+)\)/g;
-const LAB_BTN_LINE_RE = /^::lab\[(pert|dfd|decision|blackbox|whitebox)\|([^\]]+)\]$/;
-const LAB_BTN_INLINE_RE = /::lab\[(pert|dfd|decision|blackbox|whitebox)\|([^\]]+)\]/g;
+const LAB_BTN_LINE_RE = /^::lab\[(pert|dfd|decision|blackbox|whitebox|os_sched|os_banker|os_paging|os_disk|os_mem)\|([^\]]+)\]$/;
+const LAB_BTN_INLINE_RE = /::lab\[(pert|dfd|decision|blackbox|whitebox|os_sched|os_banker|os_paging|os_disk|os_mem)\|([^\]]+)\]/g;
 
 const formatInlineMd = (text) =>
   text

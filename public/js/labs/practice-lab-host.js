@@ -1,6 +1,8 @@
 import { escapeHtml, showToast } from "../api.js";
 import { mountDecisionLab, mountDfdLab } from "./dfd-decision-labs.js";
 import { buildSolutionPayload, gradeInteractiveLab, LAB_KIND_META, parseLabSpec } from "./lab-grader.js";
+import { mountOsDiskLab, mountOsMemLab, mountOsPagingLab } from "./os-mem-io-labs.js";
+import { mountOsBankerLab, mountOsSchedLab } from "./os-proc-labs.js";
 import { mountPertLab } from "./pert-lab.js";
 import { mountBlackboxLab, mountWhiteboxLab } from "./testing-labs.js";
 
@@ -9,7 +11,12 @@ const MOUNT_MAP = {
   dfd: mountDfdLab,
   decision: mountDecisionLab,
   blackbox: mountBlackboxLab,
-  whitebox: mountWhiteboxLab
+  whitebox: mountWhiteboxLab,
+  os_sched: mountOsSchedLab,
+  os_banker: mountOsBankerLab,
+  os_paging: mountOsPagingLab,
+  os_disk: mountOsDiskLab,
+  os_mem: mountOsMemLab
 };
 
 const parseSavedPayload = (arr) => {

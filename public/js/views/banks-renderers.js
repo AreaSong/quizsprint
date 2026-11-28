@@ -181,8 +181,10 @@ export const renderSubjectOverviewHtml = (subject, subjectBanks, isAdmin) => {
   const notesCount = subjectBanks.filter((b) => (b.category || "theory") === "notes").length;
   const quizCount = subjectBanks.length - notesCount;
   const modText = notesCount && quizCount ? `刷题库 ${quizCount} · 课本重点 ${notesCount}` : `共 ${subjectBanks.length} 个模块`;
-  const labBtn = String(subject.name || "").includes("软件工程")
-    ? '<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="pert">🧪 交互实验台</button>'
+  const subName = String(subject.name || "");
+  const labTab = subName.includes("软件工程") ? "pert" : (subName.includes("操作系统") ? "os_sched" : "");
+  const labBtn = labTab
+    ? `<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="${labTab}">🧪 交互实验台</button>`
     : "";
   return `
     <div class="subject-overview">
@@ -299,8 +301,10 @@ const renderSubjectGroupBlockHtml = (subject, groupBanks, viewMode, ctx) => {
   const catSummary = [...catCounts.entries()]
     .map(([c, n]) => `<span class="cat-pill" data-cat="${escapeHtml(c)}">${BANK_CATEGORIES[c] || "理论"} ${n}</span>`)
     .join("");
-  const labBtn = String(subject?.name || "").includes("软件工程")
-    ? '<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="pert">🧪 实验台</button>'
+  const grpName = String(subject?.name || "");
+  const grpLab = grpName.includes("软件工程") ? "pert" : (grpName.includes("操作系统") ? "os_sched" : "");
+  const labBtn = grpLab
+    ? `<button type="button" class="btn soft-active tiny js-open-se-lab" data-lab="${grpLab}">🧪 实验台</button>`
     : "";
   return `
     <section class="subject-group-block" data-group-subject="${escapeHtml(subId)}">

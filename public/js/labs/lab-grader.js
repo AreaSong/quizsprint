@@ -1,4 +1,19 @@
 /** 交互实验题（type=9）零 DOM 统一解析、参考解生成与自动判分引擎（前后端共用） */
+import {
+  gradeBankerAttempt,
+  gradeOsDisk,
+  gradeOsPaging,
+  gradeOsScheduling,
+  OS_BANKER_CASES,
+  OS_DISK_CASES,
+  OS_PAGING_CASES,
+  OS_SCHED_CASES,
+  solveBankerCase,
+  solveOsDisk,
+  solveOsPaging,
+  solveOsScheduling
+} from "./os-lab-core.js";
+import { gradeOsMem, OS_MEM_CASES, solveOsMem } from "./os-mem-core.js";
 import { gradePertAttempt, PERT_PRESETS, solvePertNetwork } from "./pert-core.js";
 import {
   BLACKBOX_CASES,
@@ -18,7 +33,12 @@ export const LAB_KIND_META = {
   dfd: { name: "数据流图 DFD", hint: "点击图中违规节点/数据流排错，或在画布中自由构建合规 DFD" },
   decision: { name: "判定表化简", hint: "合并互补规则列并消除多余条件，将判定表化简至最简形式" },
   blackbox: { name: "黑盒等价类/边界值", hint: "输入足以覆盖全部有效/无效等价类及 6 个边界点的测试数值" },
-  whitebox: { name: "白盒逻辑覆盖", hint: "编写满足目标覆盖要求的测试用例并观察控制流路径" }
+  whitebox: { name: "白盒逻辑覆盖", hint: "编写满足目标覆盖要求的测试用例并观察控制流路径" },
+  os_sched: { name: "OS 进程调度", hint: "计算完成时间、周转时间与带权周转时间，核对调度甘特图" },
+  os_banker: { name: "OS 银行家算法", hint: "计算 Need 矩阵、判定安全状态并构造有效安全序列" },
+  os_paging: { name: "OS 页面置换", hint: "逐拍填入物理块内页号、勾选缺页标记并统计缺页次数与缺页率" },
+  os_disk: { name: "OS 磁盘调度", hint: "排出磁头移动轨迹序列并计算总寻道长度与平均寻道长度" },
+  os_mem: { name: "OS 地址变换/分区/位示图", hint: "完成分页分段地址计算、动态分区分配或磁盘位示图换算" }
 };
 
 export const parseLabSpec = (qOrRaw) => {
@@ -60,6 +80,8 @@ export const resolveBlackboxCase = (spec) => {
   return BLACKBOX_CASES.find((c) => c.id === spec?.caseId) || BLACKBOX_CASES[0];
 };
 
+const pickCase = (list, spec, key = "id") => spec?.caseDef || list.find((c) => c[key] === spec?.caseId) || list[0];
+
 export const describeLabSpec = (q) => {
   const spec = parseLabSpec(q);
   if (!spec) return "未配置实验规格";
@@ -76,6 +98,11 @@ export const describeLabSpec = (q) => {
     const modeLabel = spec.target === "trap" ? "经典陷阱反例（条件100% ≠ 判定100%）" : "6 项逻辑覆盖 100%";
     return `${meta.name} · ${modeLabel}`;
   }
+  if (spec.kind === "os_sched") return `${meta.name} · ${pickCase(OS_SCHED_CASES, spec).name || ""}`;
+  if (spec.kind === "os_banker") return `${meta.name} · ${pickCase(OS_BANKER_CASES, spec).name || ""}`;
+  if (spec.kind === "os_paging") return `${meta.name} · ${pickCase(OS_PAGING_CASES, spec).name || ""}`;
+  if (spec.kind === "os_disk") return `${meta.name} · ${pickCase(OS_DISK_CASES, spec).name || ""}`;
+  if (spec.kind === "os_mem") return `${meta.name} · ${pickCase(OS_MEM_CASES, spec).name || ""}`;
   return meta.name;
 };
 
@@ -157,6 +184,33 @@ export const buildSolutionPayload = (spec) => {
   }
   if (spec.kind === "whitebox") {
     return { cases: structuredClone(spec.target === "trap" ? WHITEBOX_SPEC.trapCases : WHITEBOX_SPEC.fullCases) };
+  }
+  if (spec.kind === "os_sched") {
+    const sol = solveOsScheduling(pickCase(OS_SCHED_CASES, spec));
+    return {
+      rows: Object.fromEntries(sol.rows.map((r) => [r.id, { finish: String(r.finish), turnaround: String(r.turnaround), weighted: String(r.weighted) }])),
+      avgTurnaround: String(sol.avgTurnaround), avgWeighted: String(sol.avgWeighted)
+    };
+  }
+  if (spec.kind === "os_banker") {
+    const sol = solveBankerCase(pickCase(OS_BANKER_CASES, spec));
+    return { need: Object.fromEntries(Object.entries(sol.needRows).map(([k, arr]) => [k, arr.map(String)])), safe: sol.safe, sequence: [...sol.safeSeq] };
+  }
+  if (spec.kind === "os_paging") {
+    const sol = solveOsPaging(pickCase(OS_PAGING_CASES, spec));
+    return { frames: sol.steps.map((s) => s.frames.map((v) => (v == null ? "" : String(v)))), faults: sol.steps.map((s) => s.fault), faultCount: String(sol.faultCount), faultRate: String(sol.faultRate) };
+  }
+  if (spec.kind === "os_disk") {
+    const sol = solveOsDisk(pickCase(OS_DISK_CASES, spec));
+    return { seqStr: sol.sequence.join(", "), sequence: [...sol.sequence], totalSeek: String(sol.totalSeek), avgSeek: String(sol.avgSeek) };
+  }
+  if (spec.kind === "os_mem") {
+    const c = pickCase(OS_MEM_CASES, spec);
+    const sol = solveOsMem(c);
+    if (c.mode === "addr" && c.addrType === "page") return { pageNo: sol.pageNo, offset: sol.offset, frameNo: sol.frameNo, physAddr: sol.physAddr, eatNs: sol.eatNs };
+    if (c.mode === "addr") return { baseAddr: sol.baseAddr, physAddr: sol.physAddr };
+    if (c.mode === "alloc") return { assignments: Object.fromEntries(sol.assignments.map((a) => [a.jobId, { partId: a.partId, allocBase: String(a.allocBase) }])) };
+    return { row: sol.row, col: sol.col, blockNo: sol.blockNo, nextVal: sol.nextVal };
   }
   return {};
 };
@@ -284,6 +338,24 @@ export const gradeInteractiveLab = (specOrQ, payloadOrRaw) => {
       summary = correct ? "全部 6 项逻辑覆盖均达 100%" : `综合逻辑覆盖率 ${Math.round(ratio * 100)}%`;
     }
     return { correct, ratio, score: Math.round(ratio * 100), total: 100, summary, detail: res };
+  }
+
+  if (spec.kind.startsWith("os_")) {
+    const runners = {
+      os_sched: () => gradeOsScheduling(pickCase(OS_SCHED_CASES, spec), payload),
+      os_banker: () => gradeBankerAttempt(pickCase(OS_BANKER_CASES, spec), payload),
+      os_paging: () => gradeOsPaging(pickCase(OS_PAGING_CASES, spec), payload),
+      os_disk: () => gradeOsDisk(pickCase(OS_DISK_CASES, spec), payload),
+      os_mem: () => gradeOsMem(pickCase(OS_MEM_CASES, spec), payload)
+    };
+    const g = runners[spec.kind]?.();
+    if (g) {
+      return {
+        correct: Boolean(g.allCorrect), ratio: Number(g.ratio || 0), score: g.score, total: g.total,
+        summary: g.allCorrect ? `全部正确 (${g.score}/${g.total} 项)` : `答对 ${g.score}/${g.total} 项（红框为错漏项）`,
+        detail: g
+      };
+    }
   }
 
   return { correct: false, ratio: 0, score: 0, total: 1, summary: "不支持的实验类型", detail: null };
