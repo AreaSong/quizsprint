@@ -1,9 +1,11 @@
 import { escapeHtml, showToast } from "../api.js";
 import { mountDecisionLab, mountDfdLab } from "./dfd-decision-labs.js";
 import { buildSolutionPayload, gradeInteractiveLab, LAB_KIND_META, parseLabSpec } from "./lab-grader.js";
-import { mountOsDiskLab, mountOsMemLab, mountOsPagingLab } from "./os-mem-io-labs.js";
+import { mountOsMemLab } from "./os-mem-lab.js";
+import { mountOsDiskLab, mountOsPagingLab } from "./os-mem-io-labs.js";
 import { mountOsBankerLab, mountOsSchedLab } from "./os-proc-labs.js";
 import { mountPertLab } from "./pert-lab.js";
+import { bindStudioZoom, openStudioCanvasModal } from "./se-lab-modal.js";
 import { mountBlackboxLab, mountWhiteboxLab } from "./testing-labs.js";
 
 const MOUNT_MAP = {
@@ -29,35 +31,19 @@ const parseSavedPayload = (arr) => {
 const openLabFullscreenModal = ({ spec, label, initialPayload, readOnly, gradeResult, onCloseSync }) => {
   const mountFn = MOUNT_MAP[spec.kind];
   if (!mountFn) return;
-  const backdrop = document.createElement("div");
-  backdrop.className = "modal-backdrop";
-  backdrop.innerHTML = `
-    <div class="modal-card se-lab-card">
-      <div class="modal-head">
-        <div class="row-gap">
-          <h3 style="margin:0;">交互实验画布</h3>
-          <span class="tag-pill">${escapeHtml(label)}</span>
-        </div>
-        <button type="button" class="btn primary tiny js-lab-fs-done">${readOnly ? "关闭" : "收起并同步作答"}</button>
-      </div>
-      <div id="fs-lab-stage" class="se-lab-stage"></div>
-    </div>
-  `;
-  document.body.appendChild(backdrop);
-  const fullCtrl = mountFn(backdrop.querySelector("#fs-lab-stage"), {
-    embedded: true,
-    spec,
-    initialPayload,
-    readOnly,
-    gradeResult
+  const summaryBanner = gradeResult
+    ? `<div class="lab-feedback ${gradeResult.correct ? "ok" : "warn"}" style="margin-top:0;flex:1;">自动判分：${escapeHtml(gradeResult.summary)}</div>`
+    : "";
+  openStudioCanvasModal({
+    title: "交互实验画布",
+    tag: label,
+    mountFn,
+    mountOpts: { embedded: true, spec, initialPayload, readOnly, gradeResult },
+    summaryBanner,
+    closeLabel: readOnly ? "关闭" : "收起并同步作答",
+    closePrimary: true,
+    onCloseSync: readOnly ? null : onCloseSync
   });
-  const close = () => {
-    const latest = fullCtrl?.getPayload?.();
-    backdrop.remove();
-    if (!readOnly && latest) onCloseSync?.(latest);
-  };
-  backdrop._closeModal = close;
-  backdrop.querySelector(".js-lab-fs-done")?.addEventListener("click", close);
 };
 
 const renderInvalidSlot = (slot) => {
@@ -100,15 +86,7 @@ export const mountPracticeInteractiveLab = ({ container, q, record, showAnswerNo
   const gradeResult = (savedPayload && showAnswerNow) ? gradeInteractiveLab(spec, savedPayload) : null;
   const readOnly = Boolean(showAnswerNow);
   const footHtml = buildFootHtml({ gradeResult, isReciteSol, examSession, readOnly });
-  let zoomPct = 100;
   let ctrl = null;
-
-  const applyZoom = () => {
-    const svg = slot.querySelector(".lab-studio-canvas-pane svg");
-    if (svg) { svg.style.width = `${zoomPct}%`; svg.style.minWidth = `${zoomPct}%`; }
-    const lbl = slot.querySelector(".js-lab-zoom-val");
-    if (lbl) lbl.textContent = `${zoomPct}%`;
-  };
 
   const mountBody = (payload) => {
     slot.className = "lab-studio-shell";
@@ -155,13 +133,8 @@ export const mountPracticeInteractiveLab = ({ container, q, record, showAnswerNo
     const ansBox = container.querySelector("#p-q-body > .answer-box");
     const ansSlot = slot.querySelector(".lab-studio-ans-slot");
     if (ansBox && ansSlot) ansSlot.appendChild(ansBox);
-    applyZoom();
+    bindStudioZoom(slot);
 
-    slot.querySelectorAll(".js-lab-zoom").forEach((b) => b.addEventListener("click", () => {
-      const dz = Number(b.dataset.z || 0);
-      zoomPct = dz === 0 ? 100 : Math.max(85, Math.min(160, zoomPct + dz));
-      applyZoom();
-    }));
     slot.querySelector(".js-lab-expand")?.addEventListener("click", () => {
       openLabFullscreenModal({
         spec,

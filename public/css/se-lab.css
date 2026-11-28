@@ -1,4 +1,4 @@
-/* 软件工程 5 合 1 交互式实验台样式（兼容浅色/深色/护眼主题与移动端） */
+/* 软件工程 / 操作系统 5 合 1 交互式实验台样式（兼容浅色/深色/护眼主题与移动端） */
 .modal-card.se-lab-card {
   width: min(1160px, 94vw);
   max-width: 1160px;
@@ -7,6 +7,13 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.modal-card.se-lab-card.is-studio-modal {
+  width: min(97vw, 1560px);
+  max-width: none;
+  height: 93dvh;
+  max-height: 93dvh;
+  padding: 14px 18px;
 }
 .se-lab-tabs {
   display: flex;
@@ -20,6 +27,14 @@
 .se-lab-stage {
   overflow-y: auto;
   padding-right: 4px;
+}
+.se-lab-card.is-studio-modal .se-lab-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-right: 0;
 }
 .lab-toolbar {
   display: flex;
@@ -47,8 +62,8 @@
   text-align: center;
 }
 .pert-mini-in { width: 48px; padding: 3px 4px; font-size: 0.7813rem; }
-.pert-mini-in.is-ok { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); font-weight: 700; }
-.pert-mini-in.is-bad { border-color: var(--bad); background: var(--bad-soft, rgba(220,38,38,.08)); color: var(--bad); font-weight: 700; }
+.pert-mini-in.is-ok, .lab-select.is-ok, .pert-grid-table td.is-ok { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); font-weight: 700; }
+.pert-mini-in.is-bad, .lab-select.is-bad, .pert-grid-table td.is-bad { border-color: var(--bad); background: var(--bad-soft, rgba(220,38,38,.08)); color: var(--bad); font-weight: 700; }
 
 .lab-svg-wrap {
   overflow-x: auto;
@@ -207,13 +222,6 @@
   border-top: 1px solid var(--line);
 }
 
-@media (max-width: 820px) {
-  .pert-tables-grid { grid-template-columns: 1fr; }
-  .wb-lab-grid { grid-template-columns: 1fr; }
-  .wb-metrics-grid { grid-template-columns: repeat(3, 1fr); }
-  .embedded-lab-slot { padding: 9px; }
-}
-
 /* 交互实验题全宽画布工作台（Canvas Studio） */
 body.lab-studio-mode #admin-subbar,
 body.lab-studio-mode .app-footer,
@@ -261,6 +269,18 @@ body.lab-studio-mode .app-main { max-width: none; padding: 10px 18px; }
 .lab-studio-canvas-pane .dfd-svg { max-height: 440px; }
 .lab-studio-canvas-pane .cfg-svg { max-height: 360px; }
 .lab-studio-canvas-pane .axis-svg { max-height: 150px; cursor: crosshair; }
+.lab-studio-canvas-pane > .pert-grid-box { padding: 12px 14px; }
+.lab-studio-canvas-pane > .pert-grid-box .pert-grid-title { font-size: 0.875rem; margin-bottom: 8px; }
+.lab-studio-canvas-pane > .pert-grid-box .pert-grid-table { font-size: 0.8438rem; }
+.lab-studio-canvas-pane > .pert-grid-box .pert-grid-table th,
+.lab-studio-canvas-pane > .pert-grid-box .pert-grid-table td { padding: 6px 8px; }
+.os-pg-cell { width: 44px !important; padding: 5px 4px !important; font-size: 0.8438rem !important; }
+.os-bm-cell { min-width: 44px; min-height: 36px; font-size: 0.875rem; }
+.os-bm-cell.is-occ { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: var(--accent); color: var(--accent-fg); }
+.disk-axis-hit { cursor: pointer; }
+.disk-axis-hit:hover circle { r: 7; stroke: var(--accent); stroke-width: 2; }
+.os-gantt-bar-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); }
+.os-work-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); font-size: 0.8125rem; }
 .lab-studio-foot {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
   padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-soft);
@@ -280,16 +300,24 @@ body.lab-studio-mode .app-main { max-width: none; padding: 10px 18px; }
   .practice-shell.is-lab-studio .q-body-scroll { display: flex; flex-direction: column; overflow: hidden; }
   .practice-shell.is-lab-studio .q-title { flex: none; }
   .practice-shell.is-lab-studio .lab-studio-shell { flex: 1; min-height: 0; }
-  .practice-shell.is-lab-studio .lab-studio-grid { flex: 1; min-height: 0; align-items: stretch; }
-  .practice-shell.is-lab-studio .lab-studio-canvas-pane { height: 100%; min-height: 0; overflow: hidden; }
-  .practice-shell.is-lab-studio .lab-studio-canvas-pane > .lab-toolbar { flex: none; }
-  .practice-shell.is-lab-studio .lab-studio-canvas-pane > .lab-svg-wrap.is-canvas {
-    flex: 1; min-height: 0; display: flex; overflow: auto;
+  .practice-shell.is-lab-studio .lab-studio-grid,
+  .se-lab-card.is-studio-modal .lab-studio-grid { flex: 1; min-height: 0; align-items: stretch; }
+  .practice-shell.is-lab-studio .lab-studio-canvas-pane,
+  .se-lab-card.is-studio-modal .lab-studio-canvas-pane { height: 100%; min-height: 0; overflow-y: auto; }
+  .practice-shell.is-lab-studio .lab-studio-canvas-pane > .lab-toolbar,
+  .se-lab-card.is-studio-modal .lab-studio-canvas-pane > .lab-toolbar { flex: none; }
+  .practice-shell.is-lab-studio .lab-studio-canvas-pane > .lab-svg-wrap.is-canvas:last-child,
+  .se-lab-card.is-studio-modal .lab-studio-canvas-pane > .lab-svg-wrap.is-canvas:last-child {
+    flex: 1; min-height: 220px; display: flex; overflow: auto;
   }
-  .practice-shell.is-lab-studio .lab-studio-canvas-pane svg { margin: auto; }
+  .practice-shell.is-lab-studio .lab-studio-canvas-pane svg,
+  .se-lab-card.is-studio-modal .lab-studio-canvas-pane svg { margin: auto; width: var(--studio-zoom, 100%); min-width: var(--studio-zoom, 100%); }
   .practice-shell.is-lab-studio .lab-studio-canvas-pane .pert-svg,
-  .practice-shell.is-lab-studio .lab-studio-canvas-pane .dfd-svg { max-height: 100%; min-width: 0; }
-  .practice-shell.is-lab-studio .lab-studio-side-pane { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .practice-shell.is-lab-studio .lab-studio-canvas-pane .dfd-svg,
+  .se-lab-card.is-studio-modal .lab-studio-canvas-pane .pert-svg,
+  .se-lab-card.is-studio-modal .lab-studio-canvas-pane .dfd-svg { max-height: 100%; min-width: 0; }
+  .practice-shell.is-lab-studio .lab-studio-side-pane,
+  .se-lab-card.is-studio-modal .lab-studio-side-pane { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
 }
 
 @media (max-width: 1024px) {
