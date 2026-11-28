@@ -100,7 +100,6 @@ export const mountPracticeInteractiveLab = ({ container, q, record, showAnswerNo
           <button type="button" class="btn ghost tiny js-lab-zoom" data-z="-15" title="缩小画布">－</button>
           <button type="button" class="btn ghost tiny js-lab-zoom js-lab-zoom-val" data-z="0" title="重置缩放">100%</button>
           <button type="button" class="btn ghost tiny js-lab-zoom" data-z="15" title="放大画布">＋</button>
-          <button type="button" class="btn ghost tiny js-lab-expand">⛶ 弹窗放大</button>
         </div>
       </div>
       <div class="lab-studio-grid">
@@ -135,23 +134,6 @@ export const mountPracticeInteractiveLab = ({ container, q, record, showAnswerNo
     if (ansBox && ansSlot) ansSlot.appendChild(ansBox);
     bindStudioZoom(slot);
 
-    slot.querySelector(".js-lab-expand")?.addEventListener("click", () => {
-      openLabFullscreenModal({
-        spec,
-        label: meta.name,
-        initialPayload: ctrl?.getPayload?.() || payload,
-        readOnly,
-        gradeResult,
-        onCloseSync: (latest) => {
-          draftMap.set(q.id, latest);
-          if (examSession && !readOnly) {
-            const g = gradeInteractiveLab(spec, latest);
-            onDraft?.([JSON.stringify(latest)], g.correct);
-          }
-          mountBody(latest);
-        }
-      });
-    });
     slot.querySelector("#btn-confirm-lab")?.addEventListener("click", () => {
       const latest = ctrl?.getPayload?.();
       const res = gradeInteractiveLab(spec, latest);
